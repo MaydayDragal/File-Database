@@ -76,7 +76,24 @@ td.starcell { text-align:center; width:34px; }
 .badge-note { background:#1f3b2e; color:var(--accent-2); }
 .badge-note.mm { background:#3a2f16; color:#f5c542; }
 .badge-note.a { background:#2a2340; color:#b79bff; }
-td.desc-cell { max-width:480px; }
+.badge-offer { background:#16324a; color:#6fd0ff; font-size:10px; letter-spacing:.03em; text-transform:uppercase; vertical-align:middle; }
+td.desc-cell { max-width:460px; }
+#offeredFilter.on { color:#6fd0ff; border-color:#6fd0ff; }
+
+/* Photo thumbnails in the list */
+th.photocell, td.photocell { width:60px; text-align:center; padding:5px 8px; }
+.thumb { width:52px; height:34px; object-fit:contain; background:#fff; border-radius:4px; border:1px solid var(--border); display:inline-block; vertical-align:middle; }
+td.photocell.noimg { }
+.noimg-dot { display:inline-flex; align-items:center; justify-content:center; width:52px; height:34px; border-radius:4px; background:var(--panel-2); border:1px dashed var(--border); font-size:15px; opacity:.55; }
+
+/* Detail photo + rich sections */
+.detail-photo { text-align:center; margin-bottom:14px; }
+.detail-photo img { max-width:100%; max-height:300px; background:#fff; border-radius:8px; border:1px solid var(--border); }
+.detail-sec { margin-top:14px; }
+.detail-sec-h { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:700; margin-bottom:5px; }
+.detail-desc { font-size:13.5px; line-height:1.6; }
+.valid-list { margin:0; padding-left:18px; font-size:13px; line-height:1.6; color:var(--text); }
+.valid-list li { margin-bottom:2px; }
 .empty { text-align:center; color:var(--muted); padding:60px 20px; line-height:1.6; }
 
 /* Modal */

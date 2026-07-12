@@ -46,6 +46,7 @@
     <select id="fGrp" title="Service group"></select>
     <select id="fCt" title="Category"></select>
     <select id="fNote" title="Note"></select>
+    <button class="btn btn-ghost btn-sm" id="offeredFilter" title="Show only tools we offer (from the XENTRY catalog)">🛒 Offered</button>
     <button class="btn btn-ghost btn-sm" id="starFilter" title="Show starred only">★ Starred</button>
     <span class="count" id="count"></span>
   </div>
@@ -54,13 +55,13 @@
     <table class="lib" id="table">
       <thead id="thead">
         <tr>
+          <th class="photocell">Photo</th>
           <th class="starcell" data-sort="star" title="Starred">★</th>
           <th data-sort="toolNo">Tool Number</th>
           <th data-sort="desc">Description</th>
           <th class="col-grp" data-sort="svcGrp">Svc Grp</th>
           <th data-sort="ct">Ct</th>
           <th data-sort="location">Location</th>
-          <th class="col-year" data-sort="year">Year</th>
           <th class="num" data-sort="price">Dlr Net</th>
           <th data-sort="note">Note</th>
         </tr>
@@ -79,7 +80,9 @@
         <button class="x" data-close aria-label="Close">×</button>
       </div>
       <div class="modal-body">
+        <div class="detail-photo" id="dPhoto" style="display:none"></div>
         <div class="kv-grid" id="dGrid"></div>
+        <div id="dExtra"></div>
         <div class="field"><label>Quantity</label><input id="eQty" /></div>
         <div class="field"><label>Location / Bin</label><input id="eLoc" /></div>
         <div class="field"><label>Note</label><input id="eNote" placeholder="R / A / MM" /></div>

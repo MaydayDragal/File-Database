@@ -10,7 +10,7 @@
 
   var DB_NAME = "tool-inventory", STORE = "tools", META = "meta";
   var db = null, all = [], view = [];
-  var state = { q: "", grp: "", ct: "", note: "", starred: false, sort: "toolNo", dir: 1 };
+  var state = { q: "", grp: "", ct: "", note: "", starred: false, offered: false, sort: "toolNo", dir: 1 };
   var curId = null, embedded = false;
   try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
 
@@ -43,6 +43,7 @@
   function setMeta(k, v) { var t = db.transaction(META, "readwrite"); t.objectStore(META).put({ k: k, v: v }); return txDone(t); }
 
   // ---------- seed ----------
+  var SEED_VERSION = 2;   // bump to push a refreshed bundled list (edits/stars preserved)
   function normalize(t, i) {
     return {
       id: t.id || ("t" + i),
@@ -52,13 +53,40 @@
       price: (t.price === 0 || t.price) ? Number(t.price) : null,
       note: (t.note || "").trim(), note2: (t.note2 || "").trim(), comment: t.comment || "",
       star: !!t.star,
+      // XENTRY catalog fields
+      offered: !!t.offered, photo: t.photo || "", wis: t.wis || "", version: t.version || "",
+      catalogName: t.catalogName || "", catalogDesc: t.catalogDesc || "",
+      validities: Array.isArray(t.validities) ? t.validities : [],
     };
   }
+  function fetchSeed() { return fetch("tools.json").then(function (r) { return r.json(); }); }
   function loadSeed() {
-    return fetch("tools.json").then(function (r) { return r.json(); }).then(function (d) {
+    return fetchSeed().then(function (d) {
       var list = (d.tools || []).map(normalize);
       return setMeta("source", { name: d.source || "", updated: d.updated || "", count: list.length })
+        .then(function () { return setMeta("seedVersion", d.seedVersion || SEED_VERSION); })
         .then(function () { return putMany(list); }).then(function () { return list; });
+    });
+  }
+  // Re-seed to a newer bundled list, carrying over the user's stars and edits.
+  function upgradeSeed(existing) {
+    return fetchSeed().then(function (d) {
+      var fresh = (d.tools || []).map(normalize);
+      var prev = {};
+      existing.forEach(function (t) { (prev[t.toolNo] = prev[t.toolNo] || []).push(t); });
+      fresh.forEach(function (t) {
+        var arr = prev[t.toolNo]; if (!arr || !arr.length) return;
+        var old = arr.shift();               // pair up rows with the same tool number
+        if (old.star) t.star = true;
+        ["location", "qty", "note", "comment"].forEach(function (f) {
+          if (old[f] && !t[f]) t[f] = old[f]; // keep a user's entry where the seed is blank
+        });
+      });
+      return clearStore()
+        .then(function () { return setMeta("source", { name: d.source || "", updated: d.updated || "", count: fresh.length }); })
+        .then(function () { return setMeta("seedVersion", d.seedVersion || SEED_VERSION); })
+        .then(function () { return putMany(fresh); })
+        .then(function () { return fresh; });
     });
   }
 
@@ -67,11 +95,12 @@
     var q = state.q.toLowerCase();
     view = all.filter(function (t) {
       if (state.starred && !t.star) return false;
+      if (state.offered && !t.offered) return false;
       if (state.grp && t.svcGrp !== state.grp) return false;
       if (state.ct && t.ct !== state.ct) return false;
       if (state.note && t.note !== state.note) return false;
       if (q) {
-        var hay = (t.toolNo + " " + t.desc + " " + t.location + " " + t.svcGrp + " " + t.comment).toLowerCase();
+        var hay = (t.toolNo + " " + t.desc + " " + t.catalogName + " " + t.catalogDesc + " " + t.location + " " + t.svcGrp + " " + t.wis + " " + t.comment).toLowerCase();
         if (hay.indexOf(q) === -1) return false;
       }
       return true;
@@ -102,21 +131,25 @@
     view.forEach(function (t) {
       var tr = document.createElement("tr");
       tr.dataset.id = t.id;
+      var descText = t.desc || t.catalogName || "";
       tr.innerHTML =
+        '<td class="photocell">' + thumb(t) + '</td>' +
         '<td class="starcell"><button class="star' + (t.star ? " on" : "") + '" title="Star">' + (t.star ? "★" : "☆") + '</button></td>' +
         '<td class="tool-num">' + esc(t.toolNo) + '</td>' +
-        '<td class="desc-cell">' + esc(t.desc) + '</td>' +
+        '<td class="desc-cell">' + esc(descText) + (t.offered ? ' <span class="badge badge-offer" title="In the tools we offer">offered</span>' : '') + '</td>' +
         '<td class="col-grp">' + esc(t.svcGrp) + '</td>' +
         '<td>' + (t.ct ? '<span class="badge badge-ct">' + esc(t.ct) + '</span>' : '') + '</td>' +
         '<td>' + esc(t.location || "—") + '</td>' +
-        '<td class="col-year">' + esc(t.year || "") + '</td>' +
         '<td class="num">' + money(t.price) + '</td>' +
         '<td>' + noteBadge(t.note) + '</td>';
       frag.appendChild(tr);
     });
     tb.appendChild(frag);
-    $$("#tbody th, th").forEach(function () {});
     syncSortHeaders();
+  }
+  function thumb(t) {
+    if (t.photo) return '<img class="thumb" loading="lazy" src="img/' + esc(t.photo) + '.png" alt="" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'noimg\')">';
+    return '<span class="noimg-dot" aria-hidden="true">🔧</span>';
   }
   function noteBadge(n) {
     if (!n) return "";
@@ -158,11 +191,27 @@
     $("#dTitle").textContent = t.toolNo;
     $("#dStar").textContent = t.star ? "★" : "☆";
     $("#dStar").classList.toggle("on", t.star);
+    // Photo
+    var photo = $("#dPhoto");
+    if (t.photo) { photo.style.display = ""; photo.innerHTML = '<img src="img/' + esc(t.photo) + '.png" alt="Photo of ' + esc(t.toolNo) + '">'; }
+    else { photo.style.display = "none"; photo.innerHTML = ""; }
+    // Key/value facts
     $("#dGrid").innerHTML =
-      kv("Description", t.desc, "big") + kv("Tool number", t.toolNo, "mono") +
+      kv("Name", (t.desc || t.catalogName || "—"), "big") +
+      kv("Tool number", t.toolNo, "mono") +
       kv("Service group", t.svcGrp || "—") + kv("Category (Ct)", t.ct || "—") +
       kv("Year", t.year || "—") + kv("Dealer net", money(t.price)) +
-      kv("Note", (t.note || "—") + (t.note2 ? " / " + t.note2 : ""));
+      kv("Note", (t.note || "—") + (t.note2 ? " / " + t.note2 : "")) +
+      kv("Offered", t.offered ? "Yes — in the tools we offer" : "Not in the catalog") +
+      (t.wis ? kv("WIS reference", t.wis, "mono") : "") +
+      (t.version ? kv("Catalog version", t.version) : "");
+    // Rich catalog description + validities
+    var extra = $("#dExtra"); extra.innerHTML = "";
+    if (t.catalogDesc) extra.innerHTML += '<div class="detail-sec"><div class="detail-sec-h">Details</div><div class="detail-desc">' + esc(t.catalogDesc) + '</div></div>';
+    if (t.validities && t.validities.length) {
+      extra.innerHTML += '<div class="detail-sec"><div class="detail-sec-h">Model validities</div><ul class="valid-list">' +
+        t.validities.map(function (v) { return '<li>' + esc(v) + '</li>'; }).join("") + '</ul></div>';
+    }
     $("#eQty").value = t.qty || "";
     $("#eLoc").value = t.location || "";
     $("#eNote").value = t.note || "";
@@ -276,6 +325,7 @@
     $("#fCt").addEventListener("change", function (e) { state.ct = e.target.value; apply(); });
     $("#fNote").addEventListener("change", function (e) { state.note = e.target.value; apply(); });
     $("#starFilter").addEventListener("click", function () { state.starred = !state.starred; $("#starFilter").classList.toggle("on", state.starred); apply(); });
+    $("#offeredFilter").addEventListener("click", function () { state.offered = !state.offered; $("#offeredFilter").classList.toggle("on", state.offered); apply(); });
 
     $$("#thead th[data-sort]").forEach(function (th) {
       th.addEventListener("click", function () {
@@ -334,17 +384,24 @@
 
   // ---------- boot ----------
   open().then(function () {
-    return getAll();
-  }).then(function (list) {
-    if (list && list.length) { all = list.map(normalize); return null; }
+    return Promise.all([getAll(), getMeta("seedVersion")]);
+  }).then(function (r) {
+    var list = r[0], ver = r[1];
+    if (list && list.length) {
+      if (ver !== SEED_VERSION) {
+        // A newer bundled list shipped — refresh it, keeping stars and edits.
+        return upgradeSeed(list.map(normalize)).then(function (fresh) { all = fresh; setTimeout(function () { toast("Tool list updated to the latest catalog."); }, 400); });
+      }
+      all = list.map(normalize); return null;
+    }
     return loadSeed().then(function (seed) { all = seed; });
   }).then(function () {
     return getMeta("source");
   }).then(function (src) {
-    if (src) {
-      $("#sub").textContent = all.length.toLocaleString() + " tools" + (src.updated ? " · updated " + src.updated : "");
-      $("#legendUpdated").textContent = src.updated ? ("Pricing reference: " + src.updated) : "";
-    }
+    var offeredN = all.filter(function (t) { return t.offered; }).length;
+    var photoN = all.filter(function (t) { return t.photo; }).length;
+    $("#sub").textContent = all.length.toLocaleString() + " tools · " + offeredN.toLocaleString() + " offered · " + photoN.toLocaleString() + " with photo";
+    if (src && src.updated) $("#legendUpdated").textContent = "Pricing reference: " + src.updated;
     if (embedded) $("#backBtn").hidden = false;
     fillFilters();
     wire();

@@ -34,10 +34,19 @@ const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fa
 await page.goto(base + "inventory/index.html", { waitUntil: "networkidle" });
 await page.waitForTimeout(700);
 const rowCount = await page.locator("#tbody tr").count();
-check(rowCount > 0, `rows render from the bundled seed (got ${rowCount})`);
-check((await page.locator("#sub").textContent()).includes("tools"), "header shows the tool count");
+check(rowCount > 1400, `rows render from the bundled seed (got ${rowCount})`);
+check((await page.locator("#sub").textContent()).includes("offered"), "header shows offered/photo counts");
 const totalTxt = await page.locator("#count").textContent();
 check(/tools?/.test(totalTxt), `count reads '${totalTxt.trim()}'`);
+
+// --- Part photos appear in the list and actually load ---
+const thumbCount = await page.locator("#tbody .thumb").count();
+check(thumbCount > 0, `part photos render as thumbnails in the list (${thumbCount} visible)`);
+const firstThumbLoaded = await page.locator("#tbody .thumb").first().evaluate((img) => new Promise((res) => {
+  if (img.complete) return res(img.naturalWidth > 0);
+  img.onload = () => res(img.naturalWidth > 0); img.onerror = () => res(false);
+}));
+check(firstThumbLoaded, "a part photo actually loads (naturalWidth > 0)");
 
 // Search narrows results
 const before = await page.locator("#tbody tr").count();
@@ -54,10 +63,33 @@ await page.selectOption("#fGrp", grpVal);
 await page.waitForTimeout(250);
 const grpRows = await page.locator("#tbody tr").count();
 check(grpRows > 0, `service-group filter '${grpVal}' shows ${grpRows} tools`);
-// every visible row's Svc Grp cell equals the filter
-const allMatch = await page.evaluate((g) => Array.from(document.querySelectorAll("#tbody tr")).every((tr) => tr.children[3].textContent.trim() === g), grpVal);
+// every visible row's Svc Grp cell equals the filter (col index 4: photo,star,toolNo,desc,svcGrp)
+const allMatch = await page.evaluate((g) => Array.from(document.querySelectorAll("#tbody tr")).every((tr) => tr.children[4].textContent.trim() === g), grpVal);
 check(allMatch, "filtered rows all belong to that service group");
 await page.selectOption("#fGrp", "");
+await page.waitForTimeout(200);
+
+// --- 'Offered' filter shows only catalog tools ---
+await page.click("#offeredFilter");
+await page.waitForTimeout(250);
+const offRows = await page.locator("#tbody tr").count();
+check(offRows > 0 && offRows < rowCount, `offered filter narrows ${rowCount}→${offRows}`);
+const allOffered = await page.evaluate(() => Array.from(document.querySelectorAll("#tbody tr")).every((tr) => tr.querySelector(".badge-offer")));
+check(allOffered, "every offered-filtered row is marked 'offered'");
+await page.click("#offeredFilter");
+await page.waitForTimeout(200);
+
+// --- Detail view shows the part photo + catalog description ---
+await page.fill("#search", "eyelets");
+await page.waitForTimeout(300);
+await page.locator("#tbody tr").first().click();
+await page.waitForTimeout(250);
+check(await page.locator("#dPhoto img").isVisible(), "detail view shows the part photo");
+const detailPhotoLoaded = await page.locator("#dPhoto img").evaluate((img) => img.complete && img.naturalWidth > 0);
+check(detailPhotoLoaded, "detail photo loads");
+check((await page.locator("#dExtra").textContent()).length > 20, "detail view shows catalog description / validities");
+await page.click("[data-close]");
+await page.fill("#search", "");
 await page.waitForTimeout(200);
 
 // Sort by Dealer Net (click header twice → descending, top row is the max)
