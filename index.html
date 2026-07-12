@@ -81,6 +81,15 @@
       </nav>
 
       <div class="nav__section">
+        <div class="nav__label">Apps</div>
+        <nav class="nav">
+          <button class="nav__item" data-filter="li" id="nav-li">
+            <span class="nav__icon">🗄️</span> LI Documents <span class="nav__count" data-count="li"></span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="nav__section">
         <div class="nav__label">Types</div>
         <nav id="nav-types" class="nav"></nav>
       </div>
@@ -139,6 +148,11 @@
         <p id="empty-text">Drag files anywhere onto this window, or use <strong>Add files</strong> to start building your database. Everything stays on this computer.</p>
         <button class="btn btn--primary" id="empty-add">Add your first files</button>
       </div>
+
+      <!-- Embedded LI Document Database (loaded on first visit) -->
+      <section id="li-view" class="li-view" hidden aria-label="LI Document Database">
+        <iframe id="li-frame" class="li-frame" title="LI Document Database" referrerpolicy="no-referrer"></iframe>
+      </section>
     </main>
   </div>
 
@@ -178,6 +192,7 @@
       <footer class="detail__foot">
         <button id="d-open" class="btn btn--ghost">Open</button>
         <button id="d-download" class="btn btn--ghost">Download</button>
+        <button id="d-send-li" class="btn btn--ghost" hidden title="Send this PDF to the LI Database to parse and rename it">🗄️ Send to LI</button>
         <div class="spacer"></div>
         <button id="d-delete" class="btn btn--danger">Delete</button>
         <button id="d-save" class="btn btn--primary">Save</button>
@@ -210,6 +225,7 @@
   <input id="import-input" type="file" accept=".fvault,application/json,.json" hidden />
 
   <script src="db.js"></script>
+  <script src="bridge.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

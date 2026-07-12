@@ -25,6 +25,24 @@ that one computer.
 
 ---
 
+## Two databases, one app
+
+File Vault also hosts the **LI Document Database** — a specialist tool for
+Mercedes‑Benz LI PDFs (reads each PDF's LI number, version, title, function
+group, date and validity; OCRs scans; compares versions; exports renamed
+copies). They share one site and hand files to each other:
+
+- Open **🗄️ LI Documents** in the sidebar to use the LI database right inside
+  File Vault. A **← Files** link takes you back.
+- In File Vault, open any **PDF** and click **🗄️ Send to LI** to push it into
+  the LI database, where it's parsed and filed automatically.
+- In the LI database's document view, click **＋ File Vault** to copy the
+  renamed PDF into File Vault — filed under an **“LI Documents”** collection
+  and auto‑tagged with its LI number, function group and model series.
+
+Both databases stay on your machine; the handoff happens locally through a
+small shared bridge (`bridge.js`) — nothing is uploaded.
+
 ## Features
 
 - **Add anything** — drag & drop onto the window, paste from the clipboard, or use **Add files**. Bulk‑add supported.
@@ -103,11 +121,14 @@ index.html            App shell / markup
 styles.css            Styling (light + dark, responsive)
 db.js                 IndexedDB storage layer
 app.js                Application logic (import, search, preview, backup)
+bridge.js             Shared File Vault ⇄ LI Database transfer bus
 sw.js                 Service worker (offline app‑shell cache)
 manifest.webmanifest  PWA manifest (install metadata + icons)
 icons/                Generated PNG app icons
+li/                   The embedded LI Document Database (its own app + SW)
 tools/gen_icons.py    Regenerates the icons (no dependencies)
-tools/e2e.mjs         End‑to‑end browser test
+tools/e2e.mjs         End‑to‑end test for File Vault
+tools/e2e-merge.mjs   Integration test for the File Vault ⇄ LI merge
 ```
 
 ### Development

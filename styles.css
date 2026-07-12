@@ -232,6 +232,15 @@ kbd {
 .results.list .card__sub { margin: 0; }
 .results.list .card__tags { display: none; }
 
+/* ---------- Embedded LI Database ---------- */
+.content--li { padding: 0; overflow: hidden; display: flex; }
+.content--li .content__toolbar,
+.content--li #results,
+.content--li #empty { display: none !important; }
+.li-view { display: none; }                         /* hidden unless the LI view is active */
+.content--li .li-view { flex: 1; display: flex; min-height: 0; }
+.li-frame { flex: 1; width: 100%; height: 100%; border: 0; background: var(--bg); }
+
 /* ---------- Empty ---------- */
 .empty { text-align: center; max-width: 460px; margin: 8vh auto; color: var(--text-dim); }
 .empty__art { font-size: 60px; }

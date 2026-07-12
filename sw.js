@@ -5,13 +5,14 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "file-vault-v2";
+const CACHE = "file-vault-v3";
 const SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./db.js",
   "./app.js",
+  "./bridge.js",
   "./manifest.webmanifest",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
@@ -39,6 +40,9 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // only handle same-origin
+  // The LI Database (under /li/) ships its own service worker — leave its
+  // requests alone so we never serve File Vault's shell for an LI URL.
+  if (url.pathname.includes("/li/")) return;
 
   // Network-first for navigations so updates are picked up when online,
   // falling back to the cached shell when offline.

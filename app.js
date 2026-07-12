@@ -246,6 +246,19 @@
 
   function render() {
     renderSidebar();
+    syncStaticNav();
+
+    // The LI Database is an embedded app, not a file list — show it and stop.
+    const liActive = state.filter === "li";
+    document.querySelector(".content").classList.toggle("content--li", liActive);
+    $("#li-view").hidden = !liActive;
+    if (liActive) {
+      ensureLiLoaded();
+      $("#view-title").textContent = "LI Documents";
+      document.title = "LI Documents · File Vault";
+      return;
+    }
+
     const list = currentSet();
     const results = $("#results");
     results.className = "results " + state.view;
@@ -442,9 +455,43 @@
   function setFilter(f) {
     state.filter = f;
     state.tag = null;
-    $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === f));
     render();
     closeSidebarMobile();
+  }
+
+  // Keep the fixed sidebar entries (all/starred/recent/li) in sync with state.
+  function syncStaticNav() {
+    $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === state.filter));
+    const li = $("#nav-li");
+    if (li) li.classList.toggle("is-active", state.filter === "li");
+  }
+
+  // ---------- Embedded LI Database ----------
+  let liLoaded = false;
+  function ensureLiLoaded() {
+    if (liLoaded) return;
+    liLoaded = true;
+    $("#li-frame").src = "li/index.html";
+  }
+  // Count of LI documents (read-only peek at the LI app's own database).
+  function updateLiCount() {
+    try {
+      const req = indexedDB.open("LIDocsDB");
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("docs")) { db.close(); return; }
+        try {
+          const c = db.transaction("docs", "readonly").objectStore("docs").count();
+          c.onsuccess = () => {
+            const el = document.querySelector('[data-count="li"]');
+            if (el) el.textContent = c.result || "";
+            db.close();
+          };
+          c.onerror = () => db.close();
+        } catch (e) { db.close(); }
+      };
+      req.onerror = () => {};
+    } catch (e) {}
   }
 
   // ---------- Detail drawer ----------
@@ -463,6 +510,9 @@
     const starBtn = $("#d-star");
     starBtn.textContent = rec.starred ? "★" : "☆";
     starBtn.classList.toggle("on", !!rec.starred);
+
+    // "Send to LI" only makes sense for PDFs.
+    $("#d-send-li").hidden = !(rec.kind === "pdf" && window.VaultBridge);
 
     await renderPreview(rec, meta);
 
@@ -570,6 +620,60 @@
     const url = URL.createObjectURL(rec.blob);
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  // ---------- Cross-app: hand a PDF to the LI Database ----------
+  async function sendCurrentToLI() {
+    if (!window.VaultBridge) { toast("The LI bridge isn't available."); return; }
+    const rec = await DB.get(state.currentId);
+    if (!rec) return;
+    if (rec.kind !== "pdf") { toast("Only PDFs can go to the LI Database."); return; }
+    try {
+      await window.VaultBridge.send("li", { name: rec.name, type: rec.type || "application/pdf", blob: rec.blob });
+      closeDetail();
+      setFilter("li"); // switch to the LI view so the user sees it import
+      toast("Sent to LI Database — it will read and file the PDF.");
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't send to the LI Database.");
+    }
+  }
+
+  // ---------- Cross-app: receive a file handed over from the LI Database ----------
+  const LI_COLLECTION = "LI Documents";
+  async function addIncomingFile(item) {
+    const blob = item.blob;
+    const name = item.name || "document.pdf";
+    const file = new File([blob], name, { type: item.type || blob.type || "application/pdf" });
+    const kind = classify(file);
+    const thumb = await makeThumb(file, kind);
+    const now = Date.now();
+    const m = item.meta || {};
+    const tags = [];
+    if (m.li) tags.push(m.li);
+    if (m.fgroup) tags.push(m.fgroup);
+    (m.modelSeries || []).forEach && (m.modelSeries || []).forEach((s) => tags.push("Model " + s));
+    const record = {
+      id: uid(),
+      name,
+      type: file.type,
+      kind,
+      size: file.size,
+      blob: file,
+      thumb,
+      tags: Array.from(new Set(tags)),
+      collection: LI_COLLECTION,
+      note: m.title ? ("LI: " + m.title) : "",
+      starred: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    record.searchText = DB.buildSearchText(record);
+    await DB.put(record);
+    items.push(stripBlob(record));
+    if (state.filter !== "li") render();
+    updateStorage();
+    toast('Added “' + name + '” to File Vault (LI Documents).');
   }
 
   // ---------- Storage meter ----------
@@ -796,6 +900,7 @@
     $("#view-list").onclick = () => setView("list");
 
     $$("#nav-filters .nav__item").forEach((b) => { b.onclick = () => setFilter(b.dataset.filter); });
+    $("#nav-li").onclick = () => setFilter("li");
 
     // Detail drawer
     $$("#detail [data-close]").forEach((el) => { el.onclick = closeDetail; });
@@ -803,6 +908,7 @@
     $("#d-delete").onclick = deleteCurrent;
     $("#d-download").onclick = downloadCurrent;
     $("#d-open").onclick = openCurrent;
+    $("#d-send-li").onclick = sendCurrentToLI;
     $("#d-star").onclick = async () => {
       if (!state.currentId) return;
       await toggleStar(state.currentId);
@@ -918,10 +1024,23 @@
     items = await DB.listMeta();
     render();
     updateStorage();
+    updateLiCount();
+
+    // Cross-app bridge: receive files handed over from the LI Database.
+    if (window.VaultBridge) {
+      window.VaultBridge.receive("vault", (item) => addIncomingFile(item));
+    }
+    // The embedded LI app can ask us to switch back to the file list.
+    window.addEventListener("message", (e) => {
+      const d = e.data || {};
+      if (d && d.type === "vault-nav" && d.to === "files") setFilter("all");
+      if (d && d.type === "li-changed") updateLiCount();
+    });
 
     // URL actions (from PWA shortcuts)
     const params = new URLSearchParams(location.search);
     if (params.get("view") === "starred") setFilter("starred");
+    if (params.get("view") === "li") setFilter("li");
     if (params.get("action") === "add") setTimeout(() => $("#file-input").click(), 300);
 
     // Service worker for offline + seamless updates.
