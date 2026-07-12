@@ -54,6 +54,11 @@ await page.fill("#search", "torque wrench");
 await page.waitForTimeout(300);
 const after = await page.locator("#tbody tr").count();
 check(after > 0 && after < before, `search 'torque wrench' narrows ${before}→${after}`);
+// No-matches state shows a real message, not the stale "Loading…" placeholder
+await page.fill("#search", "zzz-no-such-tool");
+await page.waitForTimeout(300);
+const emptyTxt = (await page.locator("#empty").textContent()).trim();
+check(await page.locator("#empty").isVisible() && /no tools match/i.test(emptyTxt), `no-matches shows a proper message ('${emptyTxt}')`);
 await page.fill("#search", "");
 await page.waitForTimeout(250);
 
@@ -129,6 +134,32 @@ const starredStill = await page.evaluate(() => new Promise((res) => {
 }));
 check(starredStill === 1, `starred flag persisted in IndexedDB (${starredStill})`);
 
+// --- Seed upgrade preserves stars + edits (simulate an older seedVersion) ---
+const starredTool = await page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("tool-inventory");
+  r.onsuccess = () => { const db = r.result; const c = db.transaction("tools").objectStore("tools").getAll(); c.onsuccess = () => { const s = c.result.find((t) => t.star); res(s ? { toolNo: s.toolNo, location: s.location } : null); }; };
+}));
+check(!!starredTool, "found the starred+edited tool before upgrade");
+// Force the stored seedVersion back to 1 so boot() runs upgradeSeed() on reload.
+await page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("tool-inventory");
+  r.onsuccess = () => { const db = r.result; const t = db.transaction("meta", "readwrite"); t.objectStore("meta").put({ k: "seedVersion", v: 1 }); t.oncomplete = () => res(1); };
+}));
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(700);
+check((await page.locator("#tbody tr").count()) > 1400, "catalog still present after upgrade");
+const afterUpgrade = await page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("tool-inventory");
+  r.onsuccess = () => { const db = r.result; const c = db.transaction("tools").objectStore("tools").getAll(); c.onsuccess = () => { const st = c.result.filter((t) => t.star); res({ starred: st.length, locs: st.map((t) => t.location) }); }; };
+}));
+check(afterUpgrade.starred === 1, `upgrade preserved the star (${afterUpgrade.starred})`);
+check(afterUpgrade.locs.includes("TEST-BIN-9"), `upgrade preserved the edited location (${JSON.stringify(afterUpgrade.locs)})`);
+const verNow = await page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("tool-inventory");
+  r.onsuccess = () => { const db = r.result; const g = db.transaction("meta").objectStore("meta").get("seedVersion"); g.onsuccess = () => res(g.result && g.result.v); };
+}));
+check(verNow === 2, `seedVersion now matches the code constant (${verNow}) — no re-seed loop`);
+
 // Export CSV downloads
 const [dl] = await Promise.all([
   page.waitForEvent("download"),
@@ -170,6 +201,24 @@ check(!(await page.locator("#inventory-view").isVisible()), "inventory back link
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404/i.test(e));
 console.log(realErrors.length ? "\nErrors:\n" + realErrors.join("\n") : "\nNo unexpected console errors.");
 check(realErrors.length === 0, "no unexpected console/page errors");
+
+// --- Fresh profile: opening File Vault FIRST must not break the inventory app ---
+// (regression for the bug where File Vault's count-peek pre-created the
+//  inventory IndexedDB empty at v1, blocking the app from creating its stores)
+const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 820 }, colorScheme: "dark" });
+const p2 = await ctx2.newPage();
+const err2 = [];
+p2.on("pageerror", (e) => err2.push(String(e.message)));
+await p2.goto(base, { waitUntil: "networkidle" });   // File Vault first — runs updateAppCounts()
+await p2.waitForTimeout(600);
+await p2.locator("#nav-inventory").click();
+await p2.waitForTimeout(1500);
+const inv2 = p2.frameLocator("#inventory-frame");
+const rows2 = await inv2.locator("#tbody tr").count();
+check(rows2 > 1400, `inventory still loads after File Vault opened first (rows=${rows2})`);
+const invBroken = await inv2.locator("#empty").evaluate((el) => el.offsetParent !== null && /couldn't load/i.test(el.textContent)).catch(() => false);
+check(!invBroken, "inventory did not show the 'Couldn't load' error");
+await ctx2.close();
 
 await browser.close();
 server.close();

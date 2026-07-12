@@ -30,7 +30,9 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // Only prune OUR OWN old caches — CacheStorage is shared across the whole
+      // origin, so a blanket delete would wipe the LI / Tool Inventory caches.
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("file-vault-") && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

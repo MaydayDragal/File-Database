@@ -41,8 +41,10 @@ self.addEventListener("install", function (e) {
 self.addEventListener("activate", function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
+      // Only prune OUR OWN old caches — CacheStorage is shared across the whole
+      // origin, so deleting non-"li-db-" keys would wipe File Vault / Inventory.
       return Promise.all(keys.map(function (k) {
-        if (k !== SHELL_CACHE && k !== RUNTIME_CACHE) return caches.delete(k);
+        if (k.indexOf("li-db-") === 0 && k !== SHELL_CACHE && k !== RUNTIME_CACHE) return caches.delete(k);
       }));
     }).then(function () { return self.clients.claim(); })
   );

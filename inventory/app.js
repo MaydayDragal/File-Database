@@ -44,6 +44,7 @@
 
   // ---------- seed ----------
   var SEED_VERSION = 2;   // bump to push a refreshed bundled list (edits/stars preserved)
+  var EDIT_FIELDS = ["location", "qty", "note", "comment"];
   function normalize(t, i) {
     return {
       id: t.id || ("t" + i),
@@ -53,6 +54,7 @@
       price: (t.price === 0 || t.price) ? Number(t.price) : null,
       note: (t.note || "").trim(), note2: (t.note2 || "").trim(), comment: t.comment || "",
       star: !!t.star,
+      edited: (t.edited && typeof t.edited === "object") ? t.edited : {}, // fields the user changed
       // XENTRY catalog fields
       offered: !!t.offered, photo: t.photo || "", wis: t.wis || "", version: t.version || "",
       catalogName: t.catalogName || "", catalogDesc: t.catalogDesc || "",
@@ -64,7 +66,7 @@
     return fetchSeed().then(function (d) {
       var list = (d.tools || []).map(normalize);
       return setMeta("source", { name: d.source || "", updated: d.updated || "", count: list.length })
-        .then(function () { return setMeta("seedVersion", d.seedVersion || SEED_VERSION); })
+        .then(function () { return setMeta("seedVersion", SEED_VERSION); })   // store the CODE constant
         .then(function () { return putMany(list); }).then(function () { return list; });
     });
   }
@@ -76,15 +78,27 @@
       existing.forEach(function (t) { (prev[t.toolNo] = prev[t.toolNo] || []).push(t); });
       fresh.forEach(function (t) {
         var arr = prev[t.toolNo]; if (!arr || !arr.length) return;
-        var old = arr.shift();               // pair up rows with the same tool number
+        // Among rows sharing a tool number, pair by best content match so a
+        // duplicate's star/edits don't attach to the wrong physical tool.
+        var idx = 0;
+        for (var j = 0; j < arr.length; j++) {
+          if (arr[j].desc === t.desc || arr[j].location === t.location) { idx = j; break; }
+        }
+        var old = arr.splice(idx, 1)[0];
         if (old.star) t.star = true;
-        ["location", "qty", "note", "comment"].forEach(function (f) {
-          if (old[f] && !t[f]) t[f] = old[f]; // keep a user's entry where the seed is blank
-        });
+        var ed = old.edited || {};
+        // Preserve every field the user actually edited, regardless of the seed value.
+        EDIT_FIELDS.forEach(function (f) { if (ed[f] && old[f] != null && old[f] !== "") { t[f] = old[f]; t.edited[f] = 1; } });
+        // Back-compat: older records had no edit flags — keep a stored value only
+        // where the fresh seed is blank (avoids clobbering a likely user entry).
+        if (!Object.keys(ed).length) EDIT_FIELDS.forEach(function (f) { if (old[f] && !t[f]) t[f] = old[f]; });
       });
+      // Preserve user-added tools (e.g. CSV-imported) that aren't in the new seed.
+      var carried = 0, maxIdN = fresh.reduce(function (m, t) { var n = parseInt((t.id || "t0").slice(1), 10); return isNaN(n) ? m : Math.max(m, n); }, 0);
+      Object.keys(prev).forEach(function (k) { prev[k].forEach(function (o) { o.id = "t" + (++maxIdN); fresh.push(o); carried++; }); });
       return clearStore()
         .then(function () { return setMeta("source", { name: d.source || "", updated: d.updated || "", count: fresh.length }); })
-        .then(function () { return setMeta("seedVersion", d.seedVersion || SEED_VERSION); })
+        .then(function () { return setMeta("seedVersion", SEED_VERSION); })   // store the CODE constant
         .then(function () { return putMany(fresh); })
         .then(function () { return fresh; });
     });
@@ -121,6 +135,7 @@
     tb.innerHTML = "";
     $("#count").textContent = view.length.toLocaleString() + (view.length === 1 ? " tool" : " tools");
     if (!view.length) {
+      $("#empty").textContent = all.length ? "No tools match your search or filters." : "No tools yet.";
       $("#empty").style.display = "block";
       $("#table").style.display = "none";
       return;
@@ -148,7 +163,8 @@
     syncSortHeaders();
   }
   function thumb(t) {
-    if (t.photo) return '<img class="thumb" loading="lazy" src="img/' + esc(t.photo) + '.png" alt="" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'noimg\')">';
+    if (t.photo) return '<img class="thumb" loading="lazy" src="img/' + esc(t.photo) + '.png" alt="" ' +
+      "onerror=\"this.replaceWith(Object.assign(document.createElement('span'),{className:'noimg-dot',textContent:'🔧'}))\">";
     return '<span class="noimg-dot" aria-hidden="true">🔧</span>';
   }
   function noteBadge(n) {
@@ -225,10 +241,11 @@
   function saveDetail() {
     var t = all.find(function (x) { return x.id === curId; });
     if (!t) return;
-    t.qty = $("#eQty").value.trim();
-    t.location = $("#eLoc").value.trim();
-    t.note = $("#eNote").value.trim();
-    t.comment = $("#eComment").value.trim();
+    t.edited = t.edited || {};
+    var next = { qty: $("#eQty").value.trim(), location: $("#eLoc").value.trim(), note: $("#eNote").value.trim(), comment: $("#eComment").value.trim() };
+    // Flag any field the user actually changed so a future seed update preserves it.
+    EDIT_FIELDS.forEach(function (f) { if (String(t[f] || "") !== String(next[f] || "")) t.edited[f] = 1; });
+    t.qty = next.qty; t.location = next.location; t.note = next.note; t.comment = next.comment;
     putOne(t).then(function () { apply(); closeDetail(); toast("Saved."); });
   }
   function toggleStar(id) {
@@ -266,12 +283,14 @@
       }
       var head = rows[hi].map(function (h) { return h.trim().toLowerCase(); });
       function col() { for (var a = 0; a < arguments.length; a++) { var idx = head.indexOf(arguments[a]); if (idx !== -1) return idx; } return -1; }
-      var ci = { no: col("no.", "no"), qty: col("qty"), toolNo: col("tool number"), svcGrp: col("svc grp", "service group"),
+      var ci = { id: col("id"), no: col("no.", "no"), qty: col("qty"), toolNo: col("tool number"), svcGrp: col("svc grp", "service group"),
         ct: col("ct"), desc: col("description"), location: col("location", "bin"), year: col("year"),
         price: col("dlr net($)", "dlr net", "price"), note: col("note"), comment: col("comment") };
       if (ci.toolNo === -1) { toast("No 'Tool Number' column found."); return; }
-      var byTool = {};
-      all.forEach(function (t) { if (!byTool[t.toolNo]) byTool[t.toolNo] = t; });
+      // Match rows exactly by id when present (unambiguous even for duplicate
+      // tool numbers), otherwise fall back to the first record with that number.
+      var byId = {}, byTool = {};
+      all.forEach(function (t) { byId[t.id] = t; if (!byTool[t.toolNo]) byTool[t.toolNo] = t; });
       var added = 0, updated = 0, maxIdN = all.reduce(function (m, t) { var n = parseInt((t.id || "t0").slice(1), 10); return isNaN(n) ? m : Math.max(m, n); }, 0);
       var toPut = [];
       for (var k = hi + 1; k < rows.length; k++) {
@@ -282,19 +301,20 @@
           desc: get(ci.desc), location: get(ci.location), year: get(ci.year),
           price: priceRaw === "" ? null : (isNaN(parseFloat(priceRaw)) ? null : parseFloat(priceRaw)),
           note: get(ci.note), comment: get(ci.comment) };
-        var ex = byTool[tn];
+        var rid = get(ci.id);
+        var ex = (rid && byId[rid]) ? byId[rid] : byTool[tn];
         if (ex) { for (var kk in rec) if (rec[kk] !== "" && rec[kk] != null) ex[kk] = rec[kk]; toPut.push(ex); updated++; }
-        else { rec.id = "t" + (++maxIdN); rec.star = false; var nn = normalize(rec, maxIdN); all.push(nn); byTool[tn] = nn; toPut.push(nn); added++; }
+        else { rec.id = "t" + (++maxIdN); rec.star = false; var nn = normalize(rec, maxIdN); all.push(nn); byId[nn.id] = nn; byTool[tn] = nn; toPut.push(nn); added++; }
       }
       putMany(toPut).then(function () { fillFilters(); apply(); toast("Imported CSV: " + added + " added, " + updated + " updated."); });
     });
   }
   function exportCSV() {
-    var head = ["No.", "Qty", "Tool Number", "Svc Grp", "Ct", "Description", "Location", "Year", "Dlr Net($)", "Note", "Comment"];
+    var head = ["ID", "No.", "Qty", "Tool Number", "Svc Grp", "Ct", "Description", "Location", "Year", "Dlr Net($)", "Note", "Comment"];
     var lines = [head.join(",")];
     var q = function (s) { s = String(s == null ? "" : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     view.forEach(function (t) {
-      lines.push([t.no, t.qty, t.toolNo, t.svcGrp, t.ct, t.desc, t.location, t.year, (t.price == null ? "" : t.price), t.note, t.comment].map(q).join(","));
+      lines.push([t.id, t.no, t.qty, t.toolNo, t.svcGrp, t.ct, t.desc, t.location, t.year, (t.price == null ? "" : t.price), t.note, t.comment].map(q).join(","));
     });
     dl(new Blob([lines.join("\n")], { type: "text/csv" }), "tool-inventory.csv");
     toast("Exported " + view.length + " rows to CSV.");

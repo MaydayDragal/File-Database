@@ -1,5 +1,5 @@
 /* Tool Inventory service worker — offline app shell + seed data. */
-const CACHE = "tool-inventory-v1";
+const CACHE = "tool-inventory-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -18,7 +18,8 @@ self.addEventListener("install", (e) => {
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    // Only prune OUR OWN old caches (CacheStorage is shared across the origin).
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith("tool-inventory-") && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

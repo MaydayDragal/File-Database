@@ -5,3 +5,4 @@ tools/screenshot-*.png
 tools/debug*.mjs
 *.log
 .DS_Store
+tools/shot-*.png

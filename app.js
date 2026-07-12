@@ -539,6 +539,11 @@
   function updateEmbedCount(dbName, store, countAttr) {
     try {
       const req = indexedDB.open(dbName);
+      // If the DB doesn't exist yet, opening without a version would CREATE it
+      // empty at v1 — which would then block the real app from ever creating
+      // its object stores. Abort the creation so we never leave an empty DB.
+      req.onupgradeneeded = (e) => { try { e.target.transaction.abort(); } catch (_) {} };
+      req.onblocked = () => {};
       req.onsuccess = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(store)) { db.close(); return; }
