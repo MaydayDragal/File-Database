@@ -1,0 +1,851 @@
+/*
+ * app.js — File Vault application logic.
+ *
+ * A dependency-free, offline-first personal file database. All state lives in
+ * IndexedDB (see db.js). This file wires up the UI: importing files, generating
+ * thumbnails, searching/filtering, previewing, editing metadata and backups.
+ */
+(function () {
+  "use strict";
+
+  const DB = window.VaultDB;
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  // ---- In-memory index of metadata (no blobs) for fast rendering ----
+  let items = [];               // array of meta records
+  const objectUrls = new Set(); // track for revocation
+
+  const state = {
+    filter: "all",              // all | starred | recent | kind:xxx | collection:xxx
+    tag: null,
+    query: "",
+    sort: "updated-desc",
+    view: "grid",
+    currentId: null,
+  };
+
+  // ---------- File type classification ----------
+  const KINDS = {
+    image: { label: "Images", glyph: "🖼️", badge: "IMG", color: "#0ea5e9" },
+    video: { label: "Videos", glyph: "🎬", badge: "VIDEO", color: "#e11d48" },
+    audio: { label: "Audio", glyph: "🎵", badge: "AUDIO", color: "#8b5cf6" },
+    pdf: { label: "PDFs", glyph: "📕", badge: "PDF", color: "#dc2626" },
+    document: { label: "Documents", glyph: "📄", badge: "DOC", color: "#2563eb" },
+    spreadsheet: { label: "Spreadsheets", glyph: "📊", badge: "SHEET", color: "#16a34a" },
+    presentation: { label: "Presentations", glyph: "📽️", badge: "SLIDES", color: "#ea580c" },
+    text: { label: "Text & code", glyph: "📝", badge: "TXT", color: "#475569" },
+    archive: { label: "Archives", glyph: "🗜️", badge: "ZIP", color: "#a16207" },
+    other: { label: "Other", glyph: "📦", badge: "FILE", color: "#64748b" },
+  };
+  const KIND_ORDER = ["image", "video", "audio", "pdf", "document", "spreadsheet", "presentation", "text", "archive", "other"];
+
+  function classify(file) {
+    const type = (file.type || "").toLowerCase();
+    const name = (file.name || "").toLowerCase();
+    const ext = name.includes(".") ? name.split(".").pop() : "";
+    if (type.startsWith("image/")) return "image";
+    if (type.startsWith("video/")) return "video";
+    if (type.startsWith("audio/")) return "audio";
+    if (type === "application/pdf" || ext === "pdf") return "pdf";
+    if (["zip", "rar", "7z", "gz", "tar", "bz2", "xz"].includes(ext) || type.includes("zip") || type.includes("compressed")) return "archive";
+    if (["doc", "docx", "odt", "rtf", "pages"].includes(ext) || type.includes("word") || type.includes("opendocument.text")) return "document";
+    if (["xls", "xlsx", "ods", "csv", "numbers"].includes(ext) || type.includes("sheet") || type.includes("excel")) return "spreadsheet";
+    if (["ppt", "pptx", "odp", "key"].includes(ext) || type.includes("presentation") || type.includes("powerpoint")) return "presentation";
+    if (type.startsWith("text/") ||
+        ["txt", "md", "markdown", "json", "xml", "yml", "yaml", "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs",
+         "c", "cpp", "h", "java", "cs", "php", "sh", "css", "html", "htm", "sql", "log", "ini", "conf", "toml", "env"].includes(ext))
+      return "text";
+    return "other";
+  }
+
+  const TEXT_PREVIEW_MAX = 512 * 1024; // 512KB inline text cap
+
+  // ---------- Utilities ----------
+  function uid() {
+    return "f_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+  }
+  function fmtBytes(n) {
+    if (!n && n !== 0) return "—";
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0, v = n;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return (v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
+  }
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) +
+      " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function objUrl(blob) {
+    const u = URL.createObjectURL(blob);
+    objectUrls.add(u);
+    return u;
+  }
+  function releaseUrls() {
+    objectUrls.forEach((u) => URL.revokeObjectURL(u));
+    objectUrls.clear();
+  }
+  let toastTimer = null;
+  function toast(msg, actionLabel, actionFn) {
+    const el = $("#toast");
+    el.innerHTML = "";
+    el.append(document.createTextNode(msg));
+    if (actionLabel) {
+      const b = document.createElement("button");
+      b.textContent = actionLabel;
+      b.onclick = () => { hide(el); actionFn && actionFn(); };
+      el.append(b);
+    }
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => hide(el), actionLabel ? 7000 : 3200);
+  }
+  const hide = (el) => { el.hidden = true; };
+
+  // ---------- Thumbnail generation ----------
+  function makeImageThumb(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const max = 360;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          canvas.toBlob((b) => { URL.revokeObjectURL(url); resolve(b); }, "image/jpeg", 0.78);
+        } catch (e) { URL.revokeObjectURL(url); resolve(null); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+  function makeVideoThumb(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.muted = true; v.preload = "metadata"; v.src = url;
+      let done = false;
+      const finish = (blob) => { if (done) return; done = true; URL.revokeObjectURL(url); resolve(blob); };
+      v.onloadeddata = () => {
+        try { v.currentTime = Math.min(1, (v.duration || 2) / 2); } catch (e) { finish(null); }
+      };
+      v.onseeked = () => {
+        try {
+          const max = 360;
+          const scale = Math.min(1, max / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round((v.videoWidth || 320) * scale));
+          canvas.height = Math.max(1, Math.round((v.videoHeight || 180) * scale));
+          canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((b) => finish(b), "image/jpeg", 0.72);
+        } catch (e) { finish(null); }
+      };
+      v.onerror = () => finish(null);
+      setTimeout(() => finish(null), 6000); // safety timeout
+    });
+  }
+  async function makeThumb(file, kind) {
+    try {
+      if (kind === "image") return await makeImageThumb(file);
+      if (kind === "video") return await makeVideoThumb(file);
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  // ---------- Import ----------
+  async function addFiles(fileList) {
+    const files = Array.from(fileList).filter(Boolean);
+    if (!files.length) return;
+    const collection = state.filter.startsWith("collection:") ? state.filter.slice(11) : "";
+    let added = 0;
+    toast(`Adding ${files.length} file${files.length > 1 ? "s" : ""}…`);
+    for (const file of files) {
+      const kind = classify(file);
+      const thumb = await makeThumb(file, kind);
+      const now = Date.now();
+      const record = {
+        id: uid(),
+        name: file.name || "Untitled",
+        type: file.type || "application/octet-stream",
+        kind,
+        size: file.size,
+        blob: file,
+        thumb,
+        tags: [],
+        collection,
+        note: "",
+        starred: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      record.searchText = DB.buildSearchText(record);
+      try {
+        await DB.put(record);
+        items.push(stripBlob(record));
+        added++;
+      } catch (e) {
+        console.error(e);
+        toast("Couldn't save “" + file.name + "”. Storage may be full.");
+      }
+    }
+    render();
+    updateStorage();
+    if (added) toast(`Added ${added} file${added > 1 ? "s" : ""}${collection ? " to " + collection : ""}.`);
+  }
+
+  function stripBlob(r) {
+    const { blob, searchText, ...meta } = r;
+    return meta;
+  }
+
+  // ---------- Rendering ----------
+  function currentSet() {
+    let list = items.slice();
+    const f = state.filter;
+    if (f === "starred") list = list.filter((i) => i.starred);
+    else if (f === "recent") {
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
+      list = list.slice(0, 40);
+    } else if (f.startsWith("kind:")) {
+      const k = f.slice(5);
+      list = list.filter((i) => i.kind === k);
+    } else if (f.startsWith("collection:")) {
+      const c = f.slice(11);
+      list = list.filter((i) => (i.collection || "") === c);
+    }
+    if (state.tag) list = list.filter((i) => (i.tags || []).includes(state.tag));
+    if (state.query) {
+      const q = state.query.toLowerCase();
+      list = list.filter((i) =>
+        [i.name, i.collection, i.note, (i.tags || []).join(" ")].join(" ").toLowerCase().includes(q));
+    }
+    if (f !== "recent") list = sortList(list);
+    return list;
+  }
+
+  function sortList(list) {
+    const [key, dir] = state.sort.split("-");
+    const mul = dir === "asc" ? 1 : -1;
+    return list.sort((a, b) => {
+      let r = 0;
+      if (key === "name") r = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      else if (key === "size") r = (a.size || 0) - (b.size || 0);
+      else r = (a.updatedAt || 0) - (b.updatedAt || 0);
+      return r * mul;
+    });
+  }
+
+  function render() {
+    renderSidebar();
+    const list = currentSet();
+    const results = $("#results");
+    results.className = "results " + state.view;
+    releaseUrls();
+    results.innerHTML = "";
+
+    if (items.length === 0) {
+      $("#empty").hidden = false;
+      $("#empty-title").textContent = "Your vault is empty";
+      $("#empty-text").innerHTML = "Drag files anywhere onto this window, or use <strong>Add files</strong> to start building your database. Everything stays on this computer.";
+      results.hidden = true;
+      return;
+    }
+    results.hidden = false;
+    if (list.length === 0) {
+      $("#empty").hidden = false;
+      $("#empty-title").textContent = "No matches";
+      $("#empty-text").textContent = "Nothing here fits the current search or filter. Try clearing filters.";
+      results.hidden = true;
+    } else {
+      $("#empty").hidden = true;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const it of list) frag.append(renderCard(it));
+    results.append(frag);
+    updateTitle(list.length);
+    renderActiveFilters();
+  }
+
+  function renderCard(it) {
+    const meta = KINDS[it.kind] || KINDS.other;
+    const card = document.createElement("article");
+    card.className = "card";
+    card.tabIndex = 0;
+    card.dataset.id = it.id;
+
+    const thumb = document.createElement("div");
+    thumb.className = "card__thumb";
+    if (it.thumb) {
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.src = objUrl(it.thumb);
+      img.alt = "";
+      thumb.append(img);
+    } else {
+      const g = document.createElement("div");
+      g.className = "card__glyph";
+      g.textContent = meta.glyph;
+      thumb.append(g);
+    }
+    const badge = document.createElement("span");
+    badge.className = "card__badge";
+    badge.style.background = meta.color;
+    badge.textContent = meta.badge;
+    thumb.append(badge);
+
+    const star = document.createElement("button");
+    star.className = "card__star" + (it.starred ? " on" : "");
+    star.textContent = it.starred ? "★" : "☆";
+    star.title = "Star";
+    star.onclick = (e) => { e.stopPropagation(); toggleStar(it.id); };
+    thumb.append(star);
+
+    const body = document.createElement("div");
+    body.className = "card__body";
+    const name = document.createElement("div");
+    name.className = "card__name";
+    name.textContent = it.name;
+    name.title = it.name;
+    const sub = document.createElement("div");
+    sub.className = "card__sub";
+    sub.innerHTML = `<span>${fmtBytes(it.size)}</span>` + (it.collection ? `<span>· ${esc(it.collection)}</span>` : "");
+    body.append(name, sub);
+    if (it.tags && it.tags.length) {
+      const tw = document.createElement("div");
+      tw.className = "card__tags";
+      it.tags.slice(0, 4).forEach((t) => {
+        const s = document.createElement("span");
+        s.className = "tag"; s.textContent = t;
+        tw.append(s);
+      });
+      body.append(tw);
+    }
+
+    card.append(thumb, body);
+    card.onclick = () => openDetail(it.id);
+    card.onkeydown = (e) => { if (e.key === "Enter") openDetail(it.id); };
+    return card;
+  }
+
+  function updateTitle(count) {
+    const f = state.filter;
+    let title = "All files";
+    if (f === "starred") title = "Starred";
+    else if (f === "recent") title = "Recent";
+    else if (f.startsWith("kind:")) title = (KINDS[f.slice(5)] || {}).label || "Files";
+    else if (f.startsWith("collection:")) title = f.slice(11) || "Uncategorized";
+    if (state.query) title = `“${state.query}”`;
+    $("#view-title").textContent = title;
+    document.title = `${title} · File Vault (${count})`;
+  }
+
+  function renderActiveFilters() {
+    const wrap = $("#active-filters");
+    wrap.innerHTML = "";
+    const chips = [];
+    if (state.tag) chips.push(["tag", "#" + state.tag, () => { state.tag = null; render(); }]);
+    if (state.query) chips.push(["q", "search: " + state.query, () => { state.query = ""; $("#search-input").value = ""; render(); }]);
+    chips.forEach(([, label, clear]) => {
+      const c = document.createElement("span");
+      c.className = "chip";
+      c.append(document.createTextNode(label));
+      const x = document.createElement("button");
+      x.textContent = "✕"; x.setAttribute("aria-label", "Remove filter");
+      x.onclick = clear;
+      c.append(x);
+      wrap.append(c);
+    });
+  }
+
+  // ---------- Sidebar ----------
+  function renderSidebar() {
+    const counts = { all: items.length, starred: 0, recent: Math.min(items.length, 40) };
+    const kindCounts = {};
+    const collCounts = {};
+    const tagCounts = {};
+    for (const it of items) {
+      if (it.starred) counts.starred++;
+      kindCounts[it.kind] = (kindCounts[it.kind] || 0) + 1;
+      const c = it.collection || "";
+      if (c) collCounts[c] = (collCounts[c] || 0) + 1;
+      (it.tags || []).forEach((t) => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
+    }
+    $$("[data-count]").forEach((el) => {
+      const k = el.getAttribute("data-count");
+      el.textContent = counts[k] ? counts[k] : "";
+    });
+
+    // Types
+    const typesNav = $("#nav-types");
+    typesNav.innerHTML = "";
+    KIND_ORDER.filter((k) => kindCounts[k]).forEach((k) => {
+      const m = KINDS[k];
+      const b = document.createElement("button");
+      b.className = "nav__item" + (state.filter === "kind:" + k ? " is-active" : "");
+      b.dataset.filter = "kind:" + k;
+      b.innerHTML = `<span class="nav__icon">${m.glyph}</span> ${m.label} <span class="nav__count">${kindCounts[k]}</span>`;
+      b.onclick = () => setFilter("kind:" + k);
+      typesNav.append(b);
+    });
+
+    // Collections
+    const collNav = $("#nav-collections");
+    collNav.innerHTML = "";
+    const collNames = getCollections();
+    if (!collNames.length) {
+      collNav.innerHTML = `<div class="nav__label" style="text-transform:none;font-weight:400;padding-top:2px">No collections yet</div>`;
+    }
+    collNames.forEach((c) => {
+      const b = document.createElement("button");
+      b.className = "nav__item" + (state.filter === "collection:" + c ? " is-active" : "");
+      b.innerHTML = `<span class="nav__icon">📂</span> ${esc(c)} <span class="nav__count">${collCounts[c] || 0}</span>`;
+      b.onclick = () => setFilter("collection:" + c);
+      collNav.append(b);
+    });
+
+    // Datalist for collection input
+    const dl = $("#collections-list");
+    dl.innerHTML = "";
+    collNames.forEach((c) => { const o = document.createElement("option"); o.value = c; dl.append(o); });
+
+    // Tags
+    const cloud = $("#tag-cloud");
+    cloud.innerHTML = "";
+    const sortedTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]).slice(0, 40);
+    $("#tags-section").hidden = sortedTags.length === 0;
+    sortedTags.forEach((t) => {
+      const s = document.createElement("button");
+      s.className = "tag" + (state.tag === t ? " is-active" : "");
+      s.textContent = t;
+      s.onclick = () => { state.tag = state.tag === t ? null : t; render(); };
+      cloud.append(s);
+    });
+  }
+
+  let extraCollections = [];
+  function getCollections() {
+    const set = new Set(extraCollections);
+    items.forEach((i) => { if (i.collection) set.add(i.collection); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  function setFilter(f) {
+    state.filter = f;
+    state.tag = null;
+    $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === f));
+    render();
+    closeSidebarMobile();
+  }
+
+  // ---------- Detail drawer ----------
+  async function openDetail(id) {
+    const rec = await DB.get(id);
+    if (!rec) { toast("File not found."); return; }
+    state.currentId = id;
+    const meta = KINDS[rec.kind] || KINDS.other;
+    $("#d-name").value = rec.name;
+    $("#d-type").textContent = rec.type || "unknown";
+    $("#d-size").textContent = fmtBytes(rec.size);
+    $("#d-added").textContent = fmtDate(rec.createdAt);
+    $("#d-collection").value = rec.collection || "";
+    $("#d-tags").value = (rec.tags || []).join(", ");
+    $("#d-note").value = rec.note || "";
+    const starBtn = $("#d-star");
+    starBtn.textContent = rec.starred ? "★" : "☆";
+    starBtn.classList.toggle("on", !!rec.starred);
+
+    await renderPreview(rec, meta);
+
+    const d = $("#detail");
+    d.hidden = false;
+    d.setAttribute("aria-hidden", "false");
+    setTimeout(() => $("#d-name").blur(), 0);
+  }
+
+  async function renderPreview(rec, meta) {
+    const box = $("#d-preview");
+    releasePreviewUrls();
+    box.innerHTML = "";
+    const url = objUrl(rec.blob);
+    previewUrls.add(url);
+    if (rec.kind === "image") {
+      const img = document.createElement("img"); img.src = url; img.alt = rec.name; box.append(img);
+    } else if (rec.kind === "video") {
+      const v = document.createElement("video"); v.src = url; v.controls = true; v.preload = "metadata"; box.append(v);
+    } else if (rec.kind === "audio") {
+      const a = document.createElement("audio"); a.src = url; a.controls = true;
+      const g = document.createElement("div"); g.className = "glyph-big"; g.textContent = "🎵";
+      const wrap = document.createElement("div"); wrap.style.textAlign = "center";
+      wrap.append(g, document.createElement("br"), a); box.append(wrap);
+    } else if (rec.kind === "pdf") {
+      const frame = document.createElement("iframe"); frame.src = url; frame.title = rec.name; box.append(frame);
+    } else if (rec.kind === "text" && rec.size <= TEXT_PREVIEW_MAX) {
+      try {
+        const txt = await rec.blob.text();
+        const pre = document.createElement("pre"); pre.textContent = txt; box.append(pre);
+      } catch (e) { fallbackGlyph(box, meta); }
+    } else {
+      fallbackGlyph(box, meta);
+    }
+  }
+  function fallbackGlyph(box, meta) {
+    const g = document.createElement("div"); g.className = "glyph-big"; g.textContent = meta.glyph;
+    box.append(g);
+  }
+
+  const previewUrls = new Set();
+  function releasePreviewUrls() { previewUrls.forEach((u) => URL.revokeObjectURL(u)); previewUrls.clear(); }
+
+  function closeDetail() {
+    const d = $("#detail");
+    d.hidden = true;
+    d.setAttribute("aria-hidden", "true");
+    releasePreviewUrls();
+    state.currentId = null;
+  }
+
+  async function saveDetail() {
+    const id = state.currentId;
+    if (!id) return;
+    const tags = $("#d-tags").value.split(",").map((s) => s.trim()).filter(Boolean);
+    const uniqueTags = Array.from(new Set(tags));
+    const patch = {
+      name: $("#d-name").value.trim() || "Untitled",
+      collection: $("#d-collection").value.trim(),
+      tags: uniqueTags,
+      note: $("#d-note").value.trim(),
+    };
+    const merged = await DB.update(id, patch);
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx >= 0) items[idx] = Object.assign(items[idx], patch, { updatedAt: merged.updatedAt });
+    render();
+    closeDetail();
+    toast("Saved.");
+  }
+
+  async function deleteCurrent() {
+    const id = state.currentId;
+    if (!id) return;
+    const rec = items.find((i) => i.id === id);
+    const name = rec ? rec.name : "this file";
+    if (!confirm(`Delete “${name}”? This can't be undone (the file is removed from the vault).`)) return;
+    await DB.remove(id);
+    items = items.filter((i) => i.id !== id);
+    closeDetail();
+    render();
+    updateStorage();
+    toast("Deleted “" + name + "”.");
+  }
+
+  async function toggleStar(id) {
+    const it = items.find((i) => i.id === id);
+    if (!it) return;
+    it.starred = !it.starred;
+    await DB.update(id, { starred: it.starred });
+    render();
+  }
+
+  async function downloadCurrent() {
+    const rec = await DB.get(state.currentId);
+    if (!rec) return;
+    const url = URL.createObjectURL(rec.blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = rec.name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+  async function openCurrent() {
+    const rec = await DB.get(state.currentId);
+    if (!rec) return;
+    const url = URL.createObjectURL(rec.blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  // ---------- Storage meter ----------
+  async function updateStorage() {
+    let used = 0, quota = 0;
+    if (navigator.storage && navigator.storage.estimate) {
+      try { const e = await navigator.storage.estimate(); used = e.usage || 0; quota = e.quota || 0; } catch (e) {}
+    }
+    const fill = $("#storage-fill");
+    const text = $("#storage-text");
+    if (quota) {
+      const pct = Math.min(100, (used / quota) * 100);
+      fill.style.width = pct.toFixed(1) + "%";
+      text.textContent = `${fmtBytes(used)} used · ${fmtBytes(quota)} available`;
+    } else {
+      fill.style.width = "0%";
+      text.textContent = `${fmtBytes(used)} used`;
+    }
+    const usage = $("#about-usage");
+    if (usage) usage.textContent = `${items.length} files · ${fmtBytes(used)} stored${quota ? " of ~" + fmtBytes(quota) : ""}.`;
+  }
+
+  // ---------- Export / Import ----------
+  async function exportVault() {
+    toast("Preparing backup…");
+    const records = [];
+    await DB.each((r) => records.push(r));
+    // Build a JSON container with base64 blobs. Simple and portable.
+    const out = { format: "file-vault", version: 1, exportedAt: Date.now(), files: [] };
+    for (const r of records) {
+      const b64 = await blobToBase64(r.blob);
+      const thumb64 = r.thumb ? await blobToBase64(r.thumb) : null;
+      out.files.push({
+        id: r.id, name: r.name, type: r.type, kind: r.kind, size: r.size,
+        tags: r.tags, collection: r.collection, note: r.note, starred: r.starred,
+        createdAt: r.createdAt, updatedAt: r.updatedAt,
+        blob: b64, blobType: r.blob.type, thumb: thumb64,
+      });
+    }
+    const json = JSON.stringify(out);
+    const blob = new Blob([json], { type: "application/json" });
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = URL.createObjectURL(blob);
+    a.download = `file-vault-backup-${stamp}.fvault`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast(`Exported ${out.files.length} files.`);
+  }
+
+  async function importVault(file) {
+    try {
+      toast("Reading backup…");
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || data.format !== "file-vault" || !Array.isArray(data.files)) {
+        toast("That doesn't look like a File Vault backup.");
+        return;
+      }
+      const existing = new Set(items.map((i) => i.id));
+      let imported = 0;
+      for (const f of data.files) {
+        const blob = base64ToBlob(f.blob, f.blobType || f.type);
+        const thumb = f.thumb ? base64ToBlob(f.thumb, "image/jpeg") : null;
+        const id = existing.has(f.id) ? uid() : f.id;
+        const rec = {
+          id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
+          size: f.size != null ? f.size : blob.size, blob, thumb,
+          tags: f.tags || [], collection: f.collection || "", note: f.note || "",
+          starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
+        };
+        rec.searchText = DB.buildSearchText(rec);
+        await DB.put(rec);
+        items.push(stripBlob(rec));
+        imported++;
+      }
+      render();
+      updateStorage();
+      toast(`Imported ${imported} files.`);
+    } catch (e) {
+      console.error(e);
+      toast("Import failed — the file may be corrupted.");
+    }
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+  function base64ToBlob(b64, type) {
+    const bin = atob(b64 || "");
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: type || "application/octet-stream" });
+  }
+
+  // ---------- PWA install ----------
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $("#install-btn").hidden = false;
+  });
+  window.addEventListener("appinstalled", () => { $("#install-btn").hidden = true; toast("Installed! Look for File Vault in your apps."); });
+
+  // ---------- Drag & drop ----------
+  let dragDepth = 0;
+  function initDnD() {
+    const overlay = $("#drop-overlay");
+    window.addEventListener("dragenter", (e) => {
+      if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+      e.preventDefault(); dragDepth++; overlay.hidden = false;
+    });
+    window.addEventListener("dragover", (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) e.preventDefault(); });
+    window.addEventListener("dragleave", (e) => { dragDepth = Math.max(0, dragDepth - 1); if (dragDepth === 0) overlay.hidden = true; });
+    window.addEventListener("drop", (e) => {
+      if (!e.dataTransfer) return;
+      e.preventDefault(); dragDepth = 0; overlay.hidden = true;
+      if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+    // Paste files/images
+    window.addEventListener("paste", (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      const files = Array.from((e.clipboardData && e.clipboardData.files) || []);
+      if (files.length) { e.preventDefault(); addFiles(files); }
+    });
+  }
+
+  // ---------- Sidebar (mobile) ----------
+  function openSidebarMobile() { $("#sidebar").classList.add("open"); $("#sidebar-scrim").hidden = false; }
+  function closeSidebarMobile() { $("#sidebar").classList.remove("open"); $("#sidebar-scrim").hidden = true; }
+
+  // ---------- Event wiring ----------
+  function wire() {
+    $("#add-btn").onclick = () => $("#file-input").click();
+    $("#empty-add").onclick = () => $("#file-input").click();
+    $("#file-input").onchange = (e) => { addFiles(e.target.files); e.target.value = ""; };
+    $("#import-input").onchange = (e) => { if (e.target.files[0]) importVault(e.target.files[0]); e.target.value = ""; };
+
+    // Search (debounced)
+    let searchTimer;
+    $("#search-input").addEventListener("input", (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { state.query = e.target.value.trim(); render(); }, 140);
+    });
+
+    $("#sort-select").onchange = (e) => { state.sort = e.target.value; render(); };
+    $("#view-grid").onclick = () => setView("grid");
+    $("#view-list").onclick = () => setView("list");
+
+    $$("#nav-filters .nav__item").forEach((b) => { b.onclick = () => setFilter(b.dataset.filter); });
+
+    // Detail drawer
+    $$("#detail [data-close]").forEach((el) => { el.onclick = closeDetail; });
+    $("#d-save").onclick = saveDetail;
+    $("#d-delete").onclick = deleteCurrent;
+    $("#d-download").onclick = downloadCurrent;
+    $("#d-open").onclick = openCurrent;
+    $("#d-star").onclick = async () => {
+      if (!state.currentId) return;
+      await toggleStar(state.currentId);
+      const it = items.find((i) => i.id === state.currentId);
+      const b = $("#d-star"); b.textContent = it.starred ? "★" : "☆"; b.classList.toggle("on", it.starred);
+    };
+
+    // More menu
+    const moreBtn = $("#more-btn"), moreMenu = $("#more-menu");
+    moreBtn.onclick = (e) => { e.stopPropagation(); moreMenu.hidden = !moreMenu.hidden; };
+    document.addEventListener("click", (e) => {
+      if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) moreMenu.hidden = true;
+    });
+    moreMenu.querySelectorAll("button").forEach((b) => {
+      b.onclick = () => { moreMenu.hidden = true; handleMenu(b.dataset.action); };
+    });
+
+    // New collection buttons
+    $("#add-collection").onclick = newCollection;
+
+    // Mobile sidebar
+    $("#menu-toggle").onclick = () => {
+      const open = $("#sidebar").classList.contains("open");
+      open ? closeSidebarMobile() : openSidebarMobile();
+    };
+    $("#sidebar-scrim").onclick = closeSidebarMobile;
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (!$("#about").hidden) return hide($("#about"));
+        if (!$("#detail").hidden) return closeDetail();
+        if (!moreMenu.hidden) return (moreMenu.hidden = true);
+      }
+      const typing = document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
+      if (typing) return;
+      if (e.key === "/") { e.preventDefault(); $("#search-input").focus(); }
+      else if (e.key.toLowerCase() === "a") { $("#file-input").click(); }
+      else if (e.key.toLowerCase() === "g") setView("grid");
+      else if (e.key.toLowerCase() === "l") setView("list");
+    });
+
+    // Modal closers
+    $$("#about [data-close]").forEach((el) => { el.onclick = () => hide($("#about")); });
+  }
+
+  function handleMenu(action) {
+    if (action === "export") exportVault();
+    else if (action === "import") $("#import-input").click();
+    else if (action === "new-collection") newCollection();
+    else if (action === "persist") requestPersistence();
+    else if (action === "about") { updateStorage(); $("#about").hidden = false; }
+  }
+
+  function newCollection() {
+    const name = prompt("Name the new collection:");
+    if (!name) return;
+    const clean = name.trim();
+    if (!clean) return;
+    if (!extraCollections.includes(clean)) extraCollections.push(clean);
+    DB.setMeta("collections", extraCollections);
+    setFilter("collection:" + clean);
+    toast(`Collection “${clean}” created. Add files or drag them here to fill it.`);
+  }
+
+  async function requestPersistence() {
+    if (navigator.storage && navigator.storage.persist) {
+      const granted = await navigator.storage.persist();
+      toast(granted
+        ? "Persistent storage granted — your vault is protected from automatic cleanup."
+        : "The browser declined persistent storage, but your data is still saved.");
+    } else {
+      toast("This browser doesn't support the persistence request.");
+    }
+    updateStorage();
+  }
+
+  function setView(v) {
+    state.view = v;
+    $("#view-grid").classList.toggle("is-active", v === "grid");
+    $("#view-list").classList.toggle("is-active", v === "list");
+    DB.setMeta("view", v);
+    render();
+  }
+
+  // ---------- Boot ----------
+  async function boot() {
+    wire();
+    initDnD();
+    // restore prefs
+    try {
+      const v = await DB.getMeta("view", "grid");
+      state.view = v;
+      $("#view-grid").classList.toggle("is-active", v === "grid");
+      $("#view-list").classList.toggle("is-active", v === "list");
+      extraCollections = (await DB.getMeta("collections", [])) || [];
+    } catch (e) {}
+
+    items = await DB.listMeta();
+    render();
+    updateStorage();
+
+    // URL actions (from PWA shortcuts)
+    const params = new URLSearchParams(location.search);
+    if (params.get("view") === "starred") setFilter("starred");
+    if (params.get("action") === "add") setTimeout(() => $("#file-input").click(), 300);
+
+    // Service worker for offline
+    if ("serviceWorker" in navigator) {
+      try { await navigator.serviceWorker.register("sw.js"); } catch (e) { /* file:// or blocked */ }
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+})();

@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+tools/_fixtures/
+tools/screenshot-*.png
+tools/debug*.mjs
+*.log
+.DS_Store

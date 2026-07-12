@@ -1,0 +1,33 @@
+{
+  "name": "File Vault — Personal File Database",
+  "short_name": "File Vault",
+  "description": "A private, offline file database for documents, videos, photos, PDFs and text. Runs entirely in your browser — no install or admin rights required.",
+  "id": "/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add files",
+      "short_name": "Add",
+      "url": "./index.html?action=add",
+      "description": "Add files to the vault"
+    },
+    {
+      "name": "Starred",
+      "short_name": "Starred",
+      "url": "./index.html?view=starred",
+      "description": "Jump to starred files"
+    }
+  ]
+}

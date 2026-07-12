@@ -1,0 +1,25 @@
+{
+  "name": "file-vault",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A private, offline PWA file database for documents, videos, photos, PDFs and text. Runs entirely in the browser — no install or admin rights required.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "icons": "python3 tools/gen_icons.py",
+    "test": "node tools/e2e.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaydayDragal/File-Database.git"
+  },
+  "keywords": ["pwa", "offline", "indexeddb", "file-manager", "no-admin", "database"],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/MaydayDragal/File-Database/issues"
+  },
+  "homepage": "https://github.com/MaydayDragal/File-Database#readme",
+  "devDependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}
