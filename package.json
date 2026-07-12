@@ -7,9 +7,10 @@
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs",
+    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs",
     "test:vault": "node tools/e2e.mjs",
-    "test:merge": "node tools/e2e-merge.mjs"
+    "test:merge": "node tools/e2e-merge.mjs",
+    "test:inventory": "node tools/e2e-inventory.mjs"
   },
   "repository": {
     "type": "git",

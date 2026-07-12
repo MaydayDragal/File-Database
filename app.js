@@ -248,14 +248,20 @@
     renderSidebar();
     syncStaticNav();
 
-    // The LI Database is an embedded app, not a file list — show it and stop.
-    const liActive = state.filter === "li";
-    document.querySelector(".content").classList.toggle("content--li", liActive);
-    $("#li-view").hidden = !liActive;
-    if (liActive) {
-      ensureLiLoaded();
-      $("#view-title").textContent = "LI Documents";
-      document.title = "LI Documents · File Vault";
+    // Embedded apps (LI Database, Tool Inventory) are shown in-shell, not as a
+    // file list. Reset them all, then reveal the active one and stop.
+    const contentEl = document.querySelector(".content");
+    Object.keys(EMBED_APPS).forEach((k) => {
+      contentEl.classList.remove(EMBED_APPS[k].contentClass);
+      $(EMBED_APPS[k].view).hidden = true;
+    });
+    const app = EMBED_APPS[state.filter];
+    if (app) {
+      contentEl.classList.add(app.contentClass);
+      $(app.view).hidden = false;
+      if (!app.loaded) { app.loaded = true; $(app.frame).src = app.src; }
+      $("#view-title").textContent = app.title;
+      document.title = app.title + " · File Vault";
       return;
     }
 
@@ -512,31 +518,34 @@
     closeSidebarMobile();
   }
 
-  // Keep the fixed sidebar entries (all/starred/recent/li) in sync with state.
+  // ---------- Embedded apps registry ----------
+  const EMBED_APPS = {
+    li: { view: "#li-view", frame: "#li-frame", src: "li/index.html", title: "LI Documents",
+          contentClass: "content--li", loaded: false, nav: "#nav-li" },
+    inventory: { view: "#inventory-view", frame: "#inventory-frame", src: "inventory/index.html", title: "Tool Inventory",
+          contentClass: "content--inventory", loaded: false, nav: "#nav-inventory" },
+  };
+
+  // Keep the fixed sidebar entries in sync with the active view.
   function syncStaticNav() {
     $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === state.filter));
-    const li = $("#nav-li");
-    if (li) li.classList.toggle("is-active", state.filter === "li");
+    Object.keys(EMBED_APPS).forEach((k) => {
+      const el = $(EMBED_APPS[k].nav);
+      if (el) el.classList.toggle("is-active", state.filter === k);
+    });
   }
 
-  // ---------- Embedded LI Database ----------
-  let liLoaded = false;
-  function ensureLiLoaded() {
-    if (liLoaded) return;
-    liLoaded = true;
-    $("#li-frame").src = "li/index.html";
-  }
-  // Count of LI documents (read-only peek at the LI app's own database).
-  function updateLiCount() {
+  // Peek at an embedded app's own IndexedDB (read-only) to show a sidebar count.
+  function updateEmbedCount(dbName, store, countAttr) {
     try {
-      const req = indexedDB.open("LIDocsDB");
+      const req = indexedDB.open(dbName);
       req.onsuccess = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains("docs")) { db.close(); return; }
+        if (!db.objectStoreNames.contains(store)) { db.close(); return; }
         try {
-          const c = db.transaction("docs", "readonly").objectStore("docs").count();
+          const c = db.transaction(store, "readonly").objectStore(store).count();
           c.onsuccess = () => {
-            const el = document.querySelector('[data-count="li"]');
+            const el = document.querySelector(`[data-count="${countAttr}"]`);
             if (el) el.textContent = c.result || "";
             db.close();
           };
@@ -545,6 +554,10 @@
       };
       req.onerror = () => {};
     } catch (e) {}
+  }
+  function updateAppCounts() {
+    updateEmbedCount("LIDocsDB", "docs", "li");
+    updateEmbedCount("tool-inventory", "tools", "inventory");
   }
 
   // ---------- Detail drawer ----------
@@ -954,6 +967,7 @@
 
     $$("#nav-filters .nav__item").forEach((b) => { b.onclick = () => setFilter(b.dataset.filter); });
     $("#nav-li").onclick = () => setFilter("li");
+    $("#nav-inventory").onclick = () => setFilter("inventory");
 
     // Detail drawer
     $$("#detail [data-close]").forEach((el) => { el.onclick = closeDetail; });
@@ -1077,23 +1091,24 @@
     items = await DB.listMeta();
     render();
     updateStorage();
-    updateLiCount();
+    updateAppCounts();
 
     // Cross-app bridge: receive files handed over from the LI Database.
     if (window.VaultBridge) {
       window.VaultBridge.receive("vault", (item) => addIncomingFile(item));
     }
-    // The embedded LI app can ask us to switch back to the file list.
+    // Embedded apps can ask the shell to switch back to the file list.
     window.addEventListener("message", (e) => {
       const d = e.data || {};
       if (d && d.type === "vault-nav" && d.to === "files") setFilter("all");
-      if (d && d.type === "li-changed") updateLiCount();
+      if (d && d.type === "li-changed") updateAppCounts();
     });
 
     // URL actions (from PWA shortcuts)
     const params = new URLSearchParams(location.search);
     if (params.get("view") === "starred") setFilter("starred");
     if (params.get("view") === "li") setFilter("li");
+    if (params.get("view") === "inventory") setFilter("inventory");
     if (params.get("action") === "add") setTimeout(() => $("#file-input").click(), 300);
 
     // Service worker for offline + seamless updates.

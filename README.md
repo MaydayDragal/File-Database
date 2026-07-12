@@ -25,22 +25,33 @@ that one computer.
 
 ---
 
-## Two databases, one app
+## Several databases, one app
 
-File Vault also hosts the **LI Document Database** — a specialist tool for
-Mercedes‑Benz LI PDFs (reads each PDF's LI number, version, title, function
-group, date and validity; OCRs scans; compares versions; exports renamed
-copies). They share one site and hand files to each other:
+File Vault is also a home for specialist databases, reachable from the
+**Apps** section of the sidebar. Each keeps its own features and its own local
+storage, and a **← Files** link returns you to the file list.
 
-- Open **🗄️ LI Documents** in the sidebar to use the LI database right inside
-  File Vault. A **← Files** link takes you back.
+**🗄️ LI Documents** — a tool for Mercedes‑Benz LI PDFs (reads each PDF's LI
+number, version, title, function group, date and validity; OCRs scans;
+compares versions; exports renamed copies). It also hands files to File Vault:
+
 - In File Vault, open any **PDF** and click **🗄️ Send to LI** to push it into
   the LI database, where it's parsed and filed automatically.
 - In the LI database's document view, click **＋ File Vault** to copy the
   renamed PDF into File Vault — filed under an **“LI Documents”** collection
   and auto‑tagged with its LI number, function group and model series.
 
-Both databases stay on your machine; the handoff happens locally through a
+**🔧 Tool Inventory** — a searchable database of Mercedes‑Benz dealer special
+tools (tool number, description, service group, bin location, category and
+dealer‑net price). It ships with the current list built in, and lets you:
+
+- **Search** by tool number, description or location; **filter** by service
+  group, category (Ct) or note; **sort** any column; **star** favorites.
+- **Edit** a tool's location, quantity, note and comment (saved locally).
+- **Import a CSV** to refresh or extend the list, **export** the filtered rows
+  to CSV, and **back up / restore** the whole database.
+
+All of these stay on your machine; the file handoff happens locally through a
 small shared bridge (`bridge.js`) — nothing is uploaded.
 
 ## Features
@@ -126,9 +137,11 @@ sw.js                 Service worker (offline app‑shell cache)
 manifest.webmanifest  PWA manifest (install metadata + icons)
 icons/                Generated PNG app icons
 li/                   The embedded LI Document Database (its own app + SW)
+inventory/            The embedded Tool Inventory app (data in tools.json)
 tools/gen_icons.py    Regenerates the icons (no dependencies)
 tools/e2e.mjs         End‑to‑end test for File Vault
 tools/e2e-merge.mjs   Integration test for the File Vault ⇄ LI merge
+tools/e2e-inventory.mjs  Test for the Tool Inventory app + hub embedding
 ```
 
 ### Development

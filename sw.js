@@ -5,7 +5,7 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "file-vault-v3";
+const CACHE = "file-vault-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -40,9 +40,9 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // only handle same-origin
-  // The LI Database (under /li/) ships its own service worker — leave its
-  // requests alone so we never serve File Vault's shell for an LI URL.
-  if (url.pathname.includes("/li/")) return;
+  // Embedded apps under /li/ and /inventory/ ship their own service workers —
+  // leave their requests alone so we never serve File Vault's shell for them.
+  if (url.pathname.includes("/li/") || url.pathname.includes("/inventory/")) return;
 
   // Network-first for navigations so updates are picked up when online,
   // falling back to the cached shell when offline.

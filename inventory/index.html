@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1420" />
+  <meta name="description" content="Offline, searchable database of Mercedes-Benz dealer special tools." />
+  <title>Tool Inventory — Special Tools Database</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/favicon-64.png" sizes="64x64" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1><img src="icons/favicon-64.png" alt="" /> Tool Inventory</h1>
+    <span class="sub" id="sub"></span>
+    <span class="spacer"></span>
+    <div class="actions">
+      <a class="btn btn-ghost btn-sm" id="backBtn" href="../index.html" title="Back to File Vault" hidden>← Files</a>
+      <button class="btn btn-ghost btn-sm" id="installBtn" title="Install as an app" hidden>📌 Install</button>
+      <div class="menu-wrap">
+        <button class="btn btn-ghost btn-sm" id="menuBtn" aria-haspopup="true">☰ Menu</button>
+        <div class="menu" id="appMenu" hidden role="menu">
+          <div class="menu-label">Data</div>
+          <button class="menu-item" id="importCsvBtn">⬆ Import CSV…</button>
+          <button class="menu-item" id="exportCsvBtn">⬇ Export CSV (filtered)</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Backup</div>
+          <button class="menu-item" id="backupBtn">💾 Back up database</button>
+          <button class="menu-item" id="restoreBtn">↥ Restore backup…</button>
+          <button class="menu-item" id="resetBtn">↻ Reset to bundled list</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item" id="legendBtn">❔ Legend &amp; notes</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label class="search">
+      <span class="muted">🔍</span>
+      <input type="text" id="search" placeholder="Search tool number, description, location…" autocomplete="off" spellcheck="false" />
+    </label>
+    <select id="fGrp" title="Service group"></select>
+    <select id="fCt" title="Category"></select>
+    <select id="fNote" title="Note"></select>
+    <button class="btn btn-ghost btn-sm" id="starFilter" title="Show starred only">★ Starred</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="main">
+    <table class="lib" id="table">
+      <thead id="thead">
+        <tr>
+          <th class="starcell" data-sort="star" title="Starred">★</th>
+          <th data-sort="toolNo">Tool Number</th>
+          <th data-sort="desc">Description</th>
+          <th class="col-grp" data-sort="svcGrp">Svc Grp</th>
+          <th data-sort="ct">Ct</th>
+          <th data-sort="location">Location</th>
+          <th class="col-year" data-sort="year">Year</th>
+          <th class="num" data-sort="price">Dlr Net</th>
+          <th data-sort="note">Note</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">Loading…</div>
+  </div>
+
+  <!-- Detail modal -->
+  <div class="overlay" id="detail">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+      <div class="modal-head">
+        <button class="dstar" id="dStar" title="Star">☆</button>
+        <h2 id="dTitle" class="mono"></h2>
+        <button class="x" data-close aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="kv-grid" id="dGrid"></div>
+        <div class="field"><label>Quantity</label><input id="eQty" /></div>
+        <div class="field"><label>Location / Bin</label><input id="eLoc" /></div>
+        <div class="field"><label>Note</label><input id="eNote" placeholder="R / A / MM" /></div>
+        <div class="field"><label>Comment</label><textarea id="eComment" rows="2"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" id="dCopy">Copy tool #</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-close>Close</button>
+        <button class="btn btn-primary btn-sm" id="dSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend modal -->
+  <div class="overlay" id="legend">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="legendTitle">
+      <div class="modal-head"><h2 id="legendTitle">Legend &amp; notes</h2><button class="x" data-close aria-label="Close">×</button></div>
+      <div class="modal-body legend">
+        <p id="legendUpdated" class="muted"></p>
+        <p>These lists define the <strong>required M‑B Special Tools</strong> — primarily service categories <strong>Ct A</strong> and <strong>B</strong>, sometimes <strong>C</strong> and <strong>K</strong> — that authorized dealers keep to perform service, maintenance, diagnosis and minor repairs.</p>
+        <p><span class="code">MM</span> Maintenance‑Manual tools — required tools specifically described in the M‑B Maintenance Manuals.</p>
+        <p><span class="code">R</span> Required tools — additionally designated by DCAG.</p>
+        <p><span class="code">A</span> Additional tools — additionally designated by MBUSA.</p>
+        <p><span class="code">Ct</span> Service category of the tool (A / B / C / K).</p>
+        <p class="muted">Prices are for reference only and can change; some tools are ISO‑controlled or no longer available new (dealer should already stock them). Workshop equipment from the Standard Service Equipment program is not listed here.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <input type="file" id="csvInput" accept=".csv,text/csv" />
+  <input type="file" id="restoreInput" accept=".json,application/json" />
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -86,6 +86,9 @@
           <button class="nav__item" data-filter="li" id="nav-li">
             <span class="nav__icon">🗄️</span> LI Documents <span class="nav__count" data-count="li"></span>
           </button>
+          <button class="nav__item" data-filter="inventory" id="nav-inventory">
+            <span class="nav__icon">🔧</span> Tool Inventory <span class="nav__count" data-count="inventory"></span>
+          </button>
         </nav>
       </div>
 
@@ -158,9 +161,12 @@
         <button class="btn btn--primary" id="empty-add">Add your first files</button>
       </div>
 
-      <!-- Embedded LI Document Database (loaded on first visit) -->
-      <section id="li-view" class="li-view" hidden aria-label="LI Document Database">
-        <iframe id="li-frame" class="li-frame" title="LI Document Database" referrerpolicy="no-referrer"></iframe>
+      <!-- Embedded apps (loaded on first visit) -->
+      <section id="li-view" class="app-view" hidden aria-label="LI Document Database">
+        <iframe id="li-frame" class="app-frame" title="LI Document Database" referrerpolicy="no-referrer"></iframe>
+      </section>
+      <section id="inventory-view" class="app-view" hidden aria-label="Tool Inventory">
+        <iframe id="inventory-frame" class="app-frame" title="Tool Inventory" referrerpolicy="no-referrer"></iframe>
       </section>
     </main>
   </div>
