@@ -157,7 +157,40 @@ await page.click("#d-delete");
 await page.waitForTimeout(300);
 check((await page.locator(".card").count()) === 2, "delete removes a card -> 2 left");
 
-await page.screenshot({ path: path.join(ROOT, "tools", "screenshot-grid.png") });
+// --- Theme toggle (system -> light -> dark) ---
+check(await page.evaluate(() => !document.documentElement.hasAttribute("data-theme")), "starts on system theme (no data-theme attr)");
+await page.click("#theme-btn"); // system -> light
+await page.waitForTimeout(120);
+check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "light", "toggle -> light");
+await page.click("#theme-btn"); // light -> dark
+await page.waitForTimeout(120);
+check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "toggle -> dark");
+const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+check(darkBg === "rgb(15, 23, 42)", `dark theme actually applies dark bg (got ${darkBg})`);
+check(await page.evaluate(() => localStorage.getItem("fv-theme")) === "dark", "dark choice persisted to localStorage");
+// Persists across reload with no flash (head script reads localStorage synchronously)
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "dark theme persists after reload");
+
+await page.screenshot({ path: path.join(ROOT, "tools", "screenshot-dark.png") });
+
+// --- Install button actually invokes the install prompt ---
+const installResult = await page.evaluate(async () => {
+  // Simulate Chrome's install criteria being met.
+  let promptCalled = false;
+  const evt = new Event("beforeinstallprompt");
+  evt.prompt = () => { promptCalled = true; };
+  evt.userChoice = Promise.resolve({ outcome: "accepted" });
+  window.dispatchEvent(evt);
+  const btn = document.getElementById("install-btn");
+  const wasVisible = !btn.hidden;
+  btn.click();
+  await new Promise((r) => setTimeout(r, 50));
+  return { wasVisible, promptCalled };
+});
+check(installResult.wasVisible, "install button shown after beforeinstallprompt");
+check(installResult.promptCalled, "clicking install invokes the native prompt");
 
 console.log(errors.length ? "\nConsole errors:\n" + errors.join("\n") : "\nNo console errors.");
 check(errors.length === 0, "no console/page errors");

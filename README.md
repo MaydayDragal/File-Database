@@ -36,7 +36,7 @@ that one computer.
 - **Backup & restore** — export the whole vault to one `.fvault` file and import it on another computer or browser profile.
 - **Installable** — click **Install app** to add it to your Start menu / dock and launch it in its own window.
 - **Offline‑first** and **keyboard‑friendly** (`/` search, `a` add, `g`/`l` grid/list, `Esc` close).
-- **Light & dark** themes, following your system.
+- **Light & dark themes** — click the ◐ toggle in the top bar to cycle System → Light → Dark (your choice is remembered and applied before the page paints, so no flash).
 
 ---
 

@@ -673,12 +673,79 @@
 
   // ---------- PWA install ----------
   let deferredPrompt = null;
+  function isStandalone() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    $("#install-btn").hidden = false;
+    if (!isStandalone()) $("#install-btn").hidden = false;
   });
-  window.addEventListener("appinstalled", () => { $("#install-btn").hidden = true; toast("Installed! Look for File Vault in your apps."); });
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    $("#install-btn").hidden = true;
+    toast("Installed! Look for File Vault in your apps.");
+  });
+
+  async function triggerInstall() {
+    if (isStandalone()) { toast("File Vault is already installed — you're running the app."); return; }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      let outcome = "dismissed";
+      try { ({ outcome } = await deferredPrompt.userChoice); } catch (e) {}
+      deferredPrompt = null;
+      if (outcome === "accepted") $("#install-btn").hidden = true;
+      else toast("You can install anytime from here or the browser menu.");
+      return;
+    }
+    // No prompt available yet (e.g. iOS/Safari, Firefox, or criteria not met).
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua)) {
+      toast("On iPhone/iPad: tap the Share button, then “Add to Home Screen”.");
+    } else if (/Firefox/.test(ua)) {
+      toast("In Firefox: open the ⋯ menu and choose “Install” / “Add to Home screen”.");
+    } else {
+      toast("Use the browser menu (⋮) → “Install File Vault” / “Create shortcut”. If it's greyed out, reload once and try again.");
+    }
+  }
+
+  // ---------- Theme ----------
+  const THEMES = ["system", "light", "dark"];
+  const THEME_LABEL = { system: "System theme", light: "Light theme", dark: "Dark theme" };
+  let themeMode = "system";
+  function effectiveDark() {
+    if (themeMode === "dark") return true;
+    if (themeMode === "light") return false;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function applyTheme() {
+    const root = document.documentElement;
+    if (themeMode === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", themeMode);
+    // theme-color meta so the browser UI / titlebar matches
+    const tc = document.querySelector('meta[name="theme-color"]');
+    if (tc) tc.setAttribute("content", effectiveDark() ? "#16203a" : "#4f46e5");
+    // swap the toggle icon
+    const dark = effectiveDark();
+    const di = document.querySelector(".theme-icon-dark");
+    const li = document.querySelector(".theme-icon-light");
+    if (di && li) { di.hidden = dark; li.hidden = !dark; }
+    const btn = $("#theme-btn");
+    if (btn) btn.title = THEME_LABEL[themeMode] + " (click to change)";
+  }
+  function persistTheme() {
+    DB.setMeta("theme", themeMode);
+    try {
+      if (themeMode === "system") localStorage.removeItem("fv-theme");
+      else localStorage.setItem("fv-theme", themeMode);
+    } catch (e) {}
+  }
+  function cycleTheme() {
+    themeMode = THEMES[(THEMES.indexOf(themeMode) + 1) % THEMES.length];
+    applyTheme();
+    persistTheme();
+    toast(THEME_LABEL[themeMode]);
+  }
 
   // ---------- Drag & drop ----------
   let dragDepth = 0;
@@ -712,6 +779,8 @@
   function wire() {
     $("#add-btn").onclick = () => $("#file-input").click();
     $("#empty-add").onclick = () => $("#file-input").click();
+    $("#install-btn").onclick = triggerInstall;
+    $("#theme-btn").onclick = cycleTheme;
     $("#file-input").onchange = (e) => { addFiles(e.target.files); e.target.value = ""; };
     $("#import-input").onchange = (e) => { if (e.target.files[0]) importVault(e.target.files[0]); e.target.value = ""; };
 
@@ -825,12 +894,26 @@
     initDnD();
     // restore prefs
     try {
+      themeMode = (await DB.getMeta("theme", "system")) || "system";
+      if (!THEMES.includes(themeMode)) themeMode = "system";
+      applyTheme();
+      persistTheme();
       const v = await DB.getMeta("view", "grid");
       state.view = v;
       $("#view-grid").classList.toggle("is-active", v === "grid");
       $("#view-list").classList.toggle("is-active", v === "list");
       extraCollections = (await DB.getMeta("collections", [])) || [];
     } catch (e) {}
+
+    // Keep in sync with the OS when following "System".
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        if (themeMode === "system") applyTheme();
+      });
+    }
+
+    // Already-installed app: hide the Install button.
+    if (isStandalone()) $("#install-btn").hidden = true;
 
     items = await DB.listMeta();
     render();
