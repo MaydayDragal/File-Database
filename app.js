@@ -264,6 +264,7 @@
     results.className = "results " + state.view;
     releaseUrls();
     results.innerHTML = "";
+    $("#list-head").hidden = true;
 
     if (items.length === 0) {
       $("#empty").hidden = false;
@@ -285,11 +286,13 @@
     const frag = document.createDocumentFragment();
     for (const it of list) frag.append(renderCard(it));
     results.append(frag);
+    $("#list-head").hidden = state.view !== "list";
     updateTitle(list.length);
     renderActiveFilters();
   }
 
   function renderCard(it) {
+    if (state.view === "list") return renderRow(it);
     const meta = KINDS[it.kind] || KINDS.other;
     const card = document.createElement("article");
     card.className = "card";
@@ -348,6 +351,56 @@
     card.onclick = () => openDetail(it.id);
     card.onkeydown = (e) => { if (e.key === "Enter") openDetail(it.id); };
     return card;
+  }
+
+  // LI-style table row for the list view.
+  function renderRow(it) {
+    const meta = KINDS[it.kind] || KINDS.other;
+    const row = document.createElement("article");
+    row.className = "row";
+    row.tabIndex = 0;
+    row.dataset.id = it.id;
+
+    const star = document.createElement("button");
+    star.className = "row__star" + (it.starred ? " on" : "");
+    star.textContent = it.starred ? "★" : "☆";
+    star.title = "Star";
+    star.onclick = (e) => { e.stopPropagation(); toggleStar(it.id); };
+
+    const icon = document.createElement("span");
+    icon.className = "row__icon";
+    icon.textContent = meta.glyph;
+
+    const name = document.createElement("div");
+    name.className = "row__name";
+    name.textContent = it.name;
+    name.title = it.name;
+
+    const type = document.createElement("span");
+    type.className = "row__badge";
+    type.style.background = meta.color;
+    type.textContent = meta.badge;
+
+    const coll = document.createElement("div");
+    coll.className = "row__coll";
+    coll.textContent = it.collection || "—";
+
+    const tags = document.createElement("div");
+    tags.className = "row__tags";
+    (it.tags || []).slice(0, 3).forEach((t) => {
+      const s = document.createElement("span");
+      s.className = "tag"; s.textContent = t;
+      tags.append(s);
+    });
+
+    const size = document.createElement("div");
+    size.className = "row__size";
+    size.textContent = fmtBytes(it.size);
+
+    row.append(star, icon, name, type, coll, tags, size);
+    row.onclick = () => openDetail(it.id);
+    row.onkeydown = (e) => { if (e.key === "Enter") openDetail(it.id); };
+    return row;
   }
 
   function updateTitle(count) {

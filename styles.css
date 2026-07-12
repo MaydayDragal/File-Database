@@ -1,32 +1,40 @@
-/* File Vault — styles */
+/* File Vault — styles. Palette matches the LI Document Database so the two
+   apps read as one product. */
 :root {
-  --brand: #4f46e5;
-  --brand-2: #0ea5e9;
-  --bg: #f6f7fb;
+  --brand: #5b8cff;          /* LI accent (blue) */
+  --brand-strong: #4a7bf0;
+  --brand-2: #47d18f;        /* LI accent-2 (green) */
+  /* Light theme (secondary — the LI app is dark-native). */
+  --bg: #f4f6fb;
   --bg-elev: #ffffff;
-  --bg-sunken: #eef0f6;
-  --text: #1e2433;
-  --text-dim: #67708a;
-  --border: #e3e6ef;
-  --border-strong: #cdd2e0;
+  --bg-sunken: #eef1f8;
+  --text: #1b2333;
+  --text-dim: #647089;
+  --border: #e2e6ef;
+  --border-strong: #ccd2e0;
+  --th-bg: #eef1f8;
+  --row-hover: #f0f4fb;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .08);
   --shadow-lg: 0 12px 48px rgba(16, 24, 40, .22);
   --danger: #dc2626;
-  --star: #f59e0b;
-  --radius: 14px;
-  --radius-sm: 10px;
+  --star: #f5c542;
+  --radius: 12px;
+  --radius-sm: 9px;
   --topbar-h: 60px;
   --sidebar-w: 258px;
 }
-/* Dark palette, shared by OS-auto and an explicit [data-theme="dark"] choice. */
+/* Dark palette — identical tokens to the LI app (--bg:#0f1420 etc.). */
 :root[data-theme="dark"] {
-  --bg: #0f172a;
-  --bg-elev: #16203a;
-  --bg-sunken: #0b1220;
-  --text: #e7ebf5;
-  --text-dim: #93a0bd;
-  --border: #253253;
-  --border-strong: #33436c;
+  --bg: #0f1420;
+  --bg-elev: #171d2b;
+  --bg-sunken: #1e2637;
+  --text: #e6ebf5;
+  --text-dim: #98a3b8;
+  --border: #2a3346;
+  --border-strong: #3a465e;
+  --th-bg: #232c3f;
+  --row-hover: #1c2333;
+  --danger: #ff6b6b;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
   --shadow-lg: 0 18px 60px rgba(0,0,0,.55);
   color-scheme: dark;
@@ -34,13 +42,16 @@
 /* Follow the OS only when the user hasn't picked a theme explicitly. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f172a;
-    --bg-elev: #16203a;
-    --bg-sunken: #0b1220;
-    --text: #e7ebf5;
-    --text-dim: #93a0bd;
-    --border: #253253;
-    --border-strong: #33436c;
+    --bg: #0f1420;
+    --bg-elev: #171d2b;
+    --bg-sunken: #1e2637;
+    --text: #e6ebf5;
+    --text-dim: #98a3b8;
+    --border: #2a3346;
+    --border-strong: #3a465e;
+    --th-bg: #232c3f;
+    --row-hover: #1c2333;
+    --danger: #ff6b6b;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
     --shadow-lg: 0 18px 60px rgba(0,0,0,.55);
     color-scheme: dark;
@@ -75,11 +86,11 @@ kbd {
 }
 .btn:active { transform: translateY(1px); }
 .btn--primary { background: var(--brand); color: #fff; }
-.btn--primary:hover { background: #4338ca; }
-.btn--ghost { background: transparent; border-color: var(--border-strong); }
-.btn--ghost:hover { background: var(--bg-sunken); }
-.btn--danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
-.btn--danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.btn--primary:hover { background: var(--brand-strong); }
+.btn--ghost { background: var(--bg-sunken); border-color: var(--border); }
+.btn--ghost:hover { border-color: var(--brand); }
+.btn--danger { background: transparent; color: var(--danger); border-color: var(--border); }
+.btn--danger:hover { border-color: var(--danger); }
 .icon-btn {
   display: inline-grid; place-items: center;
   width: 38px; height: 38px; border-radius: 10px;
@@ -102,9 +113,9 @@ kbd {
   flex: 1; max-width: 560px; position: relative;
   display: flex; align-items: center; gap: 8px;
   background: var(--bg-sunken); border: 1px solid var(--border);
-  border-radius: 10px; padding: 0 10px; color: var(--text-dim);
+  border-radius: var(--radius-sm); padding: 0 12px; color: var(--text-dim);
 }
-.search:focus-within { border-color: var(--brand); background: var(--bg-elev); }
+.search:focus-within { border-color: var(--brand); }
 .search input { flex: 1; border: none; background: none; outline: none; padding: 10px 0; color: var(--text); }
 .search__hint { margin-left: auto; }
 .topbar__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
@@ -221,16 +232,47 @@ kbd {
 .card__tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
 .card__tags .tag { font-size: 10px; padding: 1px 7px; }
 
-/* List view */
-.results.list { display: flex; flex-direction: column; gap: 6px; }
-.results.list .card { flex-direction: row; align-items: center; border-radius: var(--radius-sm); }
-.results.list .card__thumb { width: 56px; height: 56px; aspect-ratio: auto; flex: none; border-radius: 8px; margin: 8px; }
-.results.list .card__glyph { font-size: 26px; }
-.results.list .card__badge, .results.list .card__star { display: none; }
-.results.list .card__body { flex: 1; padding: 8px 12px 8px 0; display: flex; align-items: center; gap: 14px; }
-.results.list .card__name { -webkit-line-clamp: 1; flex: 1; }
-.results.list .card__sub { margin: 0; }
-.results.list .card__tags { display: none; }
+/* List view — an LI-style table */
+:root { --list-cols: 30px 26px minmax(0, 1.7fr) 74px minmax(0, 1fr) minmax(0, 1.3fr) 88px; }
+.list-head {
+  display: grid; grid-template-columns: var(--list-cols); align-items: center;
+  gap: 12px; padding: 9px 14px; margin-bottom: 6px;
+  background: var(--th-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim);
+  position: sticky; top: -18px; z-index: 5;
+}
+.list-head[hidden] { display: none; }
+.list-head .lh-star { text-align: center; color: var(--star); }
+.list-head .lh-size { text-align: right; }
+.results.list { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-elev); }
+.row {
+  display: grid; grid-template-columns: var(--list-cols); align-items: center; gap: 12px;
+  padding: 9px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: background .12s;
+}
+.row:last-child { border-bottom: none; }
+.row:hover { background: var(--row-hover); }
+.row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.row__star { background: none; border: none; color: var(--text-dim); font-size: 15px; line-height: 1; padding: 0; text-align: center; }
+.row__star.on { color: var(--star); }
+.row__icon { font-size: 18px; text-align: center; }
+.row__name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row__badge {
+  justify-self: start; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 5px; color: #fff;
+}
+.row__coll { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row__tags { display: flex; gap: 4px; overflow: hidden; }
+.row__tags .tag { font-size: 10.5px; padding: 1px 7px; white-space: nowrap; }
+.row__size { font-size: 12.5px; color: var(--text-dim); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) {
+  :root { --list-cols: 26px minmax(0, 1fr) 64px 80px; }
+  .list-head span:nth-child(5), .list-head span:nth-child(6),
+  .row__coll, .row__tags { display: none; }
+  .list-head .lh-star { display: none; }
+  .row__star { display: none; }
+}
 
 /* ---------- Embedded LI Database ---------- */
 .content--li { padding: 0; overflow: hidden; display: flex; }

@@ -119,11 +119,15 @@ await page.locator(".card__star").first().click();
 await page.waitForTimeout(200);
 check((await page.locator("[data-count='starred']").textContent()).trim() === "1", "starred count = 1");
 
-// --- List view toggle ---
+// --- List view toggle (LI-style table) ---
 await page.click("#view-list");
-await page.waitForTimeout(150);
+await page.waitForTimeout(200);
 check((await page.locator("#results").getAttribute("class")).includes("list"), "list view active");
+check(await page.locator("#list-head").isVisible(), "list view shows a table column header");
+check((await page.locator(".row").count()) > 0, "list view renders table rows");
 await page.click("#view-grid");
+await page.waitForTimeout(150);
+check(!(await page.locator("#list-head").isVisible()), "table header hidden in grid view");
 
 // --- Export produces a downloadable backup ---
 const [download] = await Promise.all([
@@ -166,7 +170,7 @@ await page.click("#theme-btn"); // light -> dark
 await page.waitForTimeout(120);
 check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "toggle -> dark");
 const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-check(darkBg === "rgb(15, 23, 42)", `dark theme actually applies dark bg (got ${darkBg})`);
+check(darkBg === "rgb(15, 20, 32)", `dark theme actually applies dark bg (got ${darkBg})`);
 check(await page.evaluate(() => localStorage.getItem("fv-theme")) === "dark", "dark choice persisted to localStorage");
 // Persists across reload with no flash (head script reads localStorage synchronously)
 await page.reload({ waitUntil: "networkidle" });
