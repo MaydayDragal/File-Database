@@ -924,9 +924,31 @@
     if (params.get("view") === "starred") setFilter("starred");
     if (params.get("action") === "add") setTimeout(() => $("#file-input").click(), 300);
 
-    // Service worker for offline
+    // Service worker for offline + seamless updates.
     if ("serviceWorker" in navigator) {
-      try { await navigator.serviceWorker.register("sw.js"); } catch (e) { /* file:// or blocked */ }
+      try {
+        const hadController = !!navigator.serviceWorker.controller;
+        let reloading = false;
+        // When a freshly-activated worker takes control, reload once so the
+        // page runs the new code (skips the first install to avoid a needless
+        // reload on the user's very first visit).
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!hadController || reloading) return;
+          reloading = true;
+          location.reload();
+        });
+        const reg = await navigator.serviceWorker.register("sw.js");
+        reg.addEventListener("updatefound", () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener("statechange", () => {
+            if (sw.state === "installed" && navigator.serviceWorker.controller) {
+              toast("Update installed — refreshing…");
+            }
+          });
+        });
+        reg.update && reg.update().catch(() => {});
+      } catch (e) { /* file:// or blocked */ }
     }
   }
 
