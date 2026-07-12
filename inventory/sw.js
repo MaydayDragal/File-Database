@@ -1,5 +1,5 @@
 /* Tool Inventory service worker — offline app shell + seed data. */
-const CACHE = "tool-inventory-v2";
+const CACHE = "tool-inventory-v3";
 const SHELL = [
   "./",
   "./index.html",

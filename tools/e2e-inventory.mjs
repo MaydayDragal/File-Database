@@ -158,7 +158,7 @@ const verNow = await page.evaluate(() => new Promise((res) => {
   const r = indexedDB.open("tool-inventory");
   r.onsuccess = () => { const db = r.result; const g = db.transaction("meta").objectStore("meta").get("seedVersion"); g.onsuccess = () => res(g.result && g.result.v); };
 }));
-check(verNow === 2, `seedVersion now matches the code constant (${verNow}) — no re-seed loop`);
+check(verNow === 3, `seedVersion now matches the code constant (${verNow}) — no re-seed loop`);
 
 // Export CSV downloads
 const [dl] = await Promise.all([
