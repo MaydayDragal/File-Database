@@ -1086,13 +1086,21 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "639589006100",
+   "wis": "WS0100Z3106KOC",
+   "version": "01.28",
+   "catalogName": "Engine lifting device",
+   "catalogDesc": "Purpose: Engine hoist for holding the engine. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (smart): 132, 281, 780, 780993",
+    "M (Transporter_EN, PKW_EN): 642",
+    "M (Transporter_EN): 272, 274, 646, 651, 6549",
+    "M (Transporter_EN): 271, 780703",
+    "M (Transporter_EN): 112, 622",
+    "T (smart): 45139, 45149, 453",
+    "T (Transporter_EN): 910"
+   ]
   },
   {
    "no": "52",
@@ -1823,13 +1831,18 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "272589009100",
+   "wis": "WS0100P0125B",
+   "version": "01.14",
+   "catalogName": "Threaded adapter",
+   "catalogDesc": "Purpose: Threaded adapter with threaded terminal M10 1 inside to M12x1.25 outside for the pressure loss test equipment from Bosch.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 157, 273",
+    "M (Transporter_EN): 271951, 272979",
+    "M (PKW_EN, Transporter_EN): 272",
+    "M (PKW_EN): 152, 156, 159, 270, 271, 276, 278"
+   ]
   },
   {
    "no": "86",
@@ -2850,13 +2863,17 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "601589024000",
+   "wis": "WS0300P0025B",
+   "version": "01.13",
+   "catalogName": "Retaining lock",
+   "catalogDesc": "Purpose: Retaining lock for crankshaft at starter ring gear. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 102, 103, 104, 60397, 606",
+    "M (Cross-country vehicles): 60293, 60294, 602983, 60393, 612965, 612966",
+    "M (PKW_EN): 111, 601, 60291, 60296, 60391, 60396, 604, 605, 611, 612, 613"
+   ]
   },
   {
    "no": "133",
@@ -2892,13 +2909,21 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "611589001400",
+   "wis": "WS0300P0042B",
+   "version": "02.15",
+   "catalogName": "Insertion tool",
+   "catalogDesc": "Purpose: Insertion tool for the front radial shaft sealing ring. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (Cross-country vehicles, Transporter_EN, PKW_EN): 602, 612",
+    "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
+    "M (Cross-country vehicles, PKW_EN): 113, 603, 606",
+    "M (Transporter_EN, PKW_EN): 611, 646",
+    "M (Transporter_EN, PKW_EN): 601, 647",
+    "M (PKW_EN): 137, 156, 159, 604, 605, 613, 629, 642, 648",
+    "M (Transporter_EN): 642"
+   ]
   },
   {
    "no": "135",
@@ -2955,13 +2980,17 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "617589001600",
+   "wis": "WS0300P0032B",
+   "version": "01.05",
+   "catalogName": "Plug-in adapter",
+   "catalogDesc": "Purpose: Square 1/2\", 80 mm long for turning the engine.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 104, 117, 60397, 616",
+    "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 60293, 60294, 60393, 61793",
+    "M (PKW_EN): 10292, 11092, 11098, 111, 112, 113, 116, 119, 120, 137, 601, 60291, 60296, 60391, 60396, 611, 612, 613, 615, 61795, 628, 647, 648"
+   ]
   },
   {
    "no": "138",
@@ -3432,7 +3461,7 @@
    "wis": "WS0500P0179B",
    "version": "01.04",
    "catalogName": "Extraction drift punch",
-   "catalogDesc": "Purpose: Drift punch ��� 15 mm, length 550 mm, for rocker arm spindles from warmed-up bearing bridge. Technical Note: In combination with W 112 589 10 59 00 storage board. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Drift punch ∅ 15 mm, length 550 mm, for rocker arm spindles from warmed-up bearing bridge. Technical Note: In combination with W 112 589 10 59 00 storage board. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -3457,7 +3486,7 @@
    "wis": "WS0500P0178B",
    "version": "01.07",
    "catalogName": "Fixing plate",
-   "catalogDesc": "Purpose: Retaining plate for camshaft in 40�� after top dead center position. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Retaining plate for camshaft in 40° after top dead center position. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -3509,7 +3538,7 @@
    "wis": "WS0500P0186B",
    "version": "01.06",
    "catalogName": "Arresting plate",
-   "catalogDesc": "Purpose: Retaining plate for left camshaft in 40�� after top dead center position. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Retaining plate for left camshaft in 40° after top dead center position. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -3534,7 +3563,7 @@
    "wis": "WS0500P0181B",
    "version": "01.04",
    "catalogName": "Guide shaft",
-   "catalogDesc": "Purpose: Guide shaft ��� 16 mm, length 480 mm, for preassembly of roller-type rocker arms in warmed-up bearing bridge (exhaust valves). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Guide shaft ∅ 16 mm, length 480 mm, for preassembly of roller-type rocker arms in warmed-up bearing bridge (exhaust valves). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -3559,7 +3588,7 @@
    "wis": "WS0500P0182B",
    "version": "01.04",
    "catalogName": "Guide shaft",
-   "catalogDesc": "Purpose: Guide shaft ��� 18 mm, length 480 mm, for preassembly of roller-type rocker arms in warmed-up bearing bridge (intake valves). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Guide shaft ∅ 18 mm, length 480 mm, for preassembly of roller-type rocker arms in warmed-up bearing bridge (intake valves). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -3720,7 +3749,7 @@
    "wis": "WS0500P0081B",
    "version": "01.03",
    "catalogName": "Drift punch",
-   "catalogDesc": "Purpose : 9 mm drift for pressing valve stem seal onto valve guide. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 9 mm drift for pressing valve stem seal onto valve guide. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -3745,7 +3774,7 @@
    "wis": "WS0500P0082B",
    "version": "01.03",
    "catalogName": "Holding wrench",
-   "catalogDesc": "Purpose : Retainer wrench for camshaft. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Retainer wrench for camshaft. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117, 616",
     "M (Cross-country vehicles): 11099, 11597, 61793",
@@ -3802,7 +3831,7 @@
    "wis": "WS0500P0084B",
    "version": "01.03",
    "catalogName": "Drift punch",
-   "catalogDesc": "Purpose : 11 mm drift for pressing valve stem seal onto valve guide. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 11 mm drift for pressing valve stem seal onto valve guide. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -4047,7 +4076,7 @@
    "wis": "WS0500P0102B",
    "version": "01.04",
    "catalogName": "Threaded bolt",
-   "catalogDesc": "Purpose : Threaded pin M 8, 60 mm long to extractor 115 589 20 33 Reference information : Sale of this workshop equipment has been discontinued. The workshop equipment is no longer available. If possible, please produce or procure it yourself or repair existing workshop equipment.",
+   "catalogDesc": "Purpose: Threaded pin M 8, 60 mm long to extractor 115 589 20 33 Reference information: Sale of this workshop equipment has been discontinued. The workshop equipment is no longer available. If possible, please produce or procure it yourself or repair existing workshop equipment.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 103, 104, 616",
     "M (Cross-country vehicles): 10296, 10297, 10298, 10299, 11099, 11597, 60293, 60294, 60393, 60397, 61793",
@@ -4836,13 +4865,20 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "605589003300",
+   "wis": "WS0500P0154B",
+   "version": "01.27",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Extractor (overall length 87 mm) with M6x14 mm thread for pulling out slide rail bolts.",
+   "validities": [
+    "M (Cross-country vehicles, Transporter_EN, PKW_EN): 642",
+    "M (Cross-country vehicles, PKW_EN): 104, 157, 602, 603, 606, 628",
+    "M (Cross-country vehicles): 612965",
+    "M (Transporter_EN, PKW_EN): 274",
+    "M (Transporter_EN, PKW_EN): 271",
+    "M (PKW_EN): 111, 119, 120, 133, 139, 152, 155, 252, 260, 264, 270, 272, 273, 276, 278, 601, 604, 605, 629, 640"
+   ]
   },
   {
    "no": "216",
@@ -5430,7 +5466,7 @@
    "wis": "WS0700P0010B",
    "version": "01.02",
    "catalogName": "Resistor",
-   "catalogDesc": "Purpose : R=2.5 k��, 0.25 W resistance for simulation of the engine temperature of 20 ��C for lower chamber chamber measurement, first-stage throttle valve actuator. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: R=2.5 kΩ, 0.25 W resistance for simulation of the engine temperature of 20 °C for lower chamber chamber measurement, first-stage throttle valve actuator. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 117",
     "M (Cross-country vehicles): 10297, 10299",
@@ -5508,7 +5544,7 @@
    "wis": "WS0700P0015B",
    "version": "01.02",
    "catalogName": "Test cable",
-   "catalogDesc": "Purpose : Test cable for checking the duty cycle on the throttle valve actuator of the electronic idle speed control with a Lambda tester or dwell angle tester. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Test cable for checking the duty cycle on the throttle valve actuator of the electronic idle speed control with a Lambda tester or dwell angle tester. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 102, 103, 104, 117",
     "M (PKW_EN): 116"
@@ -5532,7 +5568,7 @@
    "wis": "WS0700P0017B",
    "version": "01.05",
    "catalogName": "Adapter",
-   "catalogDesc": "Purpose: Adapter M 12��1.5 mm for connecting W 103 589 00 21 00 Test equipment to dual fuel pump. Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please produce yourself or procure and/or repair existing workshop equipment.",
+   "catalogDesc": "Purpose: Adapter M 12×1.5 mm for connecting W 103 589 00 21 00 Test equipment to dual fuel pump. Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please produce yourself or procure and/or repair existing workshop equipment.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 103, 104, 117",
     "M (Cross-country vehicles): 10299",
@@ -5557,7 +5593,7 @@
    "wis": "WS0700P0016B",
    "version": "01.05",
    "catalogName": "Measuring connection",
-   "catalogDesc": "Purpose: Measuring connection M 18��1.5 mm for measuring gas removal from exhaust system upstream of catalytic converter (vehicles with catalytic converter with open-loop system). Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
+   "catalogDesc": "Purpose: Measuring connection M 18×1.5 mm for measuring gas removal from exhaust system upstream of catalytic converter (vehicles with catalytic converter with open-loop system). Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099",
@@ -5825,13 +5861,16 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "210589086300",
+   "wis": "WS0700P0080B",
+   "version": "01.03",
+   "catalogName": "145-pin test cable",
+   "catalogDesc": "Purpose: 145-pin test cable for checking the gasoline injection and ignition system ME2.0 and ME2.1. Technical Note: To be used in combination with socket box W 129 589 00 21 00, if necessary, also socket box W 124 589 00 21 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 112, 113",
+    "M (PKW_EN): 104, 111"
+   ]
   },
   {
    "no": "260",
@@ -6544,13 +6583,12 @@
    "comment": "",
    "offered": true,
    "photo": "124589043300",
-   "wis": "WS2800P0062B",
-   "version": "01.16",
+   "wis": "WS3500P0021B",
+   "version": "01.06",
    "catalogName": "Puller",
-   "catalogDesc": "Purpose: Puller for pulling off output flanges on transfer case. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 586 04 33 00 Puller.",
+   "catalogDesc": "Purpose: Puller for pulling drive flange at rear axle differential. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 586 04 33 00 Puller.",
    "validities": [
-    "T (Transporter_EN): 907",
-    "T (PKW_EN): 167, 20308, 20309, 20328, 20329, 204, 205, 207, 210081, 210082, 210281, 210282, 21108, 21109, 21128, 21129, 212, 213, 216, 217, 218, 219, 220, 221, 222, 230, 253"
+    "T (PKW_EN): 117, 118, 156, 176, 177, 204, 206, 212, 246, 247, 254"
    ]
   },
   {
@@ -6668,7 +6706,7 @@
    "wis": "WS0700P0016B",
    "version": "01.05",
    "catalogName": "Measuring connection",
-   "catalogDesc": "Purpose: Measuring connection M 18��1.5 mm for measuring gas removal from exhaust system upstream of catalytic converter (vehicles with catalytic converter with open-loop system). Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
+   "catalogDesc": "Purpose: Measuring connection M 18×1.5 mm for measuring gas removal from exhaust system upstream of catalytic converter (vehicles with catalytic converter with open-loop system). Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099",
@@ -7688,7 +7726,7 @@
    "wis": "WS1800P0004A",
    "version": "01.45",
    "catalogName": "Wrench socket",
-   "catalogDesc": "Purpose : 74 mm 14-point socket for loosening and tightening the oil filter change exchangeable cartridge or oil filter housing cover.",
+   "catalogDesc": "Purpose: 74 mm 14-point socket for loosening and tightening the oil filter change exchangeable cartridge or oil filter housing cover.",
    "validities": [
     "M (Cross-country vehicles, Transporter_EN, PKW_EN): 612",
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 104, 112",
@@ -7762,7 +7800,7 @@
    "wis": "WS1800P0010B",
    "version": "01.10",
    "catalogName": "Dipstick",
-   "catalogDesc": "Purpose : Dipstick for determining oil level and inspecting length of dipstick guide tube. Test equipment category CAT_A.",
+   "catalogDesc": "Purpose: Dipstick for determining oil level and inspecting length of dipstick guide tube. Test equipment category CAT_A.",
    "validities": [
     "M (Cross-country vehicles): 612965",
     "M (PKW_EN): 103943, 103984, 103985, 104, 111, 119, 120, 137, 603913, 603963, 60397, 604, 605, 606, 611, 612, 613, 628, 629, 647, 648, 651"
@@ -7786,7 +7824,7 @@
    "wis": "WS1800P0024B",
    "version": "01.18",
    "catalogName": "Measuring rod",
-   "catalogDesc": "Purpose : Measuring rod for measuring oil level and for checking length of oil pipe. Test equipment category CAT_A. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W120 589 08 21 00 - dipstick.",
+   "catalogDesc": "Purpose: Measuring rod for measuring oil level and for checking length of oil pipe. Test equipment category CAT_A. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W120 589 08 21 00 - dipstick.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 112, 113",
     "M (Cross-country vehicles): 279",
@@ -7987,13 +8025,19 @@
    "note": "R",
    "note2": "",
    "comment": "To be used with 124 589 24 21 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "639589009100",
+   "wis": "WS2000Z3035KOB",
+   "version": "01.20",
+   "catalogName": "Test cap",
+   "catalogDesc": "Tester cap for expansion reservoir for leak test on engine cooling system in combination with pressure pump W 124 589 24 21 00. For filling the engine cooling system using vacuum-type cooling system filler W 285 589 00 21 00.",
+   "validities": [
+    "M (Transporter_EN): 271951, 272979, 642, 646, 651, 651",
+    "M (PKW_EN): 629, 642",
+    "M (Transporter_EN): 112, 272, 272, 642, 646, 646, 651, 651, 780994",
+    "T (Transporter_EN): 900, 906",
+    "T (Transporter_EN): 636, 636, 639"
+   ]
   },
   {
    "no": "358",
@@ -8008,13 +8052,19 @@
    "note": "R",
    "note2": "",
    "comment": "To be used with 124 589 24 21 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "639589019100",
+   "wis": "WS2000P3036B",
+   "version": "01.00",
+   "catalogName": "Test cap",
+   "catalogDesc": "Purpose: Tester cap for leak test of the radiator cap. Technical Note: In combination with W 124 589 24 21 00 Test equipment. Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
+   "validities": [
+    "M (Transporter_EN): 271, 272, 642, 646, 651",
+    "M (PKW_EN): 629, 642",
+    "M (Transporter_EN): 112, 272, 272, 642, 646, 646, 651",
+    "T (Transporter_EN): 906",
+    "T (Transporter_EN): 636, 639"
+   ]
   },
   {
    "no": "359",
@@ -8100,7 +8150,7 @@
    "wis": "WS2000P0026B",
    "version": "01.08",
    "catalogName": "Open wrench socket",
-   "catalogDesc": "Purpose : Open end wrench bit 36 mm for releasing and tightening the fan clutch. Note: In combination with suitable torque wrench (with square drive 9x12 mm and ratchet adapter) and 113 589 00 40 00 counterholder or 906 589 00 40 00 counterholder or 699 589 00 05 00 hook wrench.",
+   "catalogDesc": "Purpose: Open end wrench bit 36 mm for releasing and tightening the fan clutch. Note: In combination with suitable torque wrench (with square drive 9x12 mm and ratchet adapter) and 113 589 00 40 00 counterholder or 906 589 00 40 00 counterholder or 699 589 00 05 00 hook wrench.",
    "validities": [
     "M (Cross-country vehicles, Transporter_EN): 642",
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
@@ -8392,13 +8442,21 @@
    "note": "MM",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "603589004000",
+   "wis": "WS2000P0015BB",
+   "version": "01.00",
+   "catalogName": "Counterholder",
+   "catalogDesc": "Purpose: Counterholder for holding belt pulley of coolant pump or power-steering pump. Procurement information: This workshop equipment can be ordered directly from GLC/LC using the regular spare part ordering process.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 60397, 642",
+    "M (Cross-country vehicles): 60293, 60294, 60298, 60393, 612965, 612966",
+    "M (Transporter_EN, PKW_EN): 646",
+    "M (Transporter_EN): 602",
+    "M (PKW_EN): 111, 60291, 60296, 60391, 60396, 604, 605, 606, 611, 612",
+    "M (Transporter_EN): 661",
+    "M (Transporter_EN): 112, 601942, 601970"
+   ]
   },
   {
    "no": "375",
@@ -8532,13 +8590,16 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "210589001600",
+   "wis": "WS2200P0005B",
+   "version": "01.09",
+   "catalogName": "Connection piece",
+   "catalogDesc": "Purpose: 14 x 18 mm connection piece for loosening and tightening the screw for the engine mount on the engine carrier. Technical Note: In combination with W 210 589 01 16 00 four-point drive. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (Cross-country vehicles, Transporter_EN): 642",
+    "M (PKW_EN): 111, 112, 113, 137, 272, 273, 611, 612, 613, 628, 629, 642, 647, 648, 651"
+   ]
   },
   {
    "no": "381",
@@ -8737,13 +8798,18 @@
    "note": "R",
    "note2": "",
    "comment": "To be used with hand pump 210 589 00 71 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "639589029100",
+   "wis": "WS2700P0109B",
+   "version": "01.07",
+   "catalogName": "Adapter fitting",
+   "catalogDesc": "Purpose: Adapter fitting for flushing automatic transmission. Adapter fitting between oil cooler and W 210 589 00 71 00 hand pump. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (PKW_EN): 629, 642",
+    "M (Transporter_EN): 112, 272, 272, 642, 646",
+    "T (Transporter_EN): 636, 639",
+    "Menu"
+   ]
   },
   {
    "no": "390",
@@ -9893,13 +9959,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589031500",
+   "wis": "WS2800P0064B",
+   "version": "01.01",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for knocking in the shaft sealing ring at the transmission input shaft. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "444",
@@ -9914,13 +9982,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589041500",
+   "wis": "WS2800P0065B",
+   "version": "01.01",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for knocking in shaft sealing ring at axle drive. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "445",
@@ -9935,13 +10005,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589061500",
+   "wis": "WS2800P0066B",
+   "version": "01.02",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for pounding in shaft sealing ring at rear axle drive. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "446",
@@ -11426,13 +11498,14 @@
    "comment": "Subbed from 220 589 00 09 00",
    "offered": true,
    "photo": "652589003322",
-   "wis": "WS3500P338822C",
-   "version": "01.32",
+   "wis": "WS3200P305702C",
+   "version": "01.18",
    "catalogName": "Hollow cylinder",
-   "catalogDesc": "Purpose: Hollow cylinder for inserting and removing elastomer bearings from various components. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Hollow cylinder for pressing diverse bearings in and out. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "T (PKW_EN): 164, 166, 167, 174, 178, 204, 205, 206, 207, 212, 213, 214, 217, 218, 222, 223, 231, 236, 238, 243, 244, 248, 251, 253, 254, 257, 290, 292, 293, 294, 295, 296, 297, 520, 540",
-    "T (Transporter_EN): 449"
+    "T (Cross-country vehicles): 461, 463, 465",
+    "T (Transporter_EN): 907",
+    "T (PKW_EN): 117, 118, 156, 164, 166, 167, 171, 176, 177, 203, 204, 207, 209, 212, 216, 218, 221, 242, 243, 246, 247, 2510, 2511, 292"
    ]
   },
   {
@@ -12177,13 +12250,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589114300",
+   "wis": "WS3300P0041C",
+   "version": "01.05",
+   "catalogName": "Removal and installation tool",
+   "catalogDesc": "Purpose: Extraction and insertion tool for rubber mount - lower transverse control arm. Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please fabricate or procure the workshop equipment yourself or repair existing workshop equipment.",
+   "validities": [
+    "T (PKW_EN): 140"
+   ]
   },
   {
    "no": "545",
@@ -12198,13 +12273,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589011500",
+   "wis": "WS3300P0107B",
+   "version": "01.02",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for knocking in side radial shaft sealing ring into front-axle center assembly. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "546",
@@ -12725,15 +12802,14 @@
    "comment": "",
    "offered": true,
    "photo": "601589043300",
-   "wis": "WS3300P3052B",
-   "version": "01.15",
+   "wis": "WS4600P0064B",
+   "version": "01.12",
    "catalogName": "Puller",
-   "catalogDesc": "Purpose: Puller for detaching ball joints on tie rod and drag link (as of 07/80). Note: MODEL 164.1, 251: puller for ball joint, steering knuckle on upper transverse control arm. Only in combination with 140 589 00 63 00 thrust piece. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Puller for steering gear pitman arm. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "T (Cross-country vehicles): 460, 461, 463, 464",
-    "T (Transporter_EN): 601, 602, 611, 901, 902, 903, 904, 905, 909",
-    "T (PKW_EN): 1641, 1648, 169, 24520, 24523, 251",
-    "T (Transporter_EN): 667"
+    "L (Cross-country vehicles): 7655",
+    "T (Cross-country vehicles): 460, 461302, 461304, 461331, 461332, 461334, 461342, 461344, 461345, 461346, 463",
+    "T (PKW_EN): 107, 123, 126, 169, 245"
    ]
   },
   {
@@ -12795,13 +12871,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589093300",
+   "wis": "WS3300P0039C",
+   "version": "01.05",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Pry off puller for supporting joint at steering knuckle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 140, 164, 20308, 20309, 20328, 251"
+   ]
   },
   {
    "no": "573",
@@ -13039,13 +13117,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "116589046200",
+   "wis": "WS3300P0010C",
+   "version": "01.01",
+   "catalogName": "Installation tool",
+   "catalogDesc": "Purpose: Press-in tool for supporting joint in steering knuckle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 123, 126"
+   ]
   },
   {
    "no": "584",
@@ -13724,13 +13804,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589396300",
+   "wis": "WS3500P0151B",
+   "version": "01.01",
+   "catalogName": "Test cable for module 6",
+   "catalogDesc": "Purpose: Test cable for module 6 for diagnosing ETS and ASR systems in combination with 129 589 00 21 00 Socket box, 126-pin. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 129, 140"
+   ]
   },
   {
    "no": "614",
@@ -13745,13 +13827,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589021500",
+   "wis": "WS3500P0170B",
+   "version": "01.02",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for driving in side radial shaft sealing rings on rear axle differential. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "615",
@@ -16202,13 +16286,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589001400",
+   "wis": "WS4200P0041B",
+   "version": "01.02",
+   "catalogName": "Sleeve",
+   "catalogDesc": "Purpose: Sleeve for unclipping brake cable at wheel carrier. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "725",
@@ -16949,13 +17035,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "116589062100",
+   "wis": "WS4000P0010B",
+   "version": "01.01",
+   "catalogName": "Check screw",
+   "catalogDesc": "Purpose: Inspection plug for center steering position of steering 765.7 (only in combination with wheel alignment systems). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 107, 123, 126"
+   ]
   },
   {
    "no": "758",
@@ -16993,13 +17081,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "124589023300",
+   "wis": "WS4600P0028B",
+   "version": "01.04",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Puller for ball joint of tie rod from steering knuckle. Technical Note: For model 124 in combination with thrust pieces W 129 589 10 63 00 and W 201 589 05 63 00. For model 211.08/28 in combination with thrust piece W 140 589 00 63 00. Reinforced version as of 06/89. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 124, 21108, 21109, 21128, 21129, 220"
+   ]
   },
   {
    "no": "760",
@@ -18214,13 +18304,15 @@
    "note": "A",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "110589005900",
+   "wis": "WS5400P0001K",
+   "version": "01.02",
+   "catalogName": "Puller hook",
+   "catalogDesc": "Purpose: Extraction hook for instrument cluster. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 107, 123"
+   ]
   },
   {
    "no": "813",
@@ -18349,13 +18441,16 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589016300",
+   "wis": "WS5400P0010B",
+   "version": "01.02",
+   "catalogName": "Contacting module 1",
+   "catalogDesc": "Purpose: Connector module 1 for base module/overvoltage protection. Technical Note: In combination with W 140 589 06 63 00 connector box, W 140 589 10 33 00 spacer for connector box, and W 129 589 00 21 00 socket box. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (Cross-country vehicles): 463",
+    "T (PKW_EN): 124, 129, 140"
+   ]
   },
   {
    "no": "819",
@@ -18395,13 +18490,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589066300",
+   "wis": "WS5400P0013B",
+   "version": "01.01",
+   "catalogName": "Contacting box",
+   "catalogDesc": "Purpose: Connector box for checking control units in module box in combination with 129 589 00 21 00 socket box (126‑pin) and connector modules. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129, 140"
+   ]
   },
   {
    "no": "821",
@@ -18416,13 +18513,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589103300",
+   "wis": "WS5400P0014B",
+   "version": "01.01",
+   "catalogName": "Spacer",
+   "catalogDesc": "Purpose: Spacer for disconnecting control units from W 140 589 06 63 00 connector box with W 140 589 01 33 00 assembly lever. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 124, 129, 140"
+   ]
   },
   {
    "no": "822",
@@ -19892,13 +19991,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589126300",
+   "wis": "WS8000P0002B",
+   "version": "01.01",
+   "catalogName": "Test cable",
+   "catalogDesc": "Purpose: Test cable for convenience feature. Note: Only in combination with 129 589 00 21 00 Socket box 126‑pin. Reference information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 140"
+   ]
   },
   {
    "no": "888",
@@ -19913,13 +20014,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589136300",
+   "wis": "WS8000P0003B",
+   "version": "01.01",
+   "catalogName": "21-pin test cable",
+   "catalogDesc": "Purpose: 21-pin test cable for pneumatic control unit (in combination with 129 589 00 21 00 Socket box, 126-pin or 124 589 00 21 00 Socket box, 35-pin) Reference information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 140"
+   ]
   },
   {
    "no": "889",
@@ -20292,13 +20395,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589000500",
+   "wis": "WS8200P0003B",
+   "version": "01.01",
+   "catalogName": "Removal plate",
+   "catalogDesc": "Purpose: Removal tool (set = 2 ea.) for removal of radio. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 129"
+   ]
   },
   {
    "no": "906",
@@ -20360,13 +20465,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589003300",
+   "wis": "WS8200P0020B",
+   "version": "01.01",
+   "catalogName": "Unlocking tool",
+   "catalogDesc": "Purpose: Unlocking tool for installing and removing the GPS antenna. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "909",
@@ -20860,13 +20967,15 @@
    "note": "A",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "124589166300",
+   "wis": "WS8300P0005C",
+   "version": "01.01",
+   "catalogName": "Test cable",
+   "catalogDesc": "Purpose: 28-pin test cable for automatic climate control. Technical Note: In combination with socket box W 129 589 00 21 00 or W 124 589 00 21 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 124"
+   ]
   },
   {
    "no": "931",
@@ -20881,13 +20990,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589036300",
+   "wis": "WS8300P0020B",
+   "version": "01.01",
+   "catalogName": "20-pin test cable",
+   "catalogDesc": "Purpose: Test cable 20‑pin for automatic temperature control, automatic heater and A/C system (in combination with 129 589 00 21 00 socket box 126‑pin or 124 589 00 21 00 socket box 35‑pin). Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 129, 140"
+   ]
   },
   {
    "no": "932",
@@ -20902,13 +21013,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589016300",
+   "wis": "WS8300P0041B",
+   "version": "01.01",
+   "catalogName": "14-pin test cable",
+   "catalogDesc": "Purpose: 14-pin test cable for checking air conditioning system. Technical Note: In combination with socket box W 124 589 00 21 00 or W 129 589 00 21 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "933",
@@ -21358,13 +21471,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589026300",
+   "wis": "WS9100P0008B",
+   "version": "01.02",
+   "catalogName": "16-pin test cable",
+   "catalogDesc": "Purpose: Test cable 16-pin for roll bar. Note: In combination with 129 589 00 21 00 socket box 126-pin or 124 589 00 21 00 socket box 35-pin. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129"
+   ]
   },
   {
    "no": "953",
@@ -21737,13 +21852,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589036300",
+   "wis": "WS0700P0039B",
+   "version": "01.02",
+   "catalogName": "Contacting module 3",
+   "catalogDesc": "Purpose: Contacting module 3 for the diagnosis module in combination with connector box 140 589 06 63 00, spacer for connector box 140 589 10 33 00 and socket box 129 589 00 21 00. Reference information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 140"
+   ]
   },
   {
    "no": "970",
@@ -21821,13 +21938,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589013300",
+   "wis": "WS5400P0009A",
+   "version": "01.02",
+   "catalogName": "Mounting lever",
+   "catalogDesc": "Purpose: Assembly lever for modules from module box. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129, 140"
+   ]
   },
   {
    "no": "974",
@@ -21886,14 +22005,15 @@
    "comment": "",
    "offered": true,
    "photo": "110589010100",
-   "wis": "WS1500P0017B",
-   "version": "01.06",
+   "wis": "WS0500P0057A",
+   "version": "01.07",
    "catalogName": "Double open-ended wrench",
-   "catalogDesc": "Purpose: Double open-end wrench, offset 17 mm, for prying off spark plug connectors via valve cover Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Double open-end wrench, offset 17 mm for adjusting the valves. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "M (Cross-country vehicles, PKW_EN): 113",
-    "M (Cross-country vehicles): 112",
-    "M (PKW_EN, Transporter_EN): 112"
+    "M (Cross-country vehicles): 11099, 112, 113",
+    "M (PKW_EN): 11092, 11098",
+    "M (Transporter_EN): 112",
+    "T (Cross-country vehicles): 463"
    ]
   },
   {
@@ -21945,7 +22065,8 @@
     "M (Transporter_EN, PKW_EN): 271",
     "M (PKW_EN, Transporter_EN): 166, 254, 272, 607, 608, 646, 668",
     "M (PKW_EN): 111, 116, 119, 120, 133, 137, 139, 152, 155, 156, 159, 178, 252, 260, 266, 270, 273, 276, 278, 279, 282, 601, 604, 605, 611, 612, 613, 615, 626, 628, 629, 640, 647, 648",
-    "M (Transporter_EN): 200, 622, 699"
+    "M (Transporter_EN): 200, 622, 699",
+    "Menu"
    ]
   },
   {
@@ -22729,13 +22850,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589056300",
+   "wis": "WS2700P0032B",
+   "version": "01.02",
+   "catalogName": "22-pin test cable",
+   "catalogDesc": "Purpose: Test cable (22‑pin) for EAG (in combination with 124 589 00 21 00 Socket box (35-pin) or 129 589 00 21 00 Socket box (126-pin)). Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129"
+   ]
   },
   {
    "no": "1015",
@@ -22802,7 +22925,7 @@
    "wis": "WS1800P0009A",
    "version": "01.10",
    "catalogName": "Pin box wrench",
-   "catalogDesc": "Pin box wrench 14��13 mm for loosening and tightening oil plug",
+   "catalogDesc": "Pin box wrench 14×13 mm for loosening and tightening oil plug",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 102, 103, 104, 110, 117, 279, 602, 603, 606, 616",
     "M (Cross-country vehicles): 112, 113",
@@ -22918,12 +23041,16 @@
    "comment": "",
    "offered": true,
    "photo": "210589011600",
-   "wis": "WS3300P0017B",
-   "version": "01.04",
+   "wis": "WS2200P0006B",
+   "version": "01.17",
    "catalogName": "Four-point drive",
-   "catalogDesc": "Intended use: Four-point drive for tightening strut rod and spring control arm at steering knuckle",
+   "catalogDesc": "Purpose: Four-point drive to remove the chain tensioner as well as generally usable four-point drive 1/2\" for CN 14 x 18 mm",
    "validities": [
-    "T (PKW_EN): 205, 213, 217, 222, 253"
+    "M (smart): 132",
+    "M (Cross-country vehicles, PKW_EN, Transporter_EN): 642",
+    "M (Cross-country vehicles): 612965, 612966",
+    "M (PKW_EN, Transporter_EN): 646",
+    "M (PKW_EN): 111, 112, 113, 137, 157, 272, 273, 274, 275, 276, 277, 278, 279, 611, 612, 613, 628, 629, 647, 648, 651"
    ]
   },
   {
@@ -23252,13 +23379,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589136300",
+   "wis": "WS2700P0034B",
+   "version": "01.01",
+   "catalogName": "41-pin test cable",
+   "catalogDesc": "Purpose: Test cable (41‑pin) for diagnosis of EAG system in combination with 129 589 00 21 00 Socket box (126‑pin). Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129"
+   ]
   },
   {
    "no": "1038",
@@ -23468,13 +23597,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "140589046300",
+   "wis": "WS3500P0096B",
+   "version": "01.02",
+   "catalogName": "Contacting module 4",
+   "catalogDesc": "Purpose: Connector module 4 for ASD in combination with connector box 140 589 06 63 00, spacer for connector box 140 589 10 33 00 and socket box 129 589 00 21 00. Reference information: Sale of this workshop equipment has been discontinued. The workshop equipment is no longer available. If possible, please produce yourself or procure and/or repair existing workshop equipment.",
+   "validities": [
+    "T (PKW_EN): 124, 129, 140"
+   ]
   },
   {
    "no": "1048",
@@ -23491,13 +23622,12 @@
    "comment": "",
    "offered": true,
    "photo": "129589006300",
-   "wis": "WS4200P0026B",
-   "version": "04.04",
+   "wis": "WS3500P0069B",
+   "version": "02.01",
    "catalogName": "35-pin test cable",
-   "catalogDesc": "Purpose: Test cable (35-pin) for ABS control (in combination with 129 589 00 21 00 socket box (126‑pin) or 124 589 00 21 00 socket box (35‑pin)). Procurement information: Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Test cable (35‑pin) for ASR control (in combination with socket box 129 589 00 21 00 or 124 589 00 21 00). Procurement information: Sale of this special tool was ceased.",
    "validities": [
-    "T (Cross-country vehicles): 463",
-    "T (PKW_EN): 202"
+    "T (PKW_EN): 124, 126, 129, 201"
    ]
   },
   {
@@ -23537,13 +23667,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589006300",
+   "wis": "WS3200P0047B",
+   "version": "01.04",
+   "catalogName": "Clamping plates",
+   "catalogDesc": "Purpose: Clamping plates (2 pieces) for tensioning device W 203 589 01 31 00 and W 210 589 00 31 00 for suspension strut at rear axle. Technical Note: Model series 231 for front and rear suspension strut. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163, 231"
+   ]
   },
   {
    "no": "1051",
@@ -23675,13 +23807,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589000700",
+   "wis": "WS3300P0105B",
+   "version": "01.02",
+   "catalogName": "Retaining wrench",
+   "catalogDesc": "Purpose: Retainer wrench for counterholding at joint flange of front axle and rear axle differential. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "1057",
@@ -23696,13 +23830,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589001500",
+   "wis": "WS3300P0106B",
+   "version": "01.02",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for knocking in radial shaft sealing ring at drive pinion of front axle and rear axle differential. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "1058",
@@ -23717,13 +23853,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "163589014300",
+   "wis": "WS3300P0110B",
+   "version": "01.02",
+   "catalogName": "Base",
+   "catalogDesc": "Purpose: Padding for hydraulic press W 163 589 03 43 00 for upper ball joint and supporting joint. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 163"
+   ]
   },
   {
    "no": "1059",
@@ -23898,12 +24036,12 @@
    "comment": "",
    "offered": true,
    "photo": "140589003300",
-   "wis": "WS4600P0040B",
+   "wis": "WS3500P0080B",
    "version": "01.05",
    "catalogName": "Puller",
-   "catalogDesc": "Purpose: Puller for ball joints on tie rods and drag links. Technical Note: In combination with thrust piece W 129 589 10 63 00 and W 140 589 00 63 00. Note: W 140 589 00 63 00 thrust piece only for special protection. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Puller for ball joints of tie rod from wheel carrier. Technical note: In combination with W 201 589 05 63 00 thrust piece. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "T (PKW_EN): 140, 211, 219, 240"
+    "T (PKW_EN): 140, 215, 220, 230"
    ]
   },
   {
@@ -23965,13 +24103,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589126300",
+   "wis": "WS3500P0076B",
+   "version": "01.01",
+   "catalogName": "Test cable",
+   "catalogDesc": "Purpose: Test cable for checking setting of rear axle switch. Procurement information: Sale of this special tool was ceased.",
+   "validities": [
+    "T (PKW_EN): 124, 129"
+   ]
   },
   {
    "no": "1070",
@@ -24202,12 +24342,12 @@
    "comment": "",
    "offered": true,
    "photo": "140589146300",
-   "wis": "WS3500P0112B",
+   "wis": "WS4200P0034B",
    "version": "01.03",
    "catalogName": "Adapter",
    "catalogDesc": "Purpose: Adapter for adaptation of diagnostic socket 38-pin for W 124 589 19 21 00 Pulse counter. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "T (PKW_EN): 129, 140, 202"
+    "T (PKW_EN): 124, 129, 140, 202"
    ]
   },
   {
@@ -24339,13 +24479,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "129589016300",
+   "wis": "WS7700P0009B",
+   "version": "01.03",
+   "catalogName": "12-pin test cable",
+   "catalogDesc": "Purpose: 12-pin test cable for folding roof control. Technical Note: In combination with socket boxes W 124 589 00 21 00 or W 129 589 00 21 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 124, 129"
+   ]
   },
   {
    "no": "1086",
@@ -26806,13 +26948,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "177589036300",
+   "wis": "WS5400P0085B",
+   "version": "01.01",
+   "catalogName": "Test cable",
+   "catalogDesc": "Purpose: Test cable for CAN test on star distributor of signal acquisition and actuation module (SAM) control unit. Technical note Only in combination with 000 589 00 21 00 Test box.",
+   "validities": [
+    "T (PKW_EN): 118, 1770, 1771, 2476"
+   ]
   },
   {
    "no": "1196",
@@ -31228,13 +31372,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "177589013100",
+   "wis": "WS3200P0096B",
+   "version": "01.03",
+   "catalogName": "Tensioning device",
+   "catalogDesc": "Purpose: Tensioning device for installation and removal of rear axle springs for multi-link axles.",
+   "validities": [
+    "T (PKW_EN): 118, 1770, 247"
+   ]
   },
   {
    "no": "1397",
@@ -32350,7 +32496,7 @@
    "wis": "WS0100P0094B",
    "version": "01.01",
    "catalogName": "Engine support fixture",
-   "catalogDesc": "Purpose : Engine support fixture for supporting, lifting and lowering the drive unit. Reference information : Sale of this workshop equipment does not take over the regular replacement part ordering process in GLC/LC, but instead directly over the manufacturer/supplier. Recommended workshop equipment and information about the manufacturers/supplier can be found in the maintenance system document (see below).",
+   "catalogDesc": "Purpose: Engine support fixture for supporting, lifting and lowering the drive unit. Reference information: Sale of this workshop equipment does not take over the regular replacement part ordering process in GLC/LC, but instead directly over the manufacturer/supplier. Recommended workshop equipment and information about the manufacturers/supplier can be found in the maintenance system document (see below).",
    "validities": [
     "M (PKW_EN): 104, 111, 112, 113, 119, 120, 137, 275, 601, 604, 605, 611, 612, 613, 628, 648"
    ]
@@ -33418,7 +33564,7 @@
    "wis": "WS0500P0004C",
    "version": "01.02",
    "catalogName": "Reamer",
-   "catalogDesc": "Purpose : 11 mm reamer for valve guide. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 11 mm reamer for valve guide. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -34033,7 +34179,7 @@
    "wis": "WS1300P0001A",
    "version": "01.04",
    "catalogName": "Tester",
-   "catalogDesc": "Purpose: : Measuring instrument (Krikit) for V-belt tension. Test equipment category CAT_A. Procurement information: The distribution of this workshop equipment has been discontinued. This workshop equipment is no longer available. If possible, please fabricate or procure it yourself, or repair any existing workshop equipment.",
+   "catalogDesc": "Purpose:: Measuring instrument (Krikit) for V-belt tension. Test equipment category CAT_A. Procurement information: The distribution of this workshop equipment has been discontinued. This workshop equipment is no longer available. If possible, please fabricate or procure it yourself, or repair any existing workshop equipment.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 117, 616",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 612965, 612966, 61793",
@@ -34222,7 +34368,7 @@
    "wis": "WS0500Z0011KOC",
    "version": "01.04",
    "catalogName": "Guide sleeve",
-   "catalogDesc": "Purpose : Pilot bushing 32.5/34 mm for 115 589 00 53 00 broach, 14.2 mm (valve guide basic bore). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Pilot bushing 32.5/34 mm for 115 589 00 53 00 broach, 14.2 mm (valve guide basic bore). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 60397",
     "M (Cross-country vehicles): 10297, 10299, 11099, 60293, 60294, 60393",
@@ -34249,7 +34395,7 @@
    "wis": "WS0500P0012C",
    "version": "01.07",
    "catalogName": "Feeler gauge",
-   "catalogDesc": "Purpose : 7 mm plug gauge for checking the valve guide. Test equipment category CAT_A.",
+   "catalogDesc": "Purpose: 7 mm plug gauge for checking the valve guide. Test equipment category CAT_A.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN, Transporter_EN): 112",
     "M (Cross-country vehicles, PKW_EN): 113",
@@ -34300,7 +34446,7 @@
    "wis": "WS0500P0016C",
    "version": "01.02",
    "catalogName": "Guide sleeve",
-   "catalogDesc": "Purpose : 35.5/37.5 mm guide sleeve for 115 589 00 53 00 broach (valve guide basic bore 14.20 mm dia.). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 35.5/37.5 mm guide sleeve for 115 589 00 53 00 broach (valve guide basic bore 14.20 mm dia.). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10398, 117",
     "M (PKW_EN): 10292, 10394, 116"
@@ -34559,7 +34705,7 @@
    "wis": "WS0500P0054C",
    "version": "01.02",
    "catalogName": "Drift punch",
-   "catalogDesc": "Purpose : 9 mm drift for stamping in the valve guide (intake, exhaust). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 9 mm drift for stamping in the valve guide (intake, exhaust). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -34584,7 +34730,7 @@
    "wis": "WS0500P0055C",
    "version": "01.02",
    "catalogName": "Broach",
-   "catalogDesc": "Purpose : 15.20 mm broach for valve guide basic bore, repair stage 1. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 15.20 mm broach for valve guide basic bore, repair stage 1. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -34609,7 +34755,7 @@
    "wis": "WS0500P0058C",
    "version": "01.02",
    "catalogName": "Drift punch",
-   "catalogDesc": "Purpose : 11 mm drift for stamping in the valve guide (exhaust). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 11 mm drift for stamping in the valve guide (exhaust). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -34634,7 +34780,7 @@
    "wis": "WS0500P0059C",
    "version": "01.02",
    "catalogName": "Reamer",
-   "catalogDesc": "Purpose : 15.035 mm reamer for valve guide blind hole, normal size 1. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 15.035 mm reamer for valve guide blind hole, normal size 1. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -34659,7 +34805,7 @@
    "wis": "WS0500P0061C",
    "version": "01.02",
    "catalogName": "Reamer",
-   "catalogDesc": "Purpose : 14.035 mm reamer for valve guide basic bore, normal size 1. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 14.035 mm reamer for valve guide basic bore, normal size 1. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597",
@@ -34707,7 +34853,7 @@
    "wis": "WS0500P0064C",
    "version": "01.02",
    "catalogName": "Drift punch",
-   "catalogDesc": "Purpose : 9 mm drift for stamping in the valve guide with collar. Note: For engine 110, only inlet. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 9 mm drift for stamping in the valve guide with collar. Note: For engine 110, only inlet. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099",
@@ -34732,7 +34878,7 @@
    "wis": "WS0300P0015B",
    "version": "01.02",
    "catalogName": "Sleeve",
-   "catalogDesc": "Purpose : Sleeve to press in front radial shaft sealing ring. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Sleeve to press in front radial shaft sealing ring. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099",
@@ -34757,7 +34903,7 @@
    "wis": "WS1800P0007C",
    "version": "01.01",
    "catalogName": "Dipstick",
-   "catalogDesc": "Purpose : Dipstick for measuring oil level (oil consumption measurement). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Dipstick for measuring oil level (oil consumption measurement). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (PKW_EN): 11092, 11098, 116, 117, 615, 616"
    ]
@@ -34983,7 +35129,7 @@
    "wis": "WS0500Z0074KOB",
    "version": "01.04",
    "catalogName": "Thrust element",
-   "catalogDesc": "Purpose : Remove/install valve springs (cylinder head removed).",
+   "catalogDesc": "Purpose: Remove/install valve springs (cylinder head removed).",
    "validities": [
     "M (Transporter_EN): 111979",
     "M (PKW_EN): 111, 626",
@@ -35032,7 +35178,7 @@
    "photo": "112589001600",
    "wis": "WS2200P0003C",
    "version": "01.03",
-   "catalogName": "Verbindungsst��ck",
+   "catalogName": "Verbindungsstück",
    "catalogDesc": "Purpose: 60 mm connection piece with continuous inner rectangular section 14x18 mm for insertion tools. e.g. Four-point drive 1/2\" e.g. Hazet no. 6414 Box wrench 17 mm e.g. Hazet no. 6630d-17 Extension 1/2\" e.g. Hazet no. 918-10 For loosening and tightening the upper threaded connections of the engine mounts with torque. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (PKW_EN): 112, 113, 272, 273"
@@ -35207,7 +35353,7 @@
    "wis": "WS0500P0198C",
    "version": "01.03",
    "catalogName": "Guide sleeve",
-   "catalogDesc": "Purpose: Guide sleeve 34/39 mm for broach (valve guide basic bore ��� 12.71 mm, 1. repair stage). Technical Note: To be used in combination with broach W 119 589 01 53 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Guide sleeve 34/39 mm for broach (valve guide basic bore ∅ 12.71 mm, 1. repair stage). Technical Note: To be used in combination with broach W 119 589 01 53 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (PKW_EN, Transporter_EN): 112",
     "M (PKW_EN): 113, 155"
@@ -35445,7 +35591,7 @@
    "wis": "WS0300P0019C",
    "version": "01.02",
    "catalogName": "Gauge pin",
-   "catalogDesc": "Purpose : Measuring pin screwable for TDC and 20�� after top dead center position of the piston in cylinder 1. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Measuring pin screwable for TDC and 20° after top dead center position of the piston in cylinder 1. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (PKW_EN): 116, 117, 119, 120"
    ]
@@ -35468,7 +35614,7 @@
    "wis": "WS6000P0148K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle-specific installation note for setting up straightening bench. Note: Substructure. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle-specific installation note for setting up straightening bench. Note: Substructure. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 117"
    ]
@@ -35491,7 +35637,7 @@
    "wis": "WS6000P0149K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle-specific installation note for setting up straightening bench. Note: Sidewall. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle-specific installation note for setting up straightening bench. Note: Sidewall. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 117"
    ]
@@ -35539,7 +35685,7 @@
    "wis": "WS0500Z0090KOP",
    "version": "01.06",
    "catalogName": "Slip gauge blades",
-   "catalogDesc": "Purpose : 0.20 mm slip gauge blades (20 pieces) to slip gauge holder Test equipment category CAT_A.",
+   "catalogDesc": "Purpose: 0.20 mm slip gauge blades (20 pieces) to slip gauge holder Test equipment category CAT_A.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 61693, 61793",
@@ -35564,7 +35710,7 @@
    "wis": "WS0500P0091C",
    "version": "01.02",
    "catalogName": "Guide sleeve",
-   "catalogDesc": "Purpose : 32.5/34 mm guide sleeve for 110589005300 broach (valve guide basic bore 15.2 mm dia.). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 32.5/34 mm guide sleeve for 110589005300 broach (valve guide basic bore 15.2 mm dia.). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -35683,7 +35829,7 @@
    "wis": "WS0100P002401B",
    "version": "01.01",
    "catalogName": "Allen socket extension",
-   "catalogDesc": "Purpose : 8x40 mm hexagonal pin (1 piece). Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 8x40 mm hexagonal pin (1 piece). Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (PKW_EN): 116, 117"
    ]
@@ -35729,7 +35875,7 @@
    "wis": "WS0500Z0092KOP",
    "version": "01.07",
    "catalogName": "Slip gauge blades",
-   "catalogDesc": "Purpose : 0.25 mm gauge blades (20 pieces) for gauge blade holder. Test equipment category CAT_A. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 0.25 mm gauge blades (20 pieces) for gauge blade holder. Test equipment category CAT_A. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 10299, 11099, 11597",
@@ -35777,7 +35923,7 @@
    "wis": "WS0500Z0093KOP",
    "version": "01.13",
    "catalogName": "Drift",
-   "catalogDesc": "Purpose : 9 mm drift for checking the valve guide. Test equipment category CAT_A.",
+   "catalogDesc": "Purpose: 9 mm drift for checking the valve guide. Test equipment category CAT_A.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 104, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 60293, 60294, 60393, 60397",
@@ -35803,7 +35949,7 @@
    "wis": "WS0700P0023C",
    "version": "01.01",
    "catalogName": "Slotted nut wrench",
-   "catalogDesc": "Purpose : Claw wrench for loosening and tightening the adjustment screw on the fuel distributor for replacing the rubber form ring. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Claw wrench for loosening and tightening the adjustment screw on the fuel distributor for replacing the rubber form ring. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (PKW_EN): 116, 117, 119"
    ]
@@ -35826,7 +35972,7 @@
    "wis": "WS0500P0094C",
    "version": "01.02",
    "catalogName": "Plug gauge",
-   "catalogDesc": "Purpose : 11 mm plug gauge for checking the valve guide. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 11 mm plug gauge for checking the valve guide. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11099, 11597",
@@ -35851,7 +35997,7 @@
    "wis": "WS1300P000301A",
    "version": "01.02",
    "catalogName": "Hexagon pin",
-   "catalogDesc": "Purpose : Loosen and tighten the hexagonal pin 10 mm (2 piece) for screw/bolt M10 of tensioner pulley for the V-belt of the A/C compressor. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Loosen and tighten the hexagonal pin 10 mm (2 piece) for screw/bolt M10 of tensioner pulley for the V-belt of the A/C compressor. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (PKW_EN): 116, 117"
    ]
@@ -35874,7 +36020,7 @@
    "wis": "WS0500P0095C",
    "version": "01.02",
    "catalogName": "Plug gauge",
-   "catalogDesc": "Purpose : 14.05/15.05 mm plug gauge for checking the valve guide blind hole. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: 14.05/15.05 mm plug gauge for checking the valve guide blind hole. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 117",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597",
@@ -35924,7 +36070,7 @@
    "wis": "WS2000P0011C",
    "version": "01.03",
    "catalogName": "Socket",
-   "catalogDesc": "Purpose: 22 mm socket wrench socket, hexagon tapered 1.2��, 1/2\" square for screw plug on crankcase (installation of coolant preheater). Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please produce yourself or procure and/or repair existing workshop equipment.",
+   "catalogDesc": "Purpose: 22 mm socket wrench socket, hexagon tapered 1.2°, 1/2\" square for screw plug on crankcase (installation of coolant preheater). Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please produce yourself or procure and/or repair existing workshop equipment.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 103, 104, 117, 60397, 606, 616",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 60293, 60294, 61793",
@@ -35949,7 +36095,7 @@
    "wis": "WS0300P0021C",
    "version": "01.02",
    "catalogName": "Locating tool",
-   "catalogDesc": "Purpose : Fixing tool for the holder upper section of the TDC sensor. Reference information : Sale of this special tool was ceased.",
+   "catalogDesc": "Purpose: Fixing tool for the holder upper section of the TDC sensor. Reference information: Sale of this special tool was ceased.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 10296, 10298, 117, 616",
     "M (Cross-country vehicles): 10297, 10299, 11099, 11597, 61793",
@@ -35974,7 +36120,7 @@
    "wis": "WS0500P0152C",
    "version": "01.07",
    "catalogName": "Broaching tool",
-   "catalogDesc": "Purpose : 12.7 mm broaches for reaming of the valve guide blind hole in the cylinder head for the valve guide (repair stage I, 12.7 mm, fit X6). Note : In combination with 119 589 05 63 00 guide sleeve.",
+   "catalogDesc": "Purpose: 12.7 mm broaches for reaming of the valve guide blind hole in the cylinder head for the valve guide (repair stage I, 12.7 mm, fit X6). Note: In combination with 119 589 05 63 00 guide sleeve.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 113, 606",
     "M (PKW_EN): 111, 119, 155, 271, 604, 605",
@@ -36071,7 +36217,7 @@
    "wis": "WS0500P0101B",
    "version": "01.03",
    "catalogName": "Thrust piece",
-   "catalogDesc": "Purpose: Thrust piece 90 mm for valve spring to W 111 589 18 61 00 lever compression tool with installed cylinder head/engine. Note: Valve spring retainer �� 24, 28 mm. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Thrust piece 90 mm for valve spring to W 111 589 18 61 00 lever compression tool with installed cylinder head/engine. Note: Valve spring retainer Ø 24, 28 mm. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
     "M (PKW_EN): 119, 120, 156, 159"
    ]
@@ -36144,7 +36290,7 @@
    "wis": "WS0500P010301B",
    "version": "01.03",
    "catalogName": "Retaining bracket",
-   "catalogDesc": "Purpose : Mounting frame bows (2 pcs). Reference information : Sale of this workshop equipment has been discontinued. The workshop equipment is no longer available. If possible, please produce or procure it yourself or repair existing workshop equipment.",
+   "catalogDesc": "Purpose: Mounting frame bows (2 pcs). Reference information: Sale of this workshop equipment has been discontinued. The workshop equipment is no longer available. If possible, please produce or procure it yourself or repair existing workshop equipment.",
    "validities": [
     "M (Cross-country vehicles, PKW_EN): 117",
     "M (Cross-country vehicles): 11597",
@@ -36436,7 +36582,7 @@
    "wis": "WS2000Z0014KOA",
    "version": "02.03",
    "catalogName": "Tester",
-   "catalogDesc": "Purpose : Check cooling system cap. Pry off cooling system. Test equipment category CAT_B. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 589 24 21 00 tester.",
+   "catalogDesc": "Purpose: Check cooling system cap. Pry off cooling system. Test equipment category CAT_B. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 589 24 21 00 tester.",
    "validities": [
     "M (Cross-country vehicles): 102, 103, 104, 110, 11597, 117, 602, 603, 606, 616, 617",
     "M (Transporter_EN): 111979, 601943, 602980",
@@ -36780,7 +36926,7 @@
    "wis": "WS6000P0214K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Straightening and portal brackets for measuring and repairing vehicle bodies. Test equipment category CAT_A. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Straightening and portal brackets for measuring and repairing vehicle bodies. Test equipment category CAT_A. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36803,7 +36949,7 @@
    "wis": "WS6000P0150K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle-specific installation note for setting up straightening bench. Note: Substructure. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle-specific installation note for setting up straightening bench. Note: Substructure. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36826,7 +36972,7 @@
    "wis": "WS6000P0151K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle specific assembly note for setting up straightening bench. Note: Substructure. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle specific assembly note for setting up straightening bench. Note: Substructure. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36849,7 +36995,7 @@
    "wis": "WS6000P0152K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle specific assembly note for setting up straightening bench. Note: Sidewall. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle specific assembly note for setting up straightening bench. Note: Sidewall. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36872,7 +37018,7 @@
    "wis": "WS6000P0153K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle specific assembly note for setting up straightening bench. Note: Sidewall. Reference information : Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
+   "catalogDesc": "Purpose: Vehicle specific assembly note for setting up straightening bench. Note: Sidewall. Reference information: Recommended workshop equipment and information about the manufacturers can be found in the WS document (see below).",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36895,7 +37041,7 @@
    "wis": "WS6000P0266K",
    "version": "01.00",
    "catalogName": "Data sheet",
-   "catalogDesc": "Purpose : Vehicle specific assembly note for setting up straightening bench. Test equipment category CAT_A. Note: In combination with W 000 588 03 23 00 body straightening system. Technical Note: The analysis and attachment of all aluminum structural parts of the bodyshell is performed exclusively using the repair method described in WIS. Reference information : You can find recommended workshop appliances and information on the manufacturer here:",
+   "catalogDesc": "Purpose: Vehicle specific assembly note for setting up straightening bench. Test equipment category CAT_A. Note: In combination with W 000 588 03 23 00 body straightening system. Technical Note: The analysis and attachment of all aluminum structural parts of the bodyshell is performed exclusively using the repair method described in WIS. Reference information: You can find recommended workshop appliances and information on the manufacturer here:",
    "validities": [
     "T (PKW_EN): 156"
    ]
@@ -36918,7 +37064,7 @@
    "wis": "WS0900P0021B",
    "version": "01.00",
    "catalogName": "Plug neck",
-   "catalogDesc": "Purpose : For checking the intake air system for unmetered air.",
+   "catalogDesc": "Purpose: For checking the intake air system for unmetered air.",
    "validities": [
     "M (PKW_EN): 156"
    ]
@@ -38458,6 +38604,26 @@
  ],
  "xentryModels": [
   "100",
+  "107",
+  "108",
+  "109",
+  "110",
+  "111",
+  "112",
+  "113",
+  "114",
+  "115",
+  "116",
+  "117",
+  "118",
+  "123",
+  "124",
+  "126",
+  "129",
+  "140",
+  "156",
+  "163",
+  "164",
   "166",
   "167",
   "168",
