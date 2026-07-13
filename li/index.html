@@ -13,11 +13,43 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LI Docs" />
+<!-- Apply the saved theme before first paint (shared key with the platform shell). -->
+<script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<!-- Detect being embedded in the platform shell as early as possible. -->
+<script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
 <style>
   :root {
-    --bg:#0f1420; --panel:#171d2b; --panel-2:#1e2637; --border:#2a3346; --text:#e6ebf5;
-    --muted:#98a3b8; --accent:#5b8cff; --accent-2:#47d18f; --danger:#ff6b6b; --radius:12px;
+    --bg:#f4f6fb; --panel:#ffffff; --panel-2:#eef1f8; --border:#e2e6ef; --text:#1b2333;
+    --muted:#647089; --accent:#5b8cff; --accent-2:#47d18f; --danger:#dc2626; --radius:12px;
+    --th:#eef1f8; --th-hover:#e2e6ef; --row-hover:#f0f4fb; --sel:#e3ebff; --star:#f5c542;
+    --badge-bg:#e3ebff; --badge-text:#3b63c9; --preview-bg:#eef1f8; --overlay:rgba(15,23,42,.45);
+    --menu-shadow:rgba(15,23,42,.18); --drop-hover:#e8eefc;
+    --diff-del-bg:#fde8ea; --diff-ins-bg:#e2f7ec; --diff-del-text:#b91c1c; --diff-ins-text:#15803d;
   }
+  :root[data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#0f1420; --panel:#171d2b; --panel-2:#1e2637; --border:#2a3346; --text:#e6ebf5;
+    --muted:#98a3b8; --danger:#ff6b6b;
+    --th:#232c3f; --th-hover:#2a3550; --row-hover:#1c2333; --sel:#1c2740;
+    --badge-bg:#223154; --badge-text:#5b8cff; --preview-bg:#0c1018; --overlay:rgba(4,8,16,.72);
+    --menu-shadow:#00000088; --drop-hover:#202b42;
+    --diff-del-bg:#3a1d22; --diff-ins-bg:#16321f; --diff-del-text:#ff9ba6; --diff-ins-text:#7ee2a8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme:dark;
+      --bg:#0f1420; --panel:#171d2b; --panel-2:#1e2637; --border:#2a3346; --text:#e6ebf5;
+      --muted:#98a3b8; --danger:#ff6b6b;
+      --th:#232c3f; --th-hover:#2a3550; --row-hover:#1c2333; --sel:#1c2740;
+      --badge-bg:#223154; --badge-text:#5b8cff; --preview-bg:#0c1018; --overlay:rgba(4,8,16,.72);
+      --menu-shadow:#00000088; --drop-hover:#202b42;
+      --diff-del-bg:#3a1d22; --diff-ins-bg:#16321f; --diff-del-text:#ff9ba6; --diff-ins-text:#7ee2a8;
+    }
+  }
+  html.embedded header.topbar h1,
+  html.embedded #backToVault,
+  html.embedded #installBtn,
+  html.embedded #menuSepInstall { display:none !important; }
   * { box-sizing:border-box; }
   html,body { height:100%; }
   body {
@@ -36,7 +68,7 @@
   .btn-danger:hover { border-color:var(--danger); }
   .btn-sm { padding:6px 11px; font-size:12.5px; }
   #autosaveBtn.on, #syncBtn.on { color:var(--accent-2); border-color:var(--accent-2); }
-  #autosaveBtn.warn { color:#f5c542; border-color:#f5c542; }
+  #autosaveBtn.warn { color:var(--star); border-color:var(--star); }
   .inst-h { font-size:13px; margin:16px 0 6px; }
   .cmdrow { display:flex; gap:6px; margin:6px 0; }
   .cmdrow input { flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 9px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
@@ -49,8 +81,8 @@
   header.topbar .spacer { flex:1; }
   header.topbar .actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .menu-wrap { position:relative; }
-  .menu-btn.attn { color:#f5c542; border-color:#f5c542; }
-  .menu { position:absolute; right:0; top:calc(100% + 6px); background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:220px; box-shadow:0 12px 34px #0008; z-index:70; display:flex; flex-direction:column; gap:1px; }
+  .menu-btn.attn { color:var(--star); border-color:var(--star); }
+  .menu { position:absolute; right:0; top:calc(100% + 6px); background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:220px; box-shadow:0 12px 34px var(--menu-shadow); z-index:70; display:flex; flex-direction:column; gap:1px; }
   .menu[hidden] { display:none; }
   .menu-label { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:6px 10px 3px; }
   .menu-item { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:1px solid transparent; color:var(--text); font-size:13px; font-weight:600; padding:8px 10px; border-radius:7px; cursor:pointer; white-space:nowrap; }
@@ -66,36 +98,36 @@
   .main { flex:1; overflow:auto; }
   table.lib { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
   table.lib thead th {
-    position:sticky; top:0; z-index:2; background:#232c3f; text-align:left; padding:9px 12px;
+    position:sticky; top:0; z-index:2; background:var(--th); text-align:left; padding:9px 12px;
     border-bottom:1px solid var(--border); cursor:pointer; user-select:none; white-space:nowrap; color:var(--text);
   }
-  table.lib thead th:hover { background:#2a3550; }
+  table.lib thead th:hover { background:var(--th-hover); }
   table.lib th.asc::after { content:" ▲"; color:var(--accent); }
   table.lib th.desc::after { content:" ▼"; color:var(--accent); }
   table.lib td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
   table.lib tbody tr { cursor:pointer; }
-  table.lib tbody tr:hover td { background:#1c2333; }
-  table.lib tbody tr.sel td { background:#1c2740; }
+  table.lib tbody tr:hover td { background:var(--row-hover); }
+  table.lib tbody tr.sel td { background:var(--sel); }
   .li-num { font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--accent); white-space:nowrap; }
   .star { cursor:pointer; font-size:16px; color:var(--muted); display:inline-block; line-height:1; user-select:none; }
-  .star.on { color:#f5c542; }
+  .star.on { color:var(--star); }
   .star:hover { transform:scale(1.2); }
   td.starcell { text-align:center; }
-  #starFilter.on { color:#f5c542; border-color:#f5c542; }
+  #starFilter.on { color:var(--star); border-color:var(--star); }
   #needsFilter.on { color:var(--danger); border-color:var(--danger); }
   .dstar { background:none; border:none; cursor:pointer; font-size:20px; color:var(--muted); line-height:1; padding:2px 4px; flex:none; }
-  .dstar.on { color:#f5c542; }
+  .dstar.on { color:var(--star); }
   .dback { background:var(--panel-2); border:1px solid var(--border); color:var(--text); cursor:pointer; font-size:12.5px; font-weight:600; line-height:1; border-radius:8px; padding:6px 10px; flex:none; }
   .dback:hover { border-color:var(--accent); }
   .copyrow { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 10px; }
-  .ver-badge { display:inline-block; background:#223154; color:var(--accent); border-radius:5px; padding:1px 7px; font-size:12px; }
+  .ver-badge { display:inline-block; background:var(--badge-bg); color:var(--badge-text); border-radius:5px; padding:1px 7px; font-size:12px; }
   td.title-cell { max-width:520px; }
   .chk { width:16px; height:16px; accent-color:var(--accent); }
   .muted { color:var(--muted); }
   .empty { text-align:center; color:var(--muted); padding:60px 20px; line-height:1.6; }
 
   /* modal */
-  .overlay { position:fixed; inset:0; background:rgba(4,8,16,.72); display:none; align-items:center; justify-content:center; z-index:50; padding:14px; }
+  .overlay { position:fixed; inset:0; background:var(--overlay); display:none; align-items:center; justify-content:center; z-index:50; padding:14px; }
   .overlay.show { display:flex; }
   .modal { background:var(--panel); border:1px solid var(--border); border-radius:14px; width:min(1000px,96vw); max-height:92vh; display:flex; flex-direction:column; overflow:hidden; }
   .modal.big { width:min(1600px,98vw); height:95vh; max-height:95vh; }
@@ -106,7 +138,7 @@
   .modal-head .x { margin-left:auto; background:none; border:none; color:var(--muted); font-size:24px; cursor:pointer; line-height:1; }
   .modal-body { display:grid; grid-template-columns:1fr 330px; gap:0; overflow:hidden; flex:1; min-height:0; }
   @media (max-width:860px){ .modal-body { grid-template-columns:1fr; grid-template-rows:1fr auto; overflow:auto; } }
-  .preview-pane { background:#0c1018; min-height:320px; }
+  .preview-pane { background:var(--preview-bg); min-height:320px; }
   .preview-pane iframe { width:100%; height:100%; min-height:320px; border:none; background:#fff; display:block; }
   .meta-pane { border-left:1px solid var(--border); padding:15px; overflow:auto; }
   @media (max-width:860px){ .meta-pane { border-left:none; border-top:1px solid var(--border); } }
@@ -131,12 +163,12 @@
   .diff-out { border:1px solid var(--border); border-radius:10px; overflow:auto; }
   .diff-row { display:grid; grid-template-columns:1fr 1fr; font-family:ui-monospace,monospace; font-size:12px; }
   .diff-row>div { padding:3px 10px; white-space:pre-wrap; word-break:break-word; border-top:1px solid var(--border); min-height:20px; }
-  .d-del { background:#3a1d22; } .d-ins { background:#16321f; } .d-eq { color:var(--muted); }
+  .d-del { background:var(--diff-del-bg); } .d-ins { background:var(--diff-ins-bg); } .d-eq { color:var(--muted); }
   .diff-sum { font-size:13px; color:var(--muted); margin-bottom:12px; }
   .diff-sum .add { color:var(--accent-2); } .diff-sum .rem { color:var(--danger); }
   .wdiff { padding:14px 16px; line-height:1.8; font-size:13.5px; word-break:break-word; white-space:normal; }
-  .wdiff .d-del { color:#ff9ba6; text-decoration:line-through; border-radius:3px; padding:0 2px; }
-  .wdiff .d-ins { color:#7ee2a8; border-radius:3px; padding:0 2px; }
+  .wdiff .d-del { color:var(--diff-del-text); text-decoration:line-through; border-radius:3px; padding:0 2px; }
+  .wdiff .d-ins { color:var(--diff-ins-text); border-radius:3px; padding:0 2px; }
   .wdiff .d-eq { color:var(--text); }
   .diff-legend { font-size:12px; color:var(--muted); margin-left:8px; }
   .diff-legend .sw { display:inline-block; padding:0 5px; border-radius:3px; margin:0 3px; }
@@ -154,7 +186,7 @@
 
   /* import + progress */
   .drop { margin:18px; border:2px dashed var(--border); border-radius:12px; padding:34px; text-align:center; cursor:pointer; background:var(--panel-2); }
-  .drop:hover, .drop.drag { border-color:var(--accent); background:#202b42; }
+  .drop:hover, .drop.drag { border-color:var(--accent); background:var(--drop-hover); }
   .drop .big { font-size:16px; font-weight:600; }
   .drop .sub { color:var(--muted); font-size:13px; margin-top:6px; }
   .prog { padding:0 18px 18px; }
@@ -174,7 +206,7 @@
   <span class="sub" id="storeInfo"></span>
   <span class="spacer"></span>
   <div class="actions">
-    <a class="btn btn-ghost btn-sm" id="backToVault" href="../index.html" title="Back to File Vault">← Files</a>
+    <a class="btn btn-ghost btn-sm" id="backToVault" href="../index.html#vault" title="Back to Files">← Files</a>
     <button class="btn btn-primary" id="importBtn">＋ Import PDFs</button>
     <button class="btn btn-ghost btn-sm" id="exportSelBtn">⬇ Export renamed (ZIP)</button>
     <div class="menu-wrap">
@@ -1593,7 +1625,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return window.matchMedia("(display-mode: " + m + ")").matches;
     }));
   }
-  function updInstallBtn() { var hide = isAppMode(); $("installBtn").style.display = hide ? "none" : ""; $("menuSepInstall").style.display = hide ? "none" : ""; }
+  function updInstallBtn() { var hide = isAppMode() || document.documentElement.classList.contains("embedded"); $("installBtn").style.display = hide ? "none" : ""; $("menuSepInstall").style.display = hide ? "none" : ""; }
   updInstallBtn();
   if (window.matchMedia) ["standalone", "minimal-ui", "fullscreen"].forEach(function (m) {
     var mq = window.matchMedia("(display-mode: " + m + ")");
@@ -1989,6 +2021,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function resumeSyncDir() { return getSetting("syncDir").then(function (h) { if (h) syncDir = h; syncLabel(); }, function () { syncLabel(); }); }
 
   // ---------- boot ----------
+  // Follow the platform shell's theme (system | light | dark). The shell persists the choice.
+  window.addEventListener("message", function (ev) {
+    var d = ev && ev.data;
+    if (!d || d.type !== "platform-theme") return;
+    if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
+    else document.documentElement.removeAttribute("data-theme");
+  });
   openDB().then(function (db) { DB = db; if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); return refresh(); }).then(function () {
     if (!docs.length) $("importOverlay").classList.add("show");
     openFromHash(); // deep-link: open the document named in #LI… if present

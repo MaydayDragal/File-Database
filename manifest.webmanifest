@@ -1,7 +1,7 @@
 {
-  "name": "File Vault — Personal File Database",
-  "short_name": "File Vault",
-  "description": "A private, offline file database for documents, videos, photos, PDFs and text. Runs entirely in your browser — no install or admin rights required.",
+  "name": "File Database — Files, LI Docs, Tools & Toolbox",
+  "short_name": "File Database",
+  "description": "Your files, LI documents, special-tool inventory and file utilities in one private, offline platform. Everything stays on this computer.",
   "id": "/",
   "start_url": "./index.html",
   "scope": "./",
@@ -17,17 +17,9 @@
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    {
-      "name": "Add files",
-      "short_name": "Add",
-      "url": "./index.html?action=add",
-      "description": "Add files to the vault"
-    },
-    {
-      "name": "Starred",
-      "short_name": "Starred",
-      "url": "./index.html?view=starred",
-      "description": "Jump to starred files"
-    }
+    { "name": "Add files", "short_name": "Add", "url": "./index.html?action=add", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Starred files", "short_name": "Starred", "url": "./index.html?view=starred", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "LI Documents", "short_name": "LI Docs", "url": "./index.html#li", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Tool Inventory", "short_name": "Tools", "url": "./index.html#inventory", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

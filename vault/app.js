@@ -12,6 +12,10 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+  // Running inside the platform shell (as an iframe)?
+  let embedded = false;
+  try { embedded = window.parent !== window; } catch (e) { embedded = true; }
+
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
   let items = [];               // array of meta records
   const objectUrls = new Set(); // track for revocation
@@ -247,23 +251,6 @@
   function render() {
     renderSidebar();
     syncStaticNav();
-
-    // Embedded apps (LI Database, Tool Inventory) are shown in-shell, not as a
-    // file list. Reset them all, then reveal the active one and stop.
-    const contentEl = document.querySelector(".content");
-    Object.keys(EMBED_APPS).forEach((k) => {
-      contentEl.classList.remove(EMBED_APPS[k].contentClass);
-      $(EMBED_APPS[k].view).hidden = true;
-    });
-    const app = EMBED_APPS[state.filter];
-    if (app) {
-      contentEl.classList.add(app.contentClass);
-      $(app.view).hidden = false;
-      if (!app.loaded) { app.loaded = true; $(app.frame).src = app.src; }
-      $("#view-title").textContent = app.title;
-      document.title = app.title + " · File Vault";
-      return;
-    }
 
     const list = currentSet();
     const results = $("#results");
@@ -518,51 +505,9 @@
     closeSidebarMobile();
   }
 
-  // ---------- Embedded apps registry ----------
-  const EMBED_APPS = {
-    li: { view: "#li-view", frame: "#li-frame", src: "li/index.html", title: "LI Documents",
-          contentClass: "content--li", loaded: false, nav: "#nav-li" },
-    inventory: { view: "#inventory-view", frame: "#inventory-frame", src: "inventory/index.html", title: "Tool Inventory",
-          contentClass: "content--inventory", loaded: false, nav: "#nav-inventory" },
-  };
-
   // Keep the fixed sidebar entries in sync with the active view.
   function syncStaticNav() {
     $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === state.filter));
-    Object.keys(EMBED_APPS).forEach((k) => {
-      const el = $(EMBED_APPS[k].nav);
-      if (el) el.classList.toggle("is-active", state.filter === k);
-    });
-  }
-
-  // Peek at an embedded app's own IndexedDB (read-only) to show a sidebar count.
-  function updateEmbedCount(dbName, store, countAttr) {
-    try {
-      const req = indexedDB.open(dbName);
-      // If the DB doesn't exist yet, opening without a version would CREATE it
-      // empty at v1 — which would then block the real app from ever creating
-      // its object stores. Abort the creation so we never leave an empty DB.
-      req.onupgradeneeded = (e) => { try { e.target.transaction.abort(); } catch (_) {} };
-      req.onblocked = () => {};
-      req.onsuccess = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(store)) { db.close(); return; }
-        try {
-          const c = db.transaction(store, "readonly").objectStore(store).count();
-          c.onsuccess = () => {
-            const el = document.querySelector(`[data-count="${countAttr}"]`);
-            if (el) el.textContent = c.result || "";
-            db.close();
-          };
-          c.onerror = () => db.close();
-        } catch (e) { db.close(); }
-      };
-      req.onerror = () => {};
-    } catch (e) {}
-  }
-  function updateAppCounts() {
-    updateEmbedCount("LIDocsDB", "docs", "li");
-    updateEmbedCount("tool-inventory", "tools", "inventory");
   }
 
   // ---------- Detail drawer ----------
@@ -584,6 +529,8 @@
 
     // "Send to LI" only makes sense for PDFs.
     $("#d-send-li").hidden = !(rec.kind === "pdf" && window.VaultBridge);
+    // "Send to Toolbox" only when a Toolbox tool exists for this file.
+    $("#d-send-toolbox").hidden = !(window.VaultBridge && toolboxTabFor(rec));
 
     await renderPreview(rec, meta);
 
@@ -702,7 +649,10 @@
     try {
       await window.VaultBridge.send("li", { name: rec.name, type: rec.type || "application/pdf", blob: rec.blob });
       closeDetail();
-      setFilter("li"); // switch to the LI view so the user sees it import
+      // Ask the platform shell to switch to the LI app so the user sees it import.
+      if (embedded) {
+        try { window.parent.postMessage({ type: "shell-nav", app: "li" }, "*"); } catch (e) {}
+      }
       toast("Sent to LI Database — it will read and file the PDF.");
     } catch (e) {
       console.error(e);
@@ -710,7 +660,37 @@
     }
   }
 
-  // ---------- Cross-app: receive a file handed over from the LI Database ----------
+  // ---------- Cross-app: hand a file to the Toolbox ----------
+  // Map a record to the Toolbox tool tab that can handle it (null = none).
+  function toolboxTabFor(rec) {
+    if (rec.kind === "image" || rec.kind === "video") return "media";
+    if (rec.kind === "pdf") return "pdf";
+    const name = (rec.name || "").toLowerCase();
+    if (name.endsWith(".csv")) return "csv";
+    if (name.endsWith(".zip")) return "zip";
+    return null;
+  }
+  async function sendCurrentToToolbox() {
+    if (!window.VaultBridge) { toast("The Toolbox bridge isn't available."); return; }
+    const rec = await DB.get(state.currentId);
+    if (!rec) return;
+    const tab = toolboxTabFor(rec);
+    if (!tab) { toast("The Toolbox has no tool for this file type."); return; }
+    try {
+      await window.VaultBridge.send("toolbox", { name: rec.name, type: rec.type, blob: rec.blob, meta: { tab } });
+      // Ask the platform shell to switch to the Toolbox on the right tool tab.
+      if (embedded) {
+        try { window.parent.postMessage({ type: "shell-nav", app: "toolbox", tab }, "*"); } catch (e) {}
+      }
+      closeDetail();
+      toast("Sent to Toolbox.");
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't send to the Toolbox.");
+    }
+  }
+
+  // ---------- Cross-app: receive a file handed over from another app ----------
   const LI_COLLECTION = "LI Documents";
   async function addIncomingFile(item) {
     const blob = item.blob;
@@ -720,6 +700,7 @@
     const thumb = await makeThumb(file, kind);
     const now = Date.now();
     const m = item.meta || {};
+    const collection = m.collection || LI_COLLECTION;
     const tags = [];
     if (m.li) tags.push(m.li);
     if (m.fgroup) tags.push(m.fgroup);
@@ -733,7 +714,7 @@
       blob: file,
       thumb,
       tags: Array.from(new Set(tags)),
-      collection: LI_COLLECTION,
+      collection,
       note: m.title ? ("LI: " + m.title) : "",
       starred: false,
       createdAt: now,
@@ -742,9 +723,9 @@
     record.searchText = DB.buildSearchText(record);
     await DB.put(record);
     items.push(stripBlob(record));
-    if (state.filter !== "li") render();
+    render();
     updateStorage();
-    toast('Added “' + name + '” to File Vault (LI Documents).');
+    toast('Added “' + name + '” to File Vault (' + collection + ').');
   }
 
   // ---------- Storage meter ----------
@@ -854,7 +835,8 @@
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    if (!isStandalone()) $("#install-btn").hidden = false;
+    // Inside the platform shell the install story belongs to the shell.
+    if (!isStandalone() && !embedded) $("#install-btn").hidden = false;
   });
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
@@ -909,6 +891,7 @@
     if (btn) btn.title = THEME_LABEL[themeMode] + " (click to change)";
   }
   function persistTheme() {
+    if (embedded) return; // the shell owns theme persistence while embedded
     DB.setMeta("theme", themeMode);
     try {
       if (themeMode === "system") localStorage.removeItem("fv-theme");
@@ -971,8 +954,6 @@
     $("#view-list").onclick = () => setView("list");
 
     $$("#nav-filters .nav__item").forEach((b) => { b.onclick = () => setFilter(b.dataset.filter); });
-    $("#nav-li").onclick = () => setFilter("li");
-    $("#nav-inventory").onclick = () => setFilter("inventory");
 
     // Detail drawer
     $$("#detail [data-close]").forEach((el) => { el.onclick = closeDetail; });
@@ -981,6 +962,7 @@
     $("#d-download").onclick = downloadCurrent;
     $("#d-open").onclick = openCurrent;
     $("#d-send-li").onclick = sendCurrentToLI;
+    $("#d-send-toolbox").onclick = sendCurrentToToolbox;
     $("#d-star").onclick = async () => {
       if (!state.currentId) return;
       await toggleStar(state.currentId);
@@ -1072,7 +1054,16 @@
     initDnD();
     // restore prefs
     try {
-      themeMode = (await DB.getMeta("theme", "system")) || "system";
+      // The shared localStorage "fv-theme" key is the platform-wide choice
+      // (the shell writes it). Prefer it when set — embedded OR standalone —
+      // so opening the vault directly never reverts/clobbers the theme picked
+      // in the shell. The vault's own DB meta is the fallback for old
+      // standalone installs that predate the key.
+      let t = null;
+      try { t = localStorage.getItem("fv-theme"); } catch (e) {}
+      if (t === "light" || t === "dark") themeMode = t;
+      else if (!embedded) themeMode = (await DB.getMeta("theme", "system")) || "system";
+      else themeMode = "system";
       if (!THEMES.includes(themeMode)) themeMode = "system";
       applyTheme();
       persistTheme();
@@ -1096,24 +1087,23 @@
     items = await DB.listMeta();
     render();
     updateStorage();
-    updateAppCounts();
 
-    // Cross-app bridge: receive files handed over from the LI Database.
+    // Cross-app bridge: receive files handed over from other apps.
     if (window.VaultBridge) {
       window.VaultBridge.receive("vault", (item) => addIncomingFile(item));
     }
-    // Embedded apps can ask the shell to switch back to the file list.
+    // Follow the platform shell's theme (the shell persists the choice).
     window.addEventListener("message", (e) => {
       const d = e.data || {};
-      if (d && d.type === "vault-nav" && d.to === "files") setFilter("all");
-      if (d && d.type === "li-changed") updateAppCounts();
+      if (d && d.type === "platform-theme" && THEMES.includes(d.mode)) {
+        themeMode = d.mode;
+        applyTheme();
+      }
     });
 
     // URL actions (from PWA shortcuts)
     const params = new URLSearchParams(location.search);
     if (params.get("view") === "starred") setFilter("starred");
-    if (params.get("view") === "li") setFilter("li");
-    if (params.get("view") === "inventory") setFilter("inventory");
     if (params.get("action") === "add") setTimeout(() => $("#file-input").click(), 300);
 
     // Service worker for offline + seamless updates.

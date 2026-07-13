@@ -1,4 +1,6 @@
-// Integration test for the File Vault ⇄ LI Database merge (bridge + embedded app).
+// Integration test for the cross-app handoffs through the File Database shell:
+// vault → LI, LI → vault and vault → Toolbox over bridge.js, with the shell
+// (root index.html) owning tabs/navigation and each app living in its iframe.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,8 +18,9 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split("?")[0]);
-  if (p === "/") p = "/index.html";
-  const file = path.join(ROOT, p);
+  if (p.endsWith("/")) p += "index.html";           // directory index (/, /vault/, /li/, …)
+  let file = path.join(ROOT, p);
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); res.end("nf"); return;
   }
@@ -37,52 +40,54 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ✓ " : "  ✗ ") + label); if (!cond) failures++; };
+const frameFor = (part) => page.frames().find((f) => f.url().includes(part));
 
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
-// --- The LI Documents nav entry exists and opens the embedded app ---
-check(await page.locator("#nav-li").isVisible(), "sidebar shows 'LI Documents' entry");
-await page.locator("#nav-li").click();
+// --- The shell boots with the vault ("Files") as the default app ---
+check(await page.locator("#tab-vault.is-active").count() === 1, "shell opens on the Files tab");
+check(await page.locator("#view-vault:not([hidden])").count() === 1, "vault panel is visible");
+const vault = page.frameLocator("#frame-vault");
+await vault.locator("#empty").waitFor({ timeout: 8000 });
+check(true, "vault iframe booted (empty state visible)");
+
+// --- The LI Documents tab opens the embedded LI app ---
+check(await page.locator("#tab-li").isVisible(), "shell shows an 'LI Documents' tab");
+await page.click("#tab-li");
 await page.waitForTimeout(300);
-check(await page.locator("#li-view").isVisible(), "clicking it reveals the embedded LI view");
-check((await page.locator("#view-title").textContent()).includes("LI"), "title switches to LI Documents");
-const frame = page.frameLocator("#li-frame");
-await page.waitForTimeout(1500); // let the LI app boot inside the iframe
-check(await frame.locator("#importBtn").isVisible(), "embedded LI app loaded (Import button visible)");
-check(await frame.locator("#backToVault").isVisible(), "LI app shows a '← Files' back link");
+check(await page.locator("#view-li:not([hidden])").count() === 1, "clicking it reveals the embedded LI view");
+const li = page.frameLocator("#frame-li");
+await li.locator("#importBtn").waitFor({ timeout: 8000 });
+check(await li.locator("#importBtn").isVisible(), "embedded LI app loaded (Import button visible)");
 // The LI app auto-opens its import prompt when empty; dismiss it like a user.
-if (await frame.locator("#importOverlay.show").count()) {
-  await frame.locator("#importOverlay .x[data-close]").click();
+if (await li.locator("#importOverlay.show").count()) {
+  await li.locator("#importOverlay .x[data-close]").click();
   await page.waitForTimeout(200);
 }
 
-// --- Bridge is present in BOTH frames ---
-check(await page.evaluate(() => !!window.VaultBridge), "bridge loaded in File Vault");
-const liHasBridge = await page.evaluate(() => {
-  const f = document.getElementById("li-frame");
-  return !!(f && f.contentWindow && f.contentWindow.VaultBridge);
-});
-check(liHasBridge, "bridge loaded inside the LI iframe");
-
-// --- Back link switches the shell back to Files ---
-await frame.locator("#backToVault").click();
-await page.waitForTimeout(500);
-check(!(await page.locator("#li-view").isVisible()), "back link returns to the file list");
+// --- Bridge is present in BOTH app frames (evaluated inside each iframe) ---
+const vaultFrame = frameFor("/vault/");
+const liFrame = frameFor("/li/");
+check(!!vaultFrame && await vaultFrame.evaluate(() => !!window.VaultBridge), "bridge loaded inside the vault iframe");
+check(!!liFrame && await liFrame.evaluate(() => !!window.VaultBridge), "bridge loaded inside the LI iframe");
 
 // --- Add a PDF to File Vault, then 'Send to LI' ---
+await page.click("#tab-vault");
+await page.waitForTimeout(200);
 const tmp = path.join(ROOT, "tools", "_fixtures");
 fs.mkdirSync(tmp, { recursive: true });
 fs.writeFileSync(path.join(tmp, "bulletin.pdf"), "%PDF-1.4\n% LI test\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF");
-await page.setInputFiles("#file-input", [path.join(tmp, "bulletin.pdf")]);
+await vault.locator("#file-input").setInputFiles(path.join(tmp, "bulletin.pdf"));
 await page.waitForTimeout(500);
-check((await page.locator(".card").count()) === 1, "PDF added to File Vault");
-await page.locator(".card").first().click();
+check((await vault.locator(".card").count()) === 1, "PDF added to File Vault");
+await vault.locator(".card").first().click();
 await page.waitForTimeout(300);
-check(await page.locator("#d-send-li").isVisible(), "'Send to LI' button shows for a PDF");
+check(await vault.locator("#d-send-li").isVisible(), "'Send to LI' button shows for a PDF");
 
 // Intercept the bridge to confirm the payload is queued for the LI app.
-await page.click("#d-send-li");
+// (IndexedDB is origin-shared, so the shell page sees the same "vault-bridge" DB.)
+await vault.locator("#d-send-li").click();
 await page.waitForTimeout(400);
 const outboxToLi = await page.evaluate(() => new Promise((resolve) => {
   const r = indexedDB.open("vault-bridge");
@@ -96,19 +101,14 @@ const outboxToLi = await page.evaluate(() => new Promise((resolve) => {
   r.onerror = () => resolve([]);
 }));
 // It may already be drained by the (loaded) LI iframe — either queued OR consumed is correct.
-check(await page.locator("#li-view").isVisible(), "'Send to LI' switches to the LI view");
+check(await page.locator("#tab-li.is-active").count() === 1, "'Send to LI' switches the shell to the LI tab");
+check(await page.locator("#view-li:not([hidden])").count() === 1, "LI panel visible after the handoff");
 console.log("    (bridge outbox snapshot:", JSON.stringify(outboxToLi) + ")");
 
-// --- LI -> File Vault: drive the bridge from the LI frame with a real blob ---
-const beforeCards = await page.evaluate(() => {
-  // count File Vault cards currently in DOM
-  return document.querySelectorAll(".card").length;
-});
-await page.evaluate(async () => {
-  const f = document.getElementById("li-frame");
-  const B = f.contentWindow.VaultBridge;
+// --- LI -> File Vault: drive the bridge from inside the LI frame with a real blob ---
+await liFrame.evaluate(async () => {
   const blob = new Blob(["%PDF-1.4 li->vault"], { type: "application/pdf" });
-  await B.send("vault", {
+  await window.VaultBridge.send("vault", {
     name: "LI54.10-P-071499 Steering column.pdf",
     type: "application/pdf",
     blob,
@@ -117,23 +117,61 @@ await page.evaluate(async () => {
 });
 await page.waitForTimeout(700);
 // Switch back to the file list (the user's natural next step) to see the arrival.
-await page.locator("[data-filter='all']").click();
+await page.click("#tab-vault");
 await page.waitForTimeout(200);
-await page.fill("#search-input", "LI54.10-P-071499");
+await vault.locator("[data-filter='all']").click();
+await page.waitForTimeout(200);
+await vault.locator("#search-input").fill("LI54.10-P-071499");
 await page.waitForTimeout(300);
-const recvCount = await page.locator(".card:visible").count();
+let recvCount = 0;
+for (let i = 0; i < 25; i++) {           // bridge delivery is async — poll
+  recvCount = await vault.locator(".card:visible").count();
+  if (recvCount === 1) break;
+  await page.waitForTimeout(200);
+}
 check(recvCount === 1, `LI→Vault handoff created a File Vault card (got ${recvCount})`);
-await page.locator(".card").first().click();
+await vault.locator(".card").first().click();
 await page.waitForTimeout(300);
-check((await page.locator("#d-collection").inputValue()) === "LI Documents", "received file filed under 'LI Documents' collection");
-check((await page.locator("#d-tags").inputValue()).includes("LI54.10-P-071499"), "received file tagged with the LI number");
-check((await page.locator("#d-tags").inputValue()).includes("Model 205"), "received file tagged with the model series");
-await page.click("#detail [data-close]");
-await page.fill("#search-input", "");
+check((await vault.locator("#d-collection").inputValue()) === "LI Documents", "received file filed under 'LI Documents' collection");
+check((await vault.locator("#d-tags").inputValue()).includes("LI54.10-P-071499"), "received file tagged with the LI number");
+check((await vault.locator("#d-tags").inputValue()).includes("Model 205"), "received file tagged with the model series");
+await vault.locator("#detail button[data-close]").click();
+await vault.locator("#search-input").fill("");
 await page.waitForTimeout(200);
 
-// --- The 'LI Documents' collection now appears in the sidebar ---
-check((await page.locator("#nav-collections").getByText("LI Documents").count()) > 0, "'LI Documents' collection in sidebar");
+// --- The 'LI Documents' collection now appears in the vault sidebar ---
+check((await vault.locator("#nav-collections").getByText("LI Documents").count()) > 0, "'LI Documents' collection in sidebar");
+
+// --- Vault -> Toolbox: an image opens the Media tool with the file loaded ---
+const png = Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+  "01f15c4890000000d49444154789c6360000002000154a24f5f0000000049454e44ae426082", "hex");
+fs.writeFileSync(path.join(tmp, "snapshot.png"), png);
+await vault.locator("#file-input").setInputFiles(path.join(tmp, "snapshot.png"));
+await page.waitForTimeout(500);
+await vault.locator(".card").filter({ hasText: "snapshot.png" }).click();
+await page.waitForTimeout(300);
+check(await vault.locator("#d-send-toolbox").isVisible(), "'Send to Toolbox' button shows for an image");
+await vault.locator("#d-send-toolbox").click();
+await page.waitForTimeout(400);
+check(await page.locator("#tab-toolbox.is-active").count() === 1, "'Send to Toolbox' switches the shell to the Toolbox tab");
+check(await page.locator("#view-toolbox:not([hidden])").count() === 1, "Toolbox panel visible after the handoff");
+const toolbox = page.frameLocator("#frame-toolbox");
+await toolbox.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
+let media = { active: false, name: "" };
+for (let i = 0; i < 40; i++) {           // frame lazy-loads + bridge drains async — poll
+  media = await page.evaluate(() => {
+    const doc = document.querySelector("#frame-toolbox")?.contentDocument;
+    if (!doc) return { active: false, name: "" };
+    return {
+      active: !!doc.querySelector("#tool-media.active"),
+      name: (doc.querySelector("#m-fileName")?.textContent || "").trim(),
+    };
+  });
+  if (media.active && media.name.includes("snapshot.png")) break;
+  await page.waitForTimeout(250);
+}
+check(media.active, "toolbox opened on the Media Compressor tool");
+check(media.name.includes("snapshot.png"), `media tool loaded the handed-over file (got "${media.name}")`);
 
 await page.screenshot({ path: path.join(ROOT, "tools", "screenshot-merge.png") });
 

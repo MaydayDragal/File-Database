@@ -10,6 +10,8 @@
   <link rel="icon" href="icons/favicon-64.png" sizes="64x64" type="image/png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  <script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -18,7 +20,7 @@
     <span class="sub" id="sub"></span>
     <span class="spacer"></span>
     <div class="actions">
-      <a class="btn btn-ghost btn-sm" id="backBtn" href="../index.html" title="Back to File Vault" hidden>← Files</a>
+      <a class="btn btn-ghost btn-sm" id="backBtn" href="../index.html#vault" title="Open the File Database platform" hidden>⌂ File Database</a>
       <button class="btn btn-ghost btn-sm" id="installBtn" title="Install as an app" hidden>📌 Install</button>
       <div class="menu-wrap">
         <button class="btn btn-ghost btn-sm" id="menuBtn" aria-haspopup="true">☰ Menu</button>

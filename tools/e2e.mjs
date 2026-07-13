@@ -1,4 +1,5 @@
-// End-to-end smoke test for File Vault using the pre-installed Chromium.
+// End-to-end smoke test for the File Vault app (standalone at /vault/) using
+// the pre-installed Chromium.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,8 +18,9 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split("?")[0]);
-  if (p === "/") p = "/index.html";
-  const file = path.join(ROOT, p);
+  if (p.endsWith("/")) p += "index.html";           // directory index (/, /vault/, /li/, …)
+  let file = path.join(ROOT, p);
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); res.end("nf"); return;
   }
@@ -41,7 +43,7 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ✓ " : "  ✗ ") + label); if (!cond) failures++; };
 
-await page.goto(base, { waitUntil: "networkidle" });
+await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // Empty state
@@ -145,13 +147,14 @@ await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(500);
 check((await page.locator(".card").count()) === 3, "data persists after reload");
 
-// --- Service worker registered ---
-const swReady = await page.evaluate(async () => {
-  if (!("serviceWorker" in navigator)) return false;
+// --- Service worker registered (scoped to /vault/ — the shell owns the root) ---
+const swScope = await page.evaluate(async () => {
+  if (!("serviceWorker" in navigator)) return null;
   const reg = await navigator.serviceWorker.getRegistration();
-  return !!reg;
+  return reg ? reg.scope : null;
 });
-check(swReady, "service worker registered (offline-capable)");
+check(!!swScope, "service worker registered (offline-capable)");
+check(!!swScope && new URL(swScope).pathname === "/vault/", `service worker scoped to /vault/ (got ${swScope})`);
 
 // --- Delete flow (accept confirm) ---
 page.on("dialog", (d) => d.accept());

@@ -1,4 +1,4 @@
-// End-to-end test for the Tool Inventory app + its File Vault hub embedding.
+// End-to-end test for the Tool Inventory app + its File Database shell embedding.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,8 +11,9 @@ const EXE = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml" };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split("?")[0]);
-  if (p === "/") p = "/index.html";
-  const file = path.join(ROOT, p);
+  if (p.endsWith("/")) p += "index.html";           // directory index (/, /vault/, /li/, …)
+  let file = path.join(ROOT, p);
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end("nf"); return; }
   res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
@@ -38,6 +39,7 @@ check(rowCount > 1400, `rows render from the bundled seed (got ${rowCount})`);
 check((await page.locator("#sub").textContent()).includes("offered"), "header shows offered/photo counts");
 const totalTxt = await page.locator("#count").textContent();
 check(/tools?/.test(totalTxt), `count reads '${totalTxt.trim()}'`);
+check(await page.locator("#backBtn").isVisible(), "standalone inventory shows the '⌂ File Database' link");
 
 // --- Part photos appear in the list and actually load ---
 const thumbCount = await page.locator("#tbody .thumb").count();
@@ -174,48 +176,53 @@ check(csv.split("\n").length > 100, "exported CSV has many rows");
 
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-inventory.png") });
 
-// ---------- Hub embedding ----------
+// ---------- Platform shell embedding ----------
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
-check(await page.locator("#nav-inventory").isVisible(), "File Vault sidebar shows 'Tool Inventory'");
-await page.locator("#nav-inventory").click();
+check(await page.locator("#tab-inventory").isVisible(), "shell shows a 'Tool Inventory' tab");
+await page.click("#tab-inventory");
 await page.waitForTimeout(300);
-check(await page.locator("#inventory-view").isVisible(), "clicking it opens the embedded inventory");
-check((await page.locator("#view-title").textContent()).includes("Tool Inventory"), "title switches to Tool Inventory");
-const invFrame = page.frameLocator("#inventory-frame");
-await page.waitForTimeout(900);
+check(await page.locator("#view-inventory:not([hidden])").count() === 1, "clicking it opens the embedded inventory");
+check(await page.locator("#tab-inventory.is-active").count() === 1, "Tool Inventory tab is active");
+const invFrame = page.frameLocator("#frame-inventory");
+await invFrame.locator("#tbody tr").first().waitFor({ timeout: 15000 });
 check(await invFrame.locator("#tbody tr").first().isVisible(), "embedded inventory renders its table");
-check(await invFrame.locator("#backBtn").isVisible(), "embedded inventory shows a '← Files' link");
-// Switching to LI Documents hides the inventory view (only one app at a time)
-await page.locator("#nav-li").click();
+check(await invFrame.locator("#backBtn").isHidden(), "embedded inventory hides the standalone '⌂ File Database' link");
+// Switching to LI Documents hides the inventory panel (only one app at a time)
+await page.click("#tab-li");
 await page.waitForTimeout(300);
-check(!(await page.locator("#inventory-view").isVisible()), "switching apps hides the inventory view");
-check(await page.locator("#li-view").isVisible(), "LI view now visible");
-// Back link from inventory returns to files
-await page.locator("#nav-inventory").click();
-await page.waitForTimeout(400);
-await invFrame.locator("#backBtn").click();
-await page.waitForTimeout(400);
-check(!(await page.locator("#inventory-view").isVisible()), "inventory back link returns to the file list");
+check(await page.locator("#view-inventory[hidden]").count() === 1, "switching apps hides the inventory panel");
+check(await page.locator("#view-li:not([hidden])").count() === 1, "LI panel now visible");
+await page.click("#tab-inventory");
+await page.waitForTimeout(300);
+const visiblePanels = await page.evaluate(() =>
+  Array.from(document.querySelectorAll(".app-panel")).filter((el) => !el.hidden).map((el) => el.id));
+check(visiblePanels.length === 1 && visiblePanels[0] === "view-inventory", `only one panel visible at a time (${visiblePanels.join(", ")})`);
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404/i.test(e));
 console.log(realErrors.length ? "\nErrors:\n" + realErrors.join("\n") : "\nNo unexpected console errors.");
 check(realErrors.length === 0, "no unexpected console/page errors");
 
-// --- Fresh profile: opening File Vault FIRST must not break the inventory app ---
-// (regression for the bug where File Vault's count-peek pre-created the
-//  inventory IndexedDB empty at v1, blocking the app from creating its stores)
+// --- Fresh profile: opening the shell (vault first) must not break the inventory app ---
+// (regression for the bug where the hub's count-peek pre-created the inventory
+//  IndexedDB empty at v1, blocking the app from creating its stores — the peek
+//  now lives in the shell's tab badges and must stay non-destructive)
 const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 820 }, colorScheme: "dark" });
 const p2 = await ctx2.newPage();
 const err2 = [];
 p2.on("pageerror", (e) => err2.push(String(e.message)));
-await p2.goto(base, { waitUntil: "networkidle" });   // File Vault first — runs updateAppCounts()
+await p2.goto(base, { waitUntil: "networkidle" });   // shell boots the vault + badge peek first
 await p2.waitForTimeout(600);
-await p2.locator("#nav-inventory").click();
-await p2.waitForTimeout(1500);
-const inv2 = p2.frameLocator("#inventory-frame");
-const rows2 = await inv2.locator("#tbody tr").count();
-check(rows2 > 1400, `inventory still loads after File Vault opened first (rows=${rows2})`);
+await p2.click("#tab-inventory");
+const inv2 = p2.frameLocator("#frame-inventory");
+await inv2.locator("#tbody tr").first().waitFor({ timeout: 20000 }).catch(() => {});
+let rows2 = 0;
+for (let i = 0; i < 40; i++) {           // fresh profile seeds ~1500 rows — poll
+  rows2 = await inv2.locator("#tbody tr").count();
+  if (rows2 > 1400) break;
+  await p2.waitForTimeout(250);
+}
+check(rows2 > 1400, `inventory still loads after the shell opened first (rows=${rows2})`);
 const invBroken = await inv2.locator("#empty").evaluate((el) => el.offsetParent !== null && /couldn't load/i.test(el.textContent)).catch(() => false);
 check(!invBroken, "inventory did not show the 'Couldn't load' error");
 await ctx2.close();

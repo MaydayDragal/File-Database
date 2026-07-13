@@ -14,6 +14,14 @@
   var curId = null, embedded = false;
   try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
 
+  // Theme broadcast from the platform shell (shell persists; we only apply).
+  window.addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.type !== "platform-theme") return;
+    if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
+    else document.documentElement.removeAttribute("data-theme");
+  });
+
   // ---------- helpers ----------
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function money(n) { return (n || n === 0) ? "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
@@ -384,17 +392,14 @@
 
     // install
     var deferred = null;
-    window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferred = e; $("#installBtn").hidden = false; });
+    window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferred = e; if (!embedded) $("#installBtn").hidden = false; });
     $("#installBtn").addEventListener("click", function () {
       if (deferred) { deferred.prompt(); deferred.userChoice.then(function () { deferred = null; $("#installBtn").hidden = true; }); }
       else toast("Use the browser menu (⋮) → Install / Create shortcut.");
     });
 
-    // back to File Vault (when embedded, switch the shell; else navigate)
-    var back = $("#backBtn");
-    if (back) back.addEventListener("click", function (e) {
-      if (embedded) { e.preventDefault(); try { window.parent.postMessage({ type: "vault-nav", to: "files" }, "*"); } catch (x) {} }
-    });
+    // #backBtn is a plain link to the File Database platform, shown standalone
+    // only (embedded, the shell owns cross-app navigation) — no handler needed.
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { $$(".overlay.show").forEach(function (o) { o.classList.remove("show"); }); if (!mn.hidden) mn.hidden = true; }
@@ -422,7 +427,7 @@
     var photoN = all.filter(function (t) { return t.photo; }).length;
     $("#sub").textContent = all.length.toLocaleString() + " tools · " + offeredN.toLocaleString() + " offered · " + photoN.toLocaleString() + " with photo";
     if (src && src.updated) $("#legendUpdated").textContent = "Pricing reference: " + src.updated;
-    if (embedded) $("#backBtn").hidden = false;
+    if (!embedded) $("#backBtn").hidden = false;   // standalone: offer a way into the platform
     fillFilters();
     wire();
     apply();

@@ -1,19 +1,20 @@
-/*
- * sw.js — Service worker for File Vault.
- *
- * Caches the app shell so it launches and works fully offline. User file data
- * is NOT handled here — that lives in IndexedDB and never touches the cache
- * or the network.
- */
-const CACHE = "file-vault-v4";
-const SHELL = [
+/* File Database platform shell service worker — offline shell + toolbox.
+   The vault, LI and inventory apps register their own service workers for
+   their own folders; this one deliberately skips their paths. */
+const CACHE = "platform-shell-v1";
+// The shell can't start without these…
+const CORE = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./db.js",
-  "./app.js",
+  "./shell.css",
+  "./shell.js",
+];
+// …while these are nice-to-have offline (the 2.3 MB toolbox page especially
+// must not be able to fail the whole install on a flaky connection).
+const EXTRAS = [
   "./bridge.js",
   "./manifest.webmanifest",
+  "./toolbox/index.html",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -23,49 +24,51 @@ const SHELL = [
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then((c) => c.addAll(CORE).then(() => Promise.all(EXTRAS.map((u) => c.add(u).catch(() => {})))))
+      .then(() => self.skipWaiting())
   );
 });
-
 self.addEventListener("activate", (e) => {
   e.waitUntil(
+    // Prune our own old caches, plus the legacy root File Vault caches
+    // ("file-vault-*") left behind by the pre-platform service worker this one
+    // replaces. Doing it here (not in the vault's SW) means the legacy cache
+    // is only removed once the new root SW has actually taken over — an
+    // existing user offline mid-migration keeps a working old shell.
+    // Everything else in CacheStorage belongs to the app SWs — leave it alone.
     caches.keys()
-      // Only prune OUR OWN old caches — CacheStorage is shared across the whole
-      // origin, so a blanket delete would wipe the LI / Tool Inventory caches.
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("file-vault-") && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys
+        .filter((k) => (k.startsWith("platform-shell-") && k !== CACHE) || k.startsWith("file-vault-"))
+        .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
-
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // only handle same-origin
-  // Embedded apps under /li/ and /inventory/ ship their own service workers —
-  // leave their requests alone so we never serve File Vault's shell for them.
-  if (url.pathname.includes("/li/") || url.pathname.includes("/inventory/")) return;
-
-  // Network-first for navigations so updates are picked up when online,
-  // falling back to the cached shell when offline.
+  if (url.origin !== self.location.origin) return;
+  // The embedded apps ship their own service workers — leave their assets alone.
+  if (url.pathname.includes("/vault/") || url.pathname.includes("/li/") || url.pathname.includes("/inventory/")) return;
   if (req.mode === "navigate") {
+    // Network-first; each navigation (shell root, toolbox iframe) is cached
+    // under its own URL so one can't clobber the other.
     e.respondWith(
       fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put("./index.html", copy));
+        if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
-      }).catch(() => caches.match("./index.html"))
+      }).catch(() =>
+        caches.match(req, { ignoreSearch: true }).then((m) => m || caches.match(
+          url.pathname.includes("/toolbox/") ? "./toolbox/index.html" : "./index.html"
+        ))
+      )
     );
     return;
   }
-
-  // Cache-first for static assets.
   e.respondWith(
     caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-      if (res && res.status === 200) {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
-      }
+      if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => cached))
   );

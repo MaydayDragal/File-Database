@@ -9,7 +9,12 @@ import zlib
 import os
 import math
 
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "icons")
+# The same badge brands both the platform shell (root icons/) and the
+# File Vault app (vault/icons/).
+OUT_DIRS = [
+    os.path.join(os.path.dirname(__file__), "..", "icons"),
+    os.path.join(os.path.dirname(__file__), "..", "vault", "icons"),
+]
 
 # Brand colors (matches styles.css)
 BG_TOP = (79, 70, 229)      # indigo-600
@@ -147,7 +152,8 @@ def write_png(path, size, rgba):
 
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    for d in OUT_DIRS:
+        os.makedirs(d, exist_ok=True)
     specs = [
         ("icon-192.png", 192, False),
         ("icon-512.png", 512, False),
@@ -157,7 +163,8 @@ def main():
     ]
     for name, size, maskable in specs:
         px = draw_icon(size, maskable)
-        write_png(os.path.join(OUT_DIR, name), size, px)
+        for d in OUT_DIRS:
+            write_png(os.path.join(d, name), size, px)
         print("wrote", name)
 
 

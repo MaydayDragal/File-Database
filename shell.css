@@ -1,0 +1,178 @@
+/* File Database — platform shell. Same design tokens as the apps so the
+   whole platform reads as one product. */
+:root {
+  --brand: #5b8cff;
+  --brand-strong: #4a7bf0;
+  --brand-2: #47d18f;
+  /* Light theme */
+  --bg: #f4f6fb;
+  --bg-elev: #ffffff;
+  --bg-sunken: #eef1f8;
+  --text: #1b2333;
+  --text-dim: #647089;
+  --border: #e2e6ef;
+  --border-strong: #ccd2e0;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .08);
+  --danger: #dc2626;
+  --radius: 12px;
+  --shellbar-h: 50px;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1420;
+  --bg-elev: #171d2b;
+  --bg-sunken: #1e2637;
+  --text: #e6ebf5;
+  --text-dim: #98a3b8;
+  --border: #2a3346;
+  --border-strong: #3a465e;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  --danger: #ff6b6b;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420;
+    --bg-elev: #171d2b;
+    --bg-sunken: #1e2637;
+    --text: #e6ebf5;
+    --text-dim: #98a3b8;
+    --border: #2a3346;
+    --border-strong: #3a465e;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --danger: #ff6b6b;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  display: flex;
+  flex-direction: column;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ---------- top bar ---------- */
+.shellbar {
+  height: var(--shellbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
+}
+.shellbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  padding-right: 4px;
+}
+.shellbar__brand img { border-radius: 7px; display: block; }
+.shellbar__tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+.shellbar__tabs::-webkit-scrollbar { display: none; }
+.shelltab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent; /* keeps label vertically centered */
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.shelltab:hover { color: var(--text); background: var(--bg-sunken); }
+.shelltab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--brand);
+}
+.shelltab__icon { font-size: 15px; }
+.tab-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 10px;
+  text-align: center;
+}
+.tab-count:empty { display: none; }
+.shellbar__actions { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text-dim);
+}
+.icon-btn:hover { color: var(--text); background: var(--bg-sunken); }
+.btn-install {
+  background: var(--brand);
+  color: #fff;
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-install:hover { background: var(--brand-strong); }
+
+/* ---------- stage / app frames ---------- */
+.stage { flex: 1; min-height: 0; display: flex; }
+.app-panel { flex: 1; min-width: 0; display: flex; }
+.app-panel[hidden] { display: none; }
+.app-frame { flex: 1; width: 100%; height: 100%; border: 0; background: var(--bg); }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%; bottom: 22px;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 9px 16px;
+  font-size: 13.5px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 60;
+  max-width: min(92vw, 480px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 640px) {
+  .shellbar { padding: 0 8px; gap: 6px; }
+  .shellbar__name { display: none; }
+  .shelltab { padding: 0 10px; }
+  .shelltab__label { display: none; }
+  .shelltab__icon { font-size: 18px; }
+}
