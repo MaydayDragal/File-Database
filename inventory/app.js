@@ -43,7 +43,7 @@
   function setMeta(k, v) { var t = db.transaction(META, "readwrite"); t.objectStore(META).put({ k: k, v: v }); return txDone(t); }
 
   // ---------- seed ----------
-  var SEED_VERSION = 3;   // bump to push a refreshed bundled list (edits/stars preserved)
+  var SEED_VERSION = 4;   // bump to push a refreshed bundled list (edits/stars preserved)
   var EDIT_FIELDS = ["location", "qty", "note", "comment"];
   function normalize(t, i) {
     return {
