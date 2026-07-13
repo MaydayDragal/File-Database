@@ -103,6 +103,7 @@
             createdAt: v.createdAt,
             updatedAt: v.updatedAt,
             thumb: v.thumb || null, // small Blob or null
+            srcMtime: v.srcMtime,   // folder-sync source mtime (if imported by sync)
           });
           cur.continue();
         };

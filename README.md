@@ -89,6 +89,7 @@ The Files app (File Vault) is the heart of the platform:
 - **Organize like a database** — put files into **Collections**, add any number of **Tags**, write **Notes**, and **★ Star** favorites.
 - **Fast find** — live search across names, tags, notes and collections; filter by type, collection, tag; sort by date / name / size; grid or list view.
 - **Backup & restore** — export the whole vault to one `.fvault` file and import it on another computer or browser profile.
+- **Folder sync (auto‑import)** — link a folder once (⋮ → **Sync a folder**, Edge/Chrome) and File Vault imports any new or changed files from it, filed under a collection named after the folder. Turn on **Auto‑sync** to re‑scan every 5 minutes while the app is open (and whenever you switch back to it) — drop a file in the folder and it appears in the vault on its own. Files are matched by name + size + modified‑time so nothing imports twice. The **LI Documents** app has the same thing for PDFs (⋮ → **Sync folder** / **Auto‑sync**). *Tip: point it at a dedicated folder such as `Downloads\LI‑inbox` rather than all of Downloads.* Background scanning only runs while the app is open — browsers don't allow a web app to watch a folder while it's fully closed.
 - **Installable** — click **Install app** to add it to your Start menu / dock and launch it in its own window.
 - **Offline‑first** and **keyboard‑friendly** (`/` search, `a` add, `g`/`l` grid/list, `Esc` close).
 - **Light & dark themes** — the ◐ toggle in the platform top bar cycles System → Light → Dark across all four apps (your choice is remembered and applied before the page paints, so no flash).
@@ -179,6 +180,7 @@ tools/e2e.mjs         End-to-end test — File Vault, standalone at /vault/
 tools/e2e-merge.mjs   Integration test — cross-app handoffs through the shell
 tools/e2e-inventory.mjs  Tool Inventory test — standalone + embedded
 tools/e2e-shell.mjs   Platform shell test — tabs, theme, deep links, badges
+tools/e2e-sync.mjs    Folder-sync test — scan, import, dedup, auto-sync
 ```
 
 ### Development

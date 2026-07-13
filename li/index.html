@@ -67,7 +67,7 @@
   .btn-danger { background:transparent; color:var(--danger); border:1px solid var(--border); }
   .btn-danger:hover { border-color:var(--danger); }
   .btn-sm { padding:6px 11px; font-size:12.5px; }
-  #autosaveBtn.on, #syncBtn.on { color:var(--accent-2); border-color:var(--accent-2); }
+  #autosaveBtn.on, #syncBtn.on, #autoSyncBtn.on { color:var(--accent-2); border-color:var(--accent-2); }
   #autosaveBtn.warn { color:var(--star); border-color:var(--star); }
   .inst-h { font-size:13px; margin:16px 0 6px; }
   .cmdrow { display:flex; gap:6px; margin:6px 0; }
@@ -214,6 +214,7 @@
       <div class="menu" id="appMenu" hidden role="menu">
         <div class="menu-label">Files</div>
         <button class="menu-item" id="syncBtn" title="Link a folder — one click imports any new or changed PDFs from it">📂 Sync folder</button>
+        <button class="menu-item" id="autoSyncBtn" title="Automatically re-scan the linked folder every few minutes (while the app is open) and import new PDFs">⏱ Auto-sync: off</button>
         <div class="menu-sep"></div>
         <div class="menu-label">Save &amp; backup</div>
         <button class="menu-item" id="autosaveBtn" title="Automatically save the database to a file you choose (e.g. on a flash drive) after every change">🔄 Auto-save: off</button>
@@ -1957,7 +1958,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function pickSyncDir() {
     if (!window.showDirectoryPicker) { toast("Folder sync needs Microsoft Edge or Chrome."); return Promise.resolve(null); }
     return window.showDirectoryPicker({ id: "li-sync", mode: "read" }).then(function (h) {
-      syncDir = h; putSetting("syncDir", h).catch(function () {}); syncLabel(); return h;
+      syncDir = h; putSetting("syncDir", h).catch(function () {}); syncLabel(); autoSyncLabel(); return h;
     }, function () { return null; });
   }
   // Recursively gather .pdf file handles (bounded depth so a huge tree can't
@@ -1979,20 +1980,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     return step();
   }
-  function ensureSyncPerm() {
+  function ensureSyncPerm(silent) {
     if (!syncDir) return Promise.resolve(false);
     var q = syncDir.queryPermission ? syncDir.queryPermission({ mode: "read" }) : Promise.resolve("granted");
     return q.then(function (p) {
       if (p === "granted") return true;
+      if (silent) return false; // never prompt without a user gesture (auto path)
       return (syncDir.requestPermission ? syncDir.requestPermission({ mode: "read" }) : Promise.resolve("denied")).then(function (p2) { return p2 === "granted"; });
     });
   }
-  function runSync() {
-    if (importing) { toast("An import is already running — wait for it to finish."); return; }
-    if (!syncDir) { pickSyncDir().then(function (h) { if (h) runSync(); }); return; }
-    ensureSyncPerm().then(function (ok) {
-      if (!ok) { toast("Couldn't access that folder — link it again."); syncDir = null; syncLabel(); return; }
-      toast("Scanning “" + (syncDir.name || "folder") + "”…");
+  // quiet=true is the auto-sync path: it never prompts, and stays silent
+  // unless it actually imports something (so a 5-minute poll isn't noisy).
+  function runSync(quiet) {
+    if (importing) { if (!quiet) toast("An import is already running — wait for it to finish."); return; }
+    if (!syncDir) { if (quiet) return; pickSyncDir().then(function (h) { if (h) runSync(); }); return; }
+    ensureSyncPerm(quiet).then(function (ok) {
+      if (!ok) { if (!quiet) { toast("Couldn't access that folder — link it again."); syncDir = null; syncLabel(); } return; }
+      if (!quiet) toast("Scanning “" + (syncDir.name || "folder") + "”…");
       return collectPdfs(syncDir, []).then(function (handles) {
         // A folder file counts as "new or changed" unless a stored doc has the
         // same name, size AND modified-time. Docs imported before mtime was
@@ -2001,7 +2005,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         var files = [], i = 0;
         (function next() {
           if (i >= handles.length) {
-            if (!files.length) { toast("“" + (syncDir.name || "folder") + "” is up to date — nothing new."); return; }
+            if (!files.length) { if (!quiet) toast("“" + (syncDir.name || "folder") + "” is up to date — nothing new."); return; }
             importFiles(files); // reuses dedupe + edit-preservation
             return;
           }
@@ -2012,13 +2016,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           }, function () {}).then(function () { i++; next(); });
         })();
       });
-    }).catch(function () { toast("Folder sync failed."); });
+    }).catch(function () { if (!quiet) toast("Folder sync failed."); });
   }
   $("syncBtn").addEventListener("click", function (e) {
     if (e.shiftKey) { pickSyncDir().then(function (h) { if (h) runSync(); }); return; }
     runSync();
   });
-  function resumeSyncDir() { return getSetting("syncDir").then(function (h) { if (h) syncDir = h; syncLabel(); }, function () { syncLabel(); }); }
+
+  // ---- Auto-sync: re-scan the linked folder on a timer while the app is open ----
+  var autoSyncOn = false, autoSyncTimer = null;
+  var AUTO_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  function autoSyncLabel() {
+    var b = $("autoSyncBtn"); if (!b) return;
+    b.textContent = "⏱ Auto-sync: " + (autoSyncOn ? "on" : "off");
+    b.classList.toggle("on", autoSyncOn);
+  }
+  function startAutoSync() {
+    stopAutoSync();
+    if (!autoSyncOn || !syncDir) return;
+    autoSyncTimer = setInterval(function () { runSync(true); }, AUTO_SYNC_INTERVAL);
+    setTimeout(function () { runSync(true); }, 1500); // prompt-free catch-up
+  }
+  function stopAutoSync() { if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; } }
+  function toggleAutoSync() {
+    if (!syncDir) { pickSyncDir().then(function (h) { if (h) { toggleAutoSync(); } }); return; }
+    autoSyncOn = !autoSyncOn;
+    putSetting("autoSyncOn", autoSyncOn).catch(function () {});
+    autoSyncLabel();
+    if (autoSyncOn) { startAutoSync(); toast("Auto-sync on — “" + (syncDir.name || "folder") + "” is checked every 5 minutes while the app is open."); }
+    else { stopAutoSync(); toast("Auto-sync off."); }
+  }
+  $("autoSyncBtn").addEventListener("click", toggleAutoSync);
+  window.addEventListener("focus", function () { if (autoSyncOn && syncDir) runSync(true); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && autoSyncOn && syncDir) runSync(true); });
+
+  function resumeSyncDir() {
+    return getSetting("syncDir").then(function (h) { if (h) syncDir = h; }, function () {})
+      .then(function () { return getSetting("autoSyncOn"); })
+      .then(function (on) { autoSyncOn = !!on; }, function () {})
+      .then(function () { syncLabel(); autoSyncLabel(); if (autoSyncOn && syncDir) startAutoSync(); });
+  }
 
   // ---------- boot ----------
   // Follow the platform shell's theme (system | light | dark). The shell persists the choice.

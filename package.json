@@ -7,11 +7,12 @@
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs",
+    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs && node tools/e2e-sync.mjs",
     "test:vault": "node tools/e2e.mjs",
     "test:merge": "node tools/e2e-merge.mjs",
     "test:inventory": "node tools/e2e-inventory.mjs",
-    "test:shell": "node tools/e2e-shell.mjs"
+    "test:shell": "node tools/e2e-shell.mjs",
+    "test:sync": "node tools/e2e-sync.mjs"
   },
   "repository": {
     "type": "git",

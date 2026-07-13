@@ -1013,8 +1013,148 @@
     if (action === "export") exportVault();
     else if (action === "import") $("#import-input").click();
     else if (action === "new-collection") newCollection();
+    else if (action === "sync-folder") runFolderSync(false);
+    else if (action === "auto-sync") toggleAutoSync();
     else if (action === "persist") requestPersistence();
     else if (action === "about") { updateStorage(); $("#about").hidden = false; }
+  }
+
+  // ---------- Folder sync (import new/changed files from a linked folder) ----------
+  // Link a folder once; the handle is stored (and restored on every launch).
+  // "Sync a folder" scans it and imports anything new or changed; "Auto-sync"
+  // repeats that scan on a timer (and on focus) while the app is open. Files
+  // are matched by name + size + modified-time so nothing imports twice.
+  let syncDir = null, syncAuto = false, syncTimer = null, syncing = false;
+  const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+  function syncMenuLabels() {
+    const s = $("#sync-action"), a = $("#autosync-action");
+    if (s) s.textContent = syncDir ? "Scan “" + (syncDir.name || "folder") + "” now" : "Sync a folder…";
+    if (a) a.textContent = "Auto-sync: " + (syncAuto ? "on" : "off");
+  }
+
+  async function pickSyncFolder() {
+    if (!window.showDirectoryPicker) { toast("Folder sync needs Microsoft Edge or Chrome."); return null; }
+    let h;
+    try { h = await window.showDirectoryPicker({ id: "vault-sync", mode: "read" }); }
+    catch (e) { return null; } // user cancelled the picker
+    syncDir = h;
+    try { await DB.setMeta("syncDir", h); } catch (e) {}
+    syncMenuLabels();
+    return h;
+  }
+
+  async function ensureSyncPerm(silent) {
+    if (!syncDir) return false;
+    const q = syncDir.queryPermission ? await syncDir.queryPermission({ mode: "read" }) : "granted";
+    if (q === "granted") return true;
+    if (silent) return false; // never prompt without a user gesture (auto path)
+    const p = syncDir.requestPermission ? await syncDir.requestPermission({ mode: "read" }) : "denied";
+    return p === "granted";
+  }
+
+  // Recursively gather file handles, bounded so a huge tree can't hang.
+  async function collectFolderFiles(dir, out, depth) {
+    out = out || []; depth = depth || 0;
+    if (depth > 8 || out.length > 20000) return out;
+    try {
+      for await (const entry of dir.values()) {
+        if (out.length > 20000) break;
+        if (entry.kind === "file") out.push(entry);
+        else if (entry.kind === "directory") { try { await collectFolderFiles(entry, out, depth + 1); } catch (e) {} }
+      }
+    } catch (e) {} // unreadable folder — keep what we have
+    return out;
+  }
+
+  async function runFolderSync(quiet) {
+    if (syncing) { if (!quiet) toast("A folder sync is already running…"); return; }
+    if (!syncDir) { const h = await pickSyncFolder(); if (!h) return; }
+    const ok = await ensureSyncPerm(quiet);
+    if (!ok) { if (!quiet) toast("Couldn't read that folder — link it again."); return; }
+    syncing = true;
+    try {
+      if (!quiet) toast("Scanning “" + (syncDir.name || "folder") + "”…");
+      const handles = await collectFolderFiles(syncDir, []);
+      // Build a name -> [{size, mtime}] index of what's already in the vault.
+      // Read straight from the DB (not the in-memory list) so a second open
+      // instance's imports are seen and files aren't imported twice.
+      let existing = items;
+      try { existing = await DB.listMeta(); } catch (e) {}
+      const known = {};
+      existing.forEach((it) => { (known[it.name] = known[it.name] || []).push({ size: it.size, mtime: it.srcMtime }); });
+      const fresh = [];
+      for (const fh of handles) {
+        let f; try { f = await fh.getFile(); } catch (e) { continue; }
+        const cand = known[f.name] || [];
+        const dup = cand.some((k) => k.size === f.size && (k.mtime == null || k.mtime === (f.lastModified || 0)));
+        if (!dup) fresh.push(f);
+      }
+      if (!fresh.length) { if (!quiet) toast("“" + (syncDir.name || "folder") + "” is up to date — nothing new."); return; }
+      await syncImport(fresh, syncDir.name || "Synced");
+    } catch (e) {
+      console.error(e);
+      if (!quiet) toast("Folder sync failed.");
+    } finally { syncing = false; }
+  }
+
+  // Import synced files into a collection named after the folder, tracking the
+  // source modified-time so a later scan won't re-import an unchanged file.
+  async function syncImport(files, collection) {
+    let added = 0;
+    for (const file of files) {
+      const kind = classify(file);
+      let thumb = null; try { thumb = await makeThumb(file, kind); } catch (e) {}
+      const now = Date.now();
+      const record = {
+        id: uid(),
+        name: file.name || "Untitled",
+        type: file.type || "application/octet-stream",
+        kind, size: file.size, blob: file, thumb,
+        tags: [], collection, note: "", starred: false,
+        createdAt: now, updatedAt: now,
+        srcMtime: file.lastModified || 0, srcSync: true,
+      };
+      record.searchText = DB.buildSearchText(record);
+      try { await DB.put(record); items.push(stripBlob(record)); added++; }
+      catch (e) { console.error(e); }
+    }
+    if (added) {
+      if (!extraCollections.includes(collection)) { extraCollections.push(collection); DB.setMeta("collections", extraCollections); }
+      render();
+      updateStorage();
+      toast("Synced " + added + " new file" + (added > 1 ? "s" : "") + " into “" + collection + "”.");
+    }
+  }
+
+  function startAutoSync() {
+    stopAutoSync();
+    if (!syncAuto || !syncDir) return;
+    syncTimer = setInterval(() => runFolderSync(true), SYNC_INTERVAL);
+    // A prompt-free catch-up shortly after enabling / launching.
+    setTimeout(() => runFolderSync(true), 1500);
+  }
+  function stopAutoSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } }
+
+  async function toggleAutoSync() {
+    if (!syncDir) { const h = await pickSyncFolder(); if (!h) return; }
+    syncAuto = !syncAuto;
+    try { await DB.setMeta("syncAuto", syncAuto); } catch (e) {}
+    syncMenuLabels();
+    if (syncAuto) { startAutoSync(); toast("Auto-sync on — “" + (syncDir.name || "folder") + "” is checked every 5 minutes while the app is open."); }
+    else { stopAutoSync(); toast("Auto-sync off."); }
+  }
+
+  async function resumeSync() {
+    try {
+      syncDir = (await DB.getMeta("syncDir", null)) || null;
+      syncAuto = !!(await DB.getMeta("syncAuto", false));
+    } catch (e) { syncDir = null; syncAuto = false; }
+    syncMenuLabels();
+    if (syncAuto && syncDir) startAutoSync();
+    // Re-scan when the app regains attention (covers files added while away).
+    window.addEventListener("focus", () => { if (syncAuto && syncDir) runFolderSync(true); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && syncAuto && syncDir) runFolderSync(true); });
   }
 
   function newCollection() {
@@ -1100,6 +1240,9 @@
         applyTheme();
       }
     });
+
+    // Restore a linked sync folder + resume auto-sync if it was on.
+    resumeSync();
 
     // URL actions (from PWA shortcuts)
     const params = new URLSearchParams(location.search);
