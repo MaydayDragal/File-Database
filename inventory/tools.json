@@ -6583,12 +6583,13 @@
    "comment": "",
    "offered": true,
    "photo": "124589043300",
-   "wis": "WS3500P0021B",
-   "version": "01.06",
+   "wis": "WS2800P0062B",
+   "version": "01.16",
    "catalogName": "Puller",
-   "catalogDesc": "Purpose: Puller for pulling drive flange at rear axle differential. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 586 04 33 00 Puller.",
+   "catalogDesc": "Purpose: Puller for pulling off output flanges on transfer case. Procurement information: Sale of this workshop equipment has been discontinued. Replaced by W 124 586 04 33 00 Puller.",
    "validities": [
-    "T (PKW_EN): 117, 118, 156, 176, 177, 204, 206, 212, 246, 247, 254"
+    "T (Transporter_EN): 907",
+    "T (PKW_EN): 167, 20308, 20309, 20328, 20329, 204, 205, 207, 210081, 210082, 210281, 210282, 21108, 21109, 21128, 21129, 212, 213, 216, 217, 218, 219, 220, 221, 222, 230, 253"
    ]
   },
   {
@@ -9151,13 +9152,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "722589031500",
+   "wis": "WS2900P0001B",
+   "version": "01.02",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for removing sleeve from brake pedal. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221"
+   ]
   },
   {
    "no": "406",
@@ -10730,13 +10733,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589003100",
+   "wis": "WS3200P0085B",
+   "version": "01.02",
+   "catalogName": "Set of emergency buffers",
+   "catalogDesc": "Purpose: For repair work on the air suspension on the front axle. Note: Set contains 2 buffers for the front axle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221"
+   ]
   },
   {
    "no": "479",
@@ -10751,13 +10756,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589010900",
+   "wis": "WS3200P0089B",
+   "version": "01.02",
+   "catalogName": "Insertion open end wrench",
+   "catalogDesc": "Intended use: Splined open end wrench 27 mm for tightening torque of pressure reservoir on ABC valve block.",
+   "validities": [
+    "T (PKW_EN): 216, 221, 222, 230, 231"
+   ]
   },
   {
    "no": "480",
@@ -11404,13 +11411,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "220589006100",
+   "wis": "WS3200P0072B",
+   "version": "01.02",
+   "catalogName": "Removal, installation",
+   "catalogDesc": "Purpose: Removal and installation tool for assembly/disassembly of the snap ring on the cap of the head bearing, front axle air spring struts. Technical note: Only affects vehicles with air suspension (AIRMATIC). Procurement information: Sale of this workshop equipment has been discontinued. Workshop equipment is no longer available. If possible, please fabricate or procure the workshop equipment yourself or repair existing workshop equipment.",
+   "validities": [
+    "T (PKW_EN): 220"
+   ]
   },
   {
    "no": "508",
@@ -11498,14 +11507,13 @@
    "comment": "Subbed from 220 589 00 09 00",
    "offered": true,
    "photo": "652589003322",
-   "wis": "WS3200P305702C",
-   "version": "01.18",
+   "wis": "WS3500P338822C",
+   "version": "01.32",
    "catalogName": "Hollow cylinder",
-   "catalogDesc": "Purpose: Hollow cylinder for pressing diverse bearings in and out. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "catalogDesc": "Purpose: Hollow cylinder for inserting and removing elastomer bearings from various components. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
    "validities": [
-    "T (Cross-country vehicles): 461, 463, 465",
-    "T (Transporter_EN): 907",
-    "T (PKW_EN): 117, 118, 156, 164, 166, 167, 171, 176, 177, 203, 204, 207, 209, 212, 216, 218, 221, 242, 243, 246, 247, 2510, 2511, 292"
+    "T (PKW_EN): 164, 166, 167, 174, 178, 204, 205, 206, 207, 212, 213, 214, 217, 218, 222, 223, 231, 236, 238, 243, 244, 248, 251, 253, 254, 257, 290, 292, 293, 294, 295, 296, 297, 520, 540",
+    "T (Transporter_EN): 449"
    ]
   },
   {
@@ -11743,13 +11751,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "730589004300",
+   "wis": "WS3300P3222A",
+   "version": "01.01",
+   "catalogName": "Removal and installation tool",
+   "catalogDesc": "Purpose: Press-in/press-out tool for wheel hub and wheel bearing in wheel carrier. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "523",
@@ -11899,13 +11909,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "222589003100",
+   "wis": "WS3200P0006B",
+   "version": "01.01",
+   "catalogName": "Set of emergency buffers",
+   "catalogDesc": "Intended use: Set of emergency-operation buffers: For repair work on front-axle air suspension. Note: Set contains 2 buffers for the front axle.",
+   "validities": [
+    "T (PKW_EN): 217, 222"
+   ]
   },
   {
    "no": "530",
@@ -12152,13 +12164,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589013400",
+   "wis": "WS3300P0176B",
+   "version": "01.02",
+   "catalogName": "Thrust piece set",
+   "catalogDesc": "Purpose: Set of thrust pieces for pressing the bearing in and out of the cross strut. Technical Note: Only to be used in combination with press-in/press-out tool W 220 589 06 43 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221"
+   ]
   },
   {
    "no": "541",
@@ -12653,13 +12667,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589003300",
+   "wis": "WS3300P0121B",
+   "version": "01.04",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Puller for spring link. Technical Note: Only to be used in combination with thrust piece W 140 589 00 63 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221, 230"
+   ]
   },
   {
    "no": "563",
@@ -13448,13 +13464,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589001500",
+   "wis": "WS3500P0247B",
+   "version": "01.03",
+   "catalogName": "Drift",
+   "catalogDesc": "Intended use: Drift for fitting front radial shaft sealing ring. Note: For rear axle housing with ring gear ∅ 240 mm.",
+   "validities": [
+    "T (PKW_EN): 216, 217, 221, 222"
+   ]
   },
   {
    "no": "598",
@@ -13492,13 +13510,16 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589006200",
+   "wis": "WS3500P0250B",
+   "version": "01.03",
+   "catalogName": "Set of spacer bolts",
+   "catalogDesc": "Intended use: Set of spacer bolts for partial lowering of rear axle carrier when removing/installing rear axle gear. Note: For rear axle housing with ring gear ∅ 240 mm.",
+   "validities": [
+    "T (smart): 4513, 4513, 4514, 4514",
+    "T (PKW_EN): 221, 231"
+   ]
   },
   {
    "no": "600",
@@ -13513,13 +13534,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589011500",
+   "wis": "WS3500P0248B",
+   "version": "01.03",
+   "catalogName": "Drift",
+   "catalogDesc": "Intended use: Drift for fitting side radial shaft sealing ring. Note: For rear axle housing with ring gear ∅ 240 mm.",
+   "validities": [
+    "T (PKW_EN): 216, 217, 221, 222"
+   ]
   },
   {
    "no": "601",
@@ -13580,13 +13603,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589021500",
+   "wis": "WS3500P0249B",
+   "version": "01.03",
+   "catalogName": "Drift",
+   "catalogDesc": "Intended use: Drift for fitting protective ring on side shaft. Note: For rear axle housing with ring gear ∅ 240 mm.",
+   "validities": [
+    "T (PKW_EN): 216, 221, 222"
+   ]
   },
   {
    "no": "604",
@@ -13601,13 +13626,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589023300",
+   "wis": "WS3300P0180B",
+   "version": "01.02",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Puller for prying the cross strut and tension strut off the steering knuckle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221"
+   ]
   },
   {
    "no": "605",
@@ -15197,13 +15224,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589006200",
+   "wis": "WS3500P0250B",
+   "version": "01.03",
+   "catalogName": "Set of spacer bolts",
+   "catalogDesc": "Intended use: Set of spacer bolts for partial lowering of rear axle carrier when removing/installing rear axle gear. Note: For rear axle housing with ring gear ∅ 240 mm.",
+   "validities": [
+    "T (smart): 4513, 4513, 4514, 4514",
+    "T (PKW_EN): 221, 231"
+   ]
   },
   {
    "no": "677",
@@ -15283,13 +15313,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "222589024300",
+   "wis": "WS3500P0014B",
+   "version": "01.01",
+   "catalogName": "Adapter",
+   "catalogDesc": "Intended use: To install the rear rubber mounts of the rear axle suspension. Note: To be used in combination with extraction and insertion tool 221 589 00 43 00, hand pump 652 589 00 33 21, hydraulic hose 652 589 00 33 23, hollow cylinder 652 589 00 33 22 and retaining belt 001 589 01 63 00.",
+   "validities": [
+    "T (PKW_EN): 217, 222"
+   ]
   },
   {
    "no": "681",
@@ -15575,13 +15607,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589033100",
+   "wis": "WS4000P0048B",
+   "version": "01.04",
+   "catalogName": "Spacer pin",
+   "catalogDesc": "Purpose: Insertable spacer pin to secure W 124 589 01 31 00 quick clamping device on RA (set = 10 pieces). Note: For AMG multi-spoke wheel. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230, 290"
+   ]
   },
   {
    "no": "694",
@@ -16813,13 +16847,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "222589006300",
+   "wis": "WS4200P3092A",
+   "version": "02.00",
+   "catalogName": "Adapter cable, 38-pin",
+   "catalogDesc": "Purpose: Adapter cable, 38-pin for diagnosis of ESP®. Note: In combination with 000 589 00 21 00 test box.",
+   "validities": [
+    "T (PKW_EN): 222",
+    "T (Transporter_EN): 415, 447, 448"
+   ]
   },
   {
    "no": "748",
@@ -18153,13 +18190,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589009000",
+   "wis": "WS4700P0015B",
+   "version": "01.01",
+   "catalogName": "Drain hose",
+   "catalogDesc": "Purpose: Drain hose for draining fuel tank. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "806",
@@ -18283,13 +18322,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "220589009939",
+   "wis": "WS5400P005039B",
+   "version": "01.03",
+   "catalogName": "Adapter cable",
+   "catalogDesc": "Purpose: 8-pin adapter cable for voltage and resistance measurement as well as checking signals from front end CAN bus. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 216, 221"
+   ]
   },
   {
    "no": "812",
@@ -19504,13 +19545,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589086300",
+   "wis": "WS7200P0023B",
+   "version": "01.02",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for supporting rear-end door and trunk lid. Technical Note: Use in combination with W 170 589 04 63 00 support. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "866",
@@ -19636,13 +19679,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589036300",
+   "wis": "WS7700P0027B",
+   "version": "01.01",
+   "catalogName": "Strut",
+   "catalogDesc": "Purpose: Strut for securing both crankshaft bearings during installation/removal of Vario roof. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "872",
@@ -19680,13 +19725,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589076300",
+   "wis": "WS7700P0024B",
+   "version": "01.01",
+   "catalogName": "Test adapter",
+   "catalogDesc": "Purpose: Test adapter for pressure test at the Vario roof. Technical Note: In combination with W 126 589 14 21 00 test kit. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "874",
@@ -19833,13 +19880,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589066300",
+   "wis": "WS7700P0023K",
+   "version": "01.03",
+   "catalogName": "Support",
+   "catalogDesc": "Purpose: Support for securing the trunk lid in the loading position. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230, 231"
+   ]
   },
   {
    "no": "881",
@@ -19947,13 +19996,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "231589032300",
+   "wis": "WS7700P0061B",
+   "version": "01.01",
+   "catalogName": "Template",
+   "catalogDesc": "Purpose: Template for checking the roof contour (E line). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 231"
+   ]
   },
   {
    "no": "886",
@@ -20902,13 +20953,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589022100",
+   "wis": "WS5400P0012B",
+   "version": "01.02",
+   "catalogName": "calibration device",
+   "catalogDesc": "Use: For calibration of Night View 3 camera.",
+   "validities": [
+    "T (PKW_EN): 217, 222, 231"
+   ]
   },
   {
    "no": "928",
@@ -20946,13 +20999,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "164589033300",
+   "wis": "WS8300P0059B",
+   "version": "01.01",
+   "catalogName": "Parting-off tool set",
+   "catalogDesc": "Purpose: Separation of high-pressure/low pressure refrigerant lines with the coupling dimensions 3/8\" and 3/4\". Note: Separating tools 5/8\" and 1/2\" have part number 452 589 00 33 00.",
+   "validities": [
+    "T (PKW_EN): 164822, 164828, 164886, 251"
+   ]
   },
   {
    "no": "930",
@@ -21583,13 +21638,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "164589026300",
+   "wis": "WS9100P0041B",
+   "version": "01.03",
+   "catalogName": "96-pin adapter cable",
+   "catalogDesc": "Purpose: Adapter cable, 96-pin, for diagnosing airbags (driver's airbag, front passenger's airbag, side airbag and window airbag) and the seat belt tensioner control unit. Technical Note: In combination with W 129 589 00 21 00 Socket box. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 1641, 1648, 216, 221, 2510, 2511"
+   ]
   },
   {
    "no": "958",
@@ -21698,13 +21755,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589002100",
+   "wis": "WS9100P0030B",
+   "version": "01.01",
+   "catalogName": "Plastic wedge",
+   "catalogDesc": "Purpose: Plastic wedge for making adjustments on roll bar. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "963",
@@ -21719,13 +21778,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589006100",
+   "wis": "WS9100P0028B",
+   "version": "01.01",
+   "catalogName": "Installation tool",
+   "catalogDesc": "Purpose: Installation tool for installation of hydraulic cylinder locking pawl to roll bar support. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "964",
@@ -21740,13 +21801,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "230589012100",
+   "wis": "WS9100P0029B",
+   "version": "01.01",
+   "catalogName": "Assembly aid",
+   "catalogDesc": "Purpose: Assembly aid for fastening the pre-tightened roll bar support on the left. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 230"
+   ]
   },
   {
    "no": "965",
@@ -23041,16 +23104,12 @@
    "comment": "",
    "offered": true,
    "photo": "210589011600",
-   "wis": "WS2200P0006B",
-   "version": "01.17",
+   "wis": "WS3300P0017B",
+   "version": "01.04",
    "catalogName": "Four-point drive",
-   "catalogDesc": "Purpose: Four-point drive to remove the chain tensioner as well as generally usable four-point drive 1/2\" for CN 14 x 18 mm",
+   "catalogDesc": "Intended use: Four-point drive for tightening strut rod and spring control arm at steering knuckle",
    "validities": [
-    "M (smart): 132",
-    "M (Cross-country vehicles, PKW_EN, Transporter_EN): 642",
-    "M (Cross-country vehicles): 612965, 612966",
-    "M (PKW_EN, Transporter_EN): 646",
-    "M (PKW_EN): 111, 112, 113, 137, 157, 272, 273, 274, 275, 276, 277, 278, 279, 611, 612, 613, 628, 629, 647, 648, 651"
+    "T (PKW_EN): 205, 213, 217, 222, 253"
    ]
   },
   {
@@ -23448,13 +23507,15 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "210589024000",
+   "wis": "WS3300P0063B",
+   "version": "01.05",
+   "catalogName": "Retainer wrench",
+   "catalogDesc": "Purpose: Retainer wrench for counterholding at joint flange of front axle drive. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 20308, 20309, 20328, 210081, 210082, 210281, 210282, 21108, 21109, 21128, 21129, 220"
+   ]
   },
   {
    "no": "1041",
@@ -23576,13 +23637,17 @@
    "note": "R",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "216589003400",
+   "wis": "WS3200P0088B",
+   "version": "01.08",
+   "catalogName": "Thrust piece",
+   "catalogDesc": "Purpose: Thrust piece M16x1.5 for guiding the thrust spindle at the puller and for protection of the hexagon socket on the suspension strut joint. Note: In combination with puller 123 589 08 33 00 on MODEL 216, 221 In combination with puller 601 589 04 33 00 on MODEL 222 In combination with puller 221 589 00 33 00 on model 447 In combination with puller 601 589 04 33 00 on model 461 Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (Cross-country vehicles): 460, 461, 463, 464",
+    "T (Transporter_EN): alle",
+    "T (PKW_EN): 216, 221, 222"
+   ]
   },
   {
    "no": "1047",
@@ -25323,13 +25388,15 @@
    "note": "",
    "note2": "",
    "comment": "Used with engine hoist 240 589 00 61 00. Note Only use with 240 589 00 32 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "240589023100",
+   "wis": "WS0100P0010B",
+   "version": "01.01",
+   "catalogName": "Set of adapters",
+   "catalogDesc": "Adapter, 6 pieces for mounting of the engine hoist 240 589 00 61 00 on the spring tower, and an adapter for support on the longitudinal member for exchange/removal, for example: engine mount, oil pan, integral carrier. Note: Only use in combination with: adaptation plates 240 589 00 32 00 and engine hoist 240 589 00 61 00.",
+   "validities": [
+    "T (PKW_EN): 231"
+   ]
   },
   {
    "no": "1124",
@@ -25660,13 +25727,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "221589033300",
+   "wis": "WS3300P0182B",
+   "version": "01.02",
+   "catalogName": "Puller fork",
+   "catalogDesc": "Purpose: Puller fork for prying off cross strut and tension strut from steering knuckle. Technical Note: Use only in combination with puller W 221 589 02 33 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 221"
+   ]
   },
   {
    "no": "1139",
@@ -26112,13 +26181,12 @@
    "comment": "",
    "offered": true,
    "photo": "168589032100",
-   "wis": "WS0900P0024C",
-   "version": "01.03",
-   "catalogName": "Parallel gauge",
-   "catalogDesc": "Purpose: Parallel gauge 400 x 40 x 20 mm for alignment of both ATLs together on the engine.",
+   "wis": "WS3500P0028C",
+   "version": "01.02",
+   "catalogName": "Parallel support",
+   "catalogDesc": "Intended use: Support for working on hydraulic workshop press.",
    "validities": [
-    "M (Cross-country vehicles, PKW_EN): 176",
-    "M (PKW_EN): 177, 178"
+    "T (PKW_EN): 166, 204, 212, 216, 218, 221, 292"
    ]
   },
   {
@@ -26994,13 +27062,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "177589041500",
+   "wis": "WS4200P0030B",
+   "version": "01.07",
+   "catalogName": "Guide pin",
+   "catalogDesc": "Purpose: Guide pin for guiding brake calipers during lining change on front axle on AMG vehicle model designation and AMG model series. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (Cross-country vehicles): 463",
+    "T (PKW_EN): 118351, 118353, 118354, 118651, 118653, 118654, 177051, 177053, 177054, 177151, 177951, 190377, 190378, 190379, 190380, 190477, 190478, 190480, 205086, 205087, 205286, 205287, 205386, 205387, 205486, 205487, 213088, 213089, 213288, 213289, 223, 232, 247651, 247751, 247753, 247754, 253388, 253389, 253988, 253989, 290"
+   ]
   },
   {
    "no": "1198",
@@ -27629,13 +27700,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "220589000900",
+   "wis": "WS3200P0081C",
+   "version": "01.01",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for replacing pressure limiting valve at front axle air suspension strut. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 220"
+   ]
   },
   {
    "no": "1227",
@@ -28146,13 +28219,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "222589029100",
+   "wis": "WS8300P0044B",
+   "version": "01.01",
+   "catalogName": "Adapter, 90 degrees",
+   "catalogDesc": "Purpose: Adapter for flushing the rear air conditioning system with full face gasket.",
+   "validities": [
+    "T (PKW_EN): 222"
+   ]
   },
   {
    "no": "1252",
@@ -28448,13 +28523,15 @@
    "note": "",
    "note2": "",
    "comment": "used with 202 589 02 31 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "243588003200",
+   "wis": "WS3200P0063B",
+   "version": "01.01",
+   "catalogName": "Clamping plates",
+   "catalogDesc": "Purpose: Clamping plates for disassembly and assembly of springs on rear axle. Technical Note: In combination with W 202 589 02 31 00 tensioning device. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this item is GEDORE Automotive GmbH, Breslauerstr. 41 / 78166, Donaueschingen / Germany.",
+   "validities": [
+    "T (PKW_EN): 243"
+   ]
   },
   {
    "no": "1266",
@@ -28494,13 +28571,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "297589013100",
+   "wis": "WS4600P0117B",
+   "version": "01.00",
+   "catalogName": "Dial indicator holder",
+   "catalogDesc": "Purpose: Dial indicator holder for a dial indicator for measuring the thrust piece play on the steering gear. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 295, 297"
+   ]
   },
   {
    "no": "1268",
@@ -28541,13 +28620,15 @@
    "note": "",
    "note2": "",
    "comment": "used with 246 589 01 43 00 and 205 589 00 43 00",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "243589004300",
+   "wis": "WS3500P0491B",
+   "version": "01.00",
+   "catalogName": "Extraction and insertion tool",
+   "catalogDesc": "Purpose: Extraction and insertion tool for extracting and inserting suspension subframe carrier of rear axle. Technical Note: In combination with W 246 589 01 43 00 Extraction and insertion tool and W 205 589 00 43 00 Extraction and insertion tool. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 243"
+   ]
   },
   {
    "no": "1270",
@@ -28646,13 +28727,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "297589003100",
+   "wis": "WS3200P0111B",
+   "version": "01.03",
+   "catalogName": "Set of emergency buffers",
+   "catalogDesc": "Purpose: Set of emergency buffers for maneuvering vehicle with unpressurized suspension struts for repair work on front axle air suspension. Note: The set consists of 2 emergency buffers for the front axle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1275",
@@ -28667,13 +28750,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "243589009100",
+   "wis": "WS2000P0064B",
+   "version": "01.03",
+   "catalogName": "Tester cap",
+   "catalogDesc": "Purpose: Tester cap for sealing second opening at expansion reservoir as well as for filling or for the leak test of the cooling circuit. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 2436, 2437, 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1276",
@@ -28688,13 +28773,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589569800",
+   "wis": "WS4700P0057B",
+   "version": "01.09",
+   "catalogName": "Safety plug",
+   "catalogDesc": "Purpose: Safety plug for covering the HV contact points and guide to the relevant measuring points at the HV contacts. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (Cross-country vehicles): 4656",
+    "T (PKW_EN): 294, 295, 296, 297, 590"
+   ]
   },
   {
    "no": "1277",
@@ -28897,13 +28985,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "254589006300",
+   "wis": "WS0300P0159B",
+   "version": "01.03",
+   "catalogName": "Fork",
+   "catalogDesc": "Purpose: Fork for fixing the balance shafts in place on the balance shaft housing. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (PKW_EN, Transporter_EN): 254",
+    "M (PKW_EN): 1395"
+   ]
   },
   {
    "no": "1286",
@@ -28918,13 +29009,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "254589003300",
+   "wis": "WS1800P0057C",
+   "version": "01.03",
+   "catalogName": "Pull-off device",
+   "catalogDesc": "Purpose: Extraction tool for removing combination pump from crankcase. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 2568",
+    "M (PKW_EN, Transporter_EN): 254"
+   ]
   },
   {
    "no": "1287",
@@ -29260,13 +29354,17 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "254586004300",
+   "wis": "WS0700P0079B",
+   "version": "01.07",
+   "catalogName": "Assembly tool",
+   "catalogDesc": "Purpose: Assembly tool for mounting and calibrating sealing rings. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this article is Bosch Automotive Service, Porschestraße 4 / 62512 / Hainburg / Germany.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 2568",
+    "M (PKW_EN, Transporter_EN): 254",
+    "M (PKW_EN): 1777, 252, 2828"
+   ]
   },
   {
    "no": "1302",
@@ -29306,13 +29404,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589016300",
+   "wis": "WS5400P0089B",
+   "version": "01.00",
+   "catalogName": "Adapter cable",
+   "catalogDesc": "Purpose: Adapter cable for breakout box for performing diagnostic measurements directly at the control unit/wiring harness connection. Technical Note: In combination with W 000 589 00 21 00 test box. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1304",
@@ -29327,13 +29427,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589003300",
+   "wis": "WS3300P0281B",
+   "version": "01.00",
+   "catalogName": "Puller",
+   "catalogDesc": "Purpose: Puller for pulling tension strut and spring link from steering knuckle. Technical Note: Only in combination with W 163 589 03 43 00 press. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1305",
@@ -29393,13 +29495,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "232589001900",
+   "wis": "WS4000P0107B",
+   "version": "01.00",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for adapting the locating points and determining the vehicle level. Technical note: In combination with W 000 588 05 19 00 Inclinometer. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 232"
+   ]
   },
   {
    "no": "1308",
@@ -29414,13 +29518,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589044300",
+   "wis": "WS3500P0493C",
+   "version": "01.03",
+   "catalogName": "Extraction and insertion tool",
+   "catalogDesc": "Purpose: Extraction and insertion tool for extracting and inserting rear axle differential bearing at rear axle carrier. Technical Note: In combination with W 652 589 00 33 21 hand pump, W 652 589 00 33 23 hydraulic hose (complete) and W 652 589 00 33 22 hollow cylinder. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1309",
@@ -29435,13 +29541,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589024300",
+   "wis": "WS3500P0497B",
+   "version": "01.00",
+   "catalogName": "Extraction and insertion tool",
+   "catalogDesc": "Purpose: Extraction and insertion tool for extracting and inserting axle subframe suspension on rear axle carrier. Technical Note: In combination with W 652 589 00 33 21 hand pump, W 652 589 00 33 23 hydraulic hose (complete) and W 652 589 00 33 22 hollow cylinder. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1310",
@@ -29646,13 +29754,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589072100",
+   "wis": "WS5400P0100B",
+   "version": "01.07",
+   "catalogName": "Calibration device",
+   "catalogDesc": "Purpose: Calibration device for augmented reality head-up display (AR-HUD) for adjusting head-up display. Technical Note: In combination with W 000 588 11 21 00 adjustment device. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223, 296, 297"
+   ]
   },
   {
    "no": "1320",
@@ -29736,13 +29846,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589513100",
+   "wis": "WS8800P0072A",
+   "version": "01.00",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for supporting hood. Technical Note: In combination with W 170 589 04 63 00 support. The adapter is used to protect the vehicle U-shaped striker in the support W 170 589 04 63 00. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1324",
@@ -29757,13 +29869,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589013100",
+   "wis": "WS3200P0060B",
+   "version": "01.02",
+   "catalogName": "Set of emergency buffers",
+   "catalogDesc": "Purpose: Set of emergency buffers for repair work on front axle air suspension or for maneuvering the vehicle with unpressurized suspension struts. Note: The set consists of 2 emergency buffers for the front axle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1325",
@@ -30058,13 +30172,16 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000588146200",
+   "wis": "WS0800P0030B",
+   "version": "01.06",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adaptation for removing/installing major assemblies. Technical Note: In combination with W 000 588 13 62 00 major assembly mount and a suitable telescopic jack/major assembly mount W 000 588 24 62 00 with a load carrying capacity of at least 0.9 t. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process in GLC/LC. This article is manufactured by Werner Weitner GmbH, Sollnau 14 / 85072 Eichstätt / Germany.",
+   "validities": [
+    "M (PKW_EN): 780600",
+    "T (PKW_EN): 294, 295, 296, 2971"
+   ]
   },
   {
    "no": "1338",
@@ -30172,13 +30289,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "232586000900",
+   "wis": "WS3300P0371B",
+   "version": "01.00",
+   "catalogName": "Socket set",
+   "catalogDesc": "Purpose: Socket set for loosening, tightening and counterholding thrust arm threaded connection on steering knuckle. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this article is Hazet-Werk GmbH & Co. KG, Güldenwerther Bahnhofstraße 25-29, 42857 Remscheid, Germany.",
+   "validities": [
+    "T (PKW_EN): 232"
+   ]
   },
   {
    "no": "1343",
@@ -30193,13 +30312,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "297589009100",
+   "wis": "WS8300P0054B",
+   "version": "01.03",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for flushing the refrigeration circuit of the air conditioning system. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1344",
@@ -30777,13 +30898,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589092500",
+   "wis": "WS0800P0052C",
+   "version": "01.00",
+   "catalogName": "Stop plug",
+   "catalogDesc": "Purpose: Stop plugs for sealing plug at high-voltage battery. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1370",
@@ -30822,13 +30945,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "297589006300",
+   "wis": "WS9100P0019B",
+   "version": "01.00",
+   "catalogName": "Release tool",
+   "catalogDesc": "Purpose: Unlocking tool for unlocking the arm rest lining on the driver's and front passenger seat. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1372",
@@ -30890,13 +31015,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "000589102500",
+   "wis": "WS0800P0053C",
+   "version": "01.00",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for connecting leak tester to high-voltage battery. Technical Note: In combination with W 000 588 24 21 00 leak tester. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1375",
@@ -31395,13 +31522,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "296589006300",
+   "wis": "WS7200P0042B",
+   "version": "01.02",
+   "catalogName": "Assembly tool",
+   "catalogDesc": "Purpose: Assembly tool for installing ultrasonic sensors in doors. Technical note: In combination with W 285 589 02 21 00 electric vacuum pump. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 296, 297"
+   ]
   },
   {
    "no": "1398",
@@ -31440,13 +31569,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "243589019100",
+   "wis": "WS8300P0068B",
+   "version": "01.01",
+   "catalogName": "Adapter set",
+   "catalogDesc": "Purpose: Adapter for flushing the refrigeration circuit of the air conditioning system. Technical Note: In combination with W 000 588 15 82 00 air conditioning service unit R134a or W 000 588 18 82 00 air conditioning service unit R1234yf. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 243, 294, 295, 296, 297"
+   ]
   },
   {
    "no": "1400",
@@ -31461,13 +31592,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "297589001500",
+   "wis": "WS0800P0041B",
+   "version": "01.06",
+   "catalogName": "Drift",
+   "catalogDesc": "Purpose: Drift for mounting the radial shaft sealing rings on the transmission of the eATS on the rear axle (RA) and the eATS on the front axle (VA, 4x4). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 294, 295, 296, 2971"
+   ]
   },
   {
    "no": "1401",
@@ -31591,13 +31724,17 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "256588000300",
+   "wis": "WS0500P0355B",
+   "version": "01.02",
+   "catalogName": "Wrench bit",
+   "catalogDesc": "Purpose: Push-in wrench for tightening the torque of the service covers on the cylinder cover. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this article is the company Matador GmbH & Co. KG, Morsbachtalstraße 17, 42855 Remscheid, Germany.",
+   "validities": [
+    "M (Cross-country vehicles, PKW_EN): 2568",
+    "M (PKW_EN, Transporter_EN): 254",
+    "M (PKW_EN): 2569"
+   ]
   },
   {
    "no": "1407",
@@ -31770,13 +31907,15 @@
    "note": "",
    "note2": "",
    "comment": "",
-   "offered": false,
-   "photo": "",
-   "wis": "",
-   "version": "",
-   "catalogName": "",
-   "catalogDesc": "",
-   "validities": []
+   "offered": true,
+   "photo": "223589009100",
+   "wis": "WS8300P0058B",
+   "version": "01.00",
+   "catalogName": "Adapter",
+   "catalogDesc": "Purpose: Adapter for flushing evaporator including connected refrigerant lines. Technical Note: In combination with W 000 588 15 82 00 air conditioning service unit (refrigerant R134A) or W 000 588 18 82 00 air conditioning service unit (refrigerant R1234yf). Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC.",
+   "validities": [
+    "T (PKW_EN): 223"
+   ]
   },
   {
    "no": "1415",
@@ -36336,12 +36475,13 @@
    "comment": "",
    "offered": true,
    "photo": "124586043300",
-   "wis": "WS3500P0600B",
-   "version": "01.02",
+   "wis": "WS2800P0141B",
+   "version": "01.00",
    "catalogName": "Puller",
-   "catalogDesc": "Purpose: Puller for pulling drive flange at rear axle differential. Technical Note: Puller, 3-arm, span 250 mm, throat depth 200 mm. Note: Replacement for W 124 589 04 33 00 Puller. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this article is the company Kleinbongartz & Kaiser OHG, Heinrich-Hertz-Str. 5, 40721 Hilden, Germany.",
+   "catalogDesc": "Purpose: Puller for pulling off output flanges on transfer case. Technical Note: Puller, 3-arm, span 250 mm, throat depth 200 mm. Note: Replacement for W 124 589 04 33 00 Puller. Procurement information: This workshop equipment can be ordered directly through the regular replacement part ordering process at the GLC/LC. The manufacturer of this article is the company Kleinbongartz & Kaiser OHG, Heinrich-Hertz-Str. 5, 40721 Hilden, Germany.",
    "validities": [
-    "T (PKW_EN): 117, 118, 156, 176, 177, 178, 204, 206, 212, 246, 247, 248, 254"
+    "T (Transporter_EN): 907",
+    "T (PKW_EN): 167, 20308, 20309, 20328, 20329, 204, 205, 207, 210081, 210082, 210281, 210282, 21108, 21109, 21128, 21129, 212, 213, 216, 217, 218, 219, 220, 221, 222, 230, 253"
    ]
   },
   {
@@ -38654,6 +38794,43 @@
   "213",
   "214",
   "215",
+  "216",
+  "217",
+  "218",
+  "219",
+  "220",
+  "221",
+  "222",
+  "223",
+  "230",
+  "231",
+  "232",
+  "236",
+  "238",
+  "240",
+  "242",
+  "243",
+  "244",
+  "245",
+  "246",
+  "247",
+  "248",
+  "251",
+  "253",
+  "254",
+  "257",
+  "290",
+  "292",
+  "293",
+  "294",
+  "295",
+  "296",
+  "297",
+  "520",
+  "530",
+  "540",
+  "590",
+  "591",
   "M254"
  ]
 }
