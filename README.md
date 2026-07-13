@@ -1,5 +1,9 @@
 # 🗂️ File Database — one page, four apps, all in your browser
 
+> 📖 Looking for the full technical map? **[FEATURES.md](FEATURES.md)** is the
+> complete feature tree and application topology — every feature, every
+> cross‑app tie‑in, storage, service workers, message contracts and test coverage.
+
 **File Database** is a Progressive Web App (PWA) platform that bundles four
 local‑first apps behind a single page:
 
