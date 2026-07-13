@@ -161,8 +161,96 @@
     try {
       if (kind === "image") return await makeImageThumb(file);
       if (kind === "video") return await makeVideoThumb(file);
+      if (kind === "pdf") return await makePdfThumb(file);
     } catch (e) { /* ignore */ }
     return null;
+  }
+
+  // ---------- PDF thumbnails (first page rendered with a vendored pdf.js) ----------
+  // pdf.js is ~1.5 MB, so it's loaded on demand the first time a PDF needs a
+  // preview — vaults with no PDFs never pay for it.
+  let _pdfjs = null, _pdfjsLoading = null;
+  function ensurePdfjs() {
+    if (_pdfjs) return Promise.resolve(_pdfjs);
+    if (_pdfjsLoading) return _pdfjsLoading;
+    _pdfjsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "vendor/pdf.min.js";
+      s.onload = () => {
+        const lib = window.pdfjsLib;
+        if (!lib) { reject(new Error("pdf.js unavailable")); return; }
+        try { lib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; } catch (e) {}
+        _pdfjs = lib; resolve(lib);
+      };
+      s.onerror = () => { _pdfjsLoading = null; reject(new Error("pdf.js failed to load")); };
+      document.head.appendChild(s);
+    });
+    return _pdfjsLoading;
+  }
+  async function makePdfThumb(file) {
+    const lib = await ensurePdfjs();
+    const buf = await file.arrayBuffer();
+    const doc = await lib.getDocument({ data: buf, disableAutoFetch: true, disableStream: true }).promise;
+    try {
+      const page = await doc.getPage(1);
+      const unit = page.getViewport({ scale: 1 });
+      const max = 360;
+      const scale = Math.min(2, max / Math.max(unit.width, unit.height) || 1);
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.ceil(vp.width));
+      canvas.height = Math.max(1, Math.ceil(vp.height));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); // PDFs are transparent
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      return await new Promise((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.75));
+    } finally {
+      try { doc.destroy(); } catch (e) {}
+    }
+  }
+
+  // Generate missing previews for PDFs already in the vault, gently in the
+  // background: one at a time, persisted as we go (without touching updatedAt
+  // so nothing jumps in "Recent"), and drawn into any card on screen.
+  let _thumbRunning = false, _thumbT = null;
+  function scheduleThumbBackfill() {
+    if (_thumbRunning) return;
+    clearTimeout(_thumbT);
+    _thumbT = setTimeout(runThumbBackfill, 400);
+  }
+  async function runThumbBackfill() {
+    if (_thumbRunning) return;
+    const pending = items.filter((it) => it.kind === "pdf" && !it.thumb && !it._noThumb).map((it) => it.id);
+    if (!pending.length) return;
+    _thumbRunning = true;
+    try {
+      for (const id of pending) {
+        const it = items.find((x) => x.id === id);
+        if (!it || it.thumb || it._noThumb) continue;
+        let rec = null;
+        try { rec = await DB.get(id); } catch (e) {}
+        if (!rec || !rec.blob) { it._noThumb = true; continue; }
+        if (rec.thumb) { it.thumb = rec.thumb; refreshCardThumb(id, rec.thumb); continue; }
+        let thumb = null;
+        try { thumb = await makePdfThumb(rec.blob); } catch (e) {}
+        if (!thumb) { it._noThumb = true; continue; } // encrypted / broken — keep the icon
+        rec.thumb = thumb;
+        try { await DB.put(rec); } catch (e) {} // put, not update: preserves updatedAt
+        it.thumb = thumb;
+        refreshCardThumb(id, thumb);
+        await new Promise((r) => setTimeout(r, 25)); // breathe between pages
+      }
+    } finally { _thumbRunning = false; }
+  }
+  function refreshCardThumb(id, thumb) {
+    const box = document.querySelector('.card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .card__thumb');
+    if (!box) return;
+    const existing = box.querySelector("img");
+    if (existing) { existing.src = objUrl(thumb); return; }
+    const img = document.createElement("img");
+    img.loading = "lazy"; img.alt = ""; img.src = objUrl(thumb);
+    const glyph = box.querySelector(".card__glyph");
+    if (glyph) glyph.replaceWith(img); else box.prepend(img);
   }
 
   // ---------- Import ----------
@@ -282,6 +370,7 @@
     $("#list-head").hidden = state.view !== "list";
     updateTitle(list.length);
     renderActiveFilters();
+    scheduleThumbBackfill(); // fill in any missing PDF previews in the background
   }
 
   function renderCard(it) {

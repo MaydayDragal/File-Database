@@ -84,7 +84,7 @@ The Files app (File Vault) is the heart of the platform:
 
 - **Add anything** — drag & drop onto the window, paste from the clipboard, or use **Add files**. Bulk‑add supported.
 - **Automatic sorting by type** — Images, Videos, Audio, PDFs, Documents, Spreadsheets, Presentations, Text & code, Archives, Other.
-- **Thumbnails** generated on device for images and videos.
+- **Thumbnails** generated on device for images, videos **and PDFs** (the PDF's first page is rendered as its preview; previews for PDFs already in your vault are filled in automatically in the background).
 - **Instant preview** in a side panel: images, video, audio, PDFs (native browser viewer), and inline text/code.
 - **Organize like a database** — put files into **Collections**, add any number of **Tags**, write **Notes**, and **★ Star** favorites.
 - **Fast find** — live search across names, tags, notes and collections; filter by type, collection, tag; sort by date / name / size; grid or list view.
@@ -181,6 +181,8 @@ tools/e2e-merge.mjs   Integration test — cross-app handoffs through the shell
 tools/e2e-inventory.mjs  Tool Inventory test — standalone + embedded
 tools/e2e-shell.mjs   Platform shell test — tabs, theme, deep links, badges
 tools/e2e-sync.mjs    Folder-sync test — scan, import, dedup, auto-sync
+tools/e2e-pdfthumb.mjs   PDF-thumbnail test — render, persist, backfill
+vault/vendor/         Vendored pdf.js (renders PDF first-page previews, offline)
 ```
 
 ### Development
