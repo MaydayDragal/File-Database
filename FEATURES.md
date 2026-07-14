@@ -123,7 +123,7 @@ File Vault
 │   ├── Tags (any number per file; tag cloud in sidebar; click = filter)
 │   ├── Notes (free text per file)
 │   ├── ★ Star (card, row, and detail toggles; "Starred" smart filter)
-│   └── Detail drawer edits: name/collection/tags/VIN/note → Save
+│   └── Detail drawer edits: name/collection/tags/VIN/FIN/note → Save
 ├── VIN grouping (⋮ → "Scan files for VINs" / sidebar ↻; Shift-click = full rescan)
 │   ├── Reads every file for 17-char Vehicle Identification Numbers
 │   │   (videos are skipped — no readable VIN, and their blobs are large)
@@ -134,10 +134,19 @@ File Vault
 │   │       filename yields no VIN (the VIN may sit in a scanned image/stamp),
 │   │       and always for images. A text PDF whose VIN is searchable is never
 │   │       OCR'd.
-│   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9], must mix letters+digits;
-│   │   tolerant of spaces/tabs BETWEEN characters (PDF/OCR text often splits a
-│   │   VIN, e.g. "W1KLF4HB1 RA068698") so split VINs are still found; OCR text
-│   │   also retried with I→1 / O,Q→0 corrections; ≤25 VINs per file
+│   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9]; tolerant of spaces/tabs BETWEEN
+│   │   characters (PDF/OCR text often splits a VIN, e.g. "W1KLF4HB1 RA068698")
+│   │   so split VINs are still found; OCR text retried with I→1 / O,Q→0; ≤25/file
+│   ├── Garbage rejection: a candidate must carry a numeric serial (≥4 digits)
+│   │   and not spell a word (no 7+ letter run), so space-joins like "…free map
+│   │   updates 50A" → FREEMAPUPDATES50A are thrown out
+│   ├── VIN vs FIN: Mercedes datacards hold both the ISO VIN (labelled "VIN")
+│   │   and a Baumuster-based FIN/datacard number (e.g. W1K2140471A068698). The
+│   │   VIN drives grouping; the FIN is stored separately (record.fins), shown as
+│   │   a distinct amber chip + its own detail field, and still searchable.
+│   │   Classified by the preceding label ("VIN" vs "Datacard"/chassis), with an
+│   │   unlabelled Baumuster-format code (digit at position 4) beside a real VIN
+│   │   treated as a FIN
 │   ├── Multi-core: files run across up to POOL_MAX lanes (cores−1, capped 4;
 │   │   window.__VIN_OCR_WORKERS override), so several images/scanned PDFs OCR
 │   │   in parallel on separate Tesseract workers. (WASM/CPU — no browser GPU
@@ -368,7 +377,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 
 | Store | Owner | Contents |
 |---|---|---|
-| IndexedDB `file-vault` (files, meta) | Vault | File records + blobs + thumbs; meta: theme, view, collections, syncDir, syncAuto |
+| IndexedDB `file-vault` (files, meta) | Vault | File records + blobs + thumbs (+ vins/fins/vinScan); meta: theme, view, collections, syncDir, syncAuto |
 | IndexedDB `LIDocsDB` (docs, files, settings) | LI | Parsed docs, PDF blobs; settings: autosave/autosaveOn/syncDir/autoSyncOn handles |
 | IndexedDB `tool-inventory` (tools, meta) | Inventory | 1,688 tool rows; meta: source, seedVersion |
 | IndexedDB `vault-bridge` (outbox) | bridge.js | In-flight cross-app file handoffs |
@@ -452,7 +461,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 11 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 12 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -466,6 +475,7 @@ Isolation guarantees worth knowing:
 | `e2e-vin-parallel.mjs` | VIN scan runs OCR in parallel: a fake engine records peak concurrency = worker-pool size (multi-core), finishing in waves not serially |
 | `e2e-vin-skip-video.mjs` | VIN scan skips videos: a seeded video is never scanned, its filename VIN isn't matched, and its detail-drawer Detect button is hidden |
 | `e2e-vin-recall.mjs` | VIN recall: space-split VINs recovered from text; OCR skipped when the PDF text layer already has a VIN, used as fallback when it doesn't |
+| `e2e-vin-datacard.mjs` | Real Mercedes datacard: VIN grouped as VIN, Baumuster FIN kept separate (searchable, own chip/field), FREEMAPUPDATES50A garbage rejected |
 | `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
 
 ---

@@ -186,6 +186,13 @@ kbd {
   border-color: color-mix(in srgb, var(--brand-2) 45%, transparent);
   color: color-mix(in srgb, var(--brand-2) 78%, var(--text));
 }
+/* FIN / datacard number — distinct (amber) from the VIN so the two never blur. */
+.tag--fin {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em;
+  border-color: color-mix(in srgb, var(--star) 50%, transparent);
+  color: color-mix(in srgb, var(--star) 72%, var(--text));
+}
+#d-fin { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
 .results .group-head {
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: 9px;

@@ -323,7 +323,7 @@
     if (state.query) {
       const q = state.query.toLowerCase();
       list = list.filter((i) =>
-        [i.name, i.collection, i.note, (i.tags || []).join(" "), (i.vins || []).join(" ")].join(" ").toLowerCase().includes(q));
+        [i.name, i.collection, i.note, (i.tags || []).join(" "), (i.vins || []).join(" "), (i.fins || []).join(" ")].join(" ").toLowerCase().includes(q));
     }
     if (f !== "recent") list = sortList(list);
     return list;
@@ -447,13 +447,18 @@
     sub.className = "card__sub";
     sub.innerHTML = `<span>${fmtBytes(it.size)}</span>` + (it.collection ? `<span>· ${esc(it.collection)}</span>` : "");
     body.append(name, sub);
-    const vins = it.vins || [];
-    if ((it.tags && it.tags.length) || vins.length) {
+    const vins = it.vins || [], fins = it.fins || [];
+    if ((it.tags && it.tags.length) || vins.length || fins.length) {
       const tw = document.createElement("div");
       tw.className = "card__tags";
       vins.slice(0, 2).forEach((v) => {
         const s = document.createElement("span");
         s.className = "tag tag--vin"; s.textContent = v; s.title = "VIN";
+        tw.append(s);
+      });
+      fins.slice(0, 1).forEach((v) => {
+        const s = document.createElement("span");
+        s.className = "tag tag--fin"; s.textContent = v; s.title = "FIN / datacard number";
         tw.append(s);
       });
       (it.tags || []).slice(0, 4).forEach((t) => {
@@ -507,6 +512,11 @@
     (it.vins || []).slice(0, 1).forEach((v) => {
       const s = document.createElement("span");
       s.className = "tag tag--vin"; s.textContent = v; s.title = "VIN";
+      tags.append(s);
+    });
+    if (!(it.vins || []).length) (it.fins || []).slice(0, 1).forEach((v) => {
+      const s = document.createElement("span");
+      s.className = "tag tag--fin"; s.textContent = v; s.title = "FIN / datacard number";
       tags.append(s);
     });
     (it.tags || []).slice(0, 3).forEach((t) => {
@@ -672,6 +682,11 @@
     $("#d-tags").value = (rec.tags || []).join(", ");
     detailVinOrig = (rec.vins || []).join(", ");
     $("#d-vin").value = detailVinOrig;
+    detailFinOrig = (rec.fins || []).join(", ");
+    $("#d-fin").value = detailFinOrig;
+    // Only surface the FIN field once a FIN has actually been found (or for a
+    // non-video; videos are never scanned).
+    $("#d-fin-field").hidden = !detailFinOrig && !!VIN_SKIP_KIND[rec.kind];
     $("#d-note").value = rec.note || "";
     const starBtn = $("#d-star");
     starBtn.textContent = rec.starred ? "★" : "☆";
@@ -734,22 +749,24 @@
     state.currentId = null;
   }
 
-  let detailVinOrig = "";
+  let detailVinOrig = "", detailFinOrig = "";
   async function saveDetail() {
     const id = state.currentId;
     if (!id) return;
     const tags = $("#d-tags").value.split(",").map((s) => s.trim()).filter(Boolean);
     const uniqueTags = Array.from(new Set(tags));
     const vins = Array.from(new Set($("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)));
+    const fins = Array.from(new Set($("#d-fin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)));
     const patch = {
       name: $("#d-name").value.trim() || "Untitled",
       collection: $("#d-collection").value.trim(),
       tags: uniqueTags,
       vins,
+      fins,
       note: $("#d-note").value.trim(),
     };
-    // A hand-edited VIN counts as scanned — the bulk scan won't overwrite it.
-    if (vins.join(", ") !== detailVinOrig) patch.vinScan = Date.now();
+    // A hand-edited VIN/FIN counts as scanned — the bulk scan won't overwrite it.
+    if (vins.join(", ") !== detailVinOrig || fins.join(", ") !== detailFinOrig) patch.vinScan = Date.now();
     const merged = await DB.update(id, patch);
     const idx = items.findIndex((i) => i.id === id);
     if (idx >= 0) items[idx] = Object.assign(items[idx], patch, { updatedAt: merged.updatedAt });
@@ -918,7 +935,7 @@
       out.files.push({
         id: r.id, name: r.name, type: r.type, kind: r.kind, size: r.size,
         tags: r.tags, collection: r.collection, note: r.note, starred: r.starred,
-        vins: r.vins || [], vinScan: r.vinScan || 0,
+        vins: r.vins || [], fins: r.fins || [], vinScan: r.vinScan || 0,
         createdAt: r.createdAt, updatedAt: r.updatedAt,
         blob: b64, blobType: r.blob.type, thumb: thumb64,
       });
@@ -953,7 +970,7 @@
           id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
           size: f.size != null ? f.size : blob.size, blob, thumb,
           tags: f.tags || [], collection: f.collection || "", note: f.note || "",
-          vins: f.vins || [], vinScan: f.vinScan || 0,
+          vins: f.vins || [], fins: f.fins || [], vinScan: f.vinScan || 0,
           starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
         };
         rec.searchText = DB.buildSearchText(rec);
@@ -1338,31 +1355,62 @@
   // from the match. The outer lookarounds still require the whole run to be
   // bounded by non-letters/digits, so it can't be a slice of a longer code.
   const VIN_SEP = "[ \\t\\u00A0]{0,2}";
-  function findVins(text, fuzzy) {
-    const out = new Set();
-    if (!text) return [];
-    const scan = (t) => {
+  // Reject 17-char strings that only LOOK like a VIN once spaces are collapsed
+  // (e.g. "...free map updates 50A" -> FREEMAPUPDATES50A). A real VIN/FIN carries
+  // a numeric serial (several digits) and never spells a word (no long run of
+  // letters). I/O/Q are already excluded by the charset.
+  function looksLikeVin(v) {
+    const digits = (v.match(/\d/g) || []).length;
+    if (digits < 4) return false;          // a real VIN/FIN has a numeric serial
+    if (17 - digits < 2) return false;     // ...but keeps its WMI letters too
+    if (/[A-Z]{7,}/.test(v)) return false; // 7+ letters in a row => a word, not a VIN
+    return true;
+  }
+
+  // Mercedes datacards carry BOTH the ISO VIN (labelled "VIN") and a separate
+  // Baumuster-based datacard/FIN number (e.g. "W1K2140471A068698", model series
+  // 214). They must not be conflated: the VIN drives grouping; the FIN is kept
+  // apart but still searchable. Classification, strongest signal first:
+  //   - a code immediately preceded by "VIN"                -> VIN (authoritative)
+  //   - a code by the datacard header / "FIN"/chassis label -> FIN
+  //   - an unlabelled Baumuster-format code (DIGIT at pos 4) seen alongside a
+  //     real VIN                                             -> FIN
+  //   - anything else                                        -> VIN (keep recall)
+  const VIN_PREC = { vin: 3, fin: 2, "?": 1 };
+  function findVinsDetailed(text, fuzzy) {
+    if (!text) return { vins: [], fins: [] };
+    const seen = new Map(); // code -> "vin" | "fin" | "?"
+    const consider = (t) => {
       const re = new RegExp("(?<![A-Z0-9])[A-HJ-NPR-Z0-9](?:" + VIN_SEP + "[A-HJ-NPR-Z0-9]){16}(?![A-Z0-9])", "g");
       let m;
-      while ((m = re.exec(t)) && out.size < VIN_MAX_PER_FILE) {
-        const v = m[0].replace(/[ \t\u00A0]/g, "");
-        if (v.length !== 17) continue;
-        const digits = (v.match(/\d/g) || []).length;
-        // Real VINs mix letters and digits — this rejects 17-letter words
-        // and bare 17-digit numbers.
-        if (digits >= 2 && 17 - digits >= 2) out.add(v);
+      while ((m = re.exec(t)) && seen.size < VIN_MAX_PER_FILE) {
+        const v = m[0].replace(/[ \t ]/g, "");
+        if (v.length !== 17 || !looksLikeVin(v)) continue;
+        const before = t.slice(Math.max(0, m.index - 16), m.index).toUpperCase().replace(/[^A-Z]/g, "");
+        let tag = "?";
+        if (/VIN$/.test(before)) tag = "vin";
+        else if (/DATACARD$|DATENKARTE$|FGSTNR$|FAHRGESTELLNR$/.test(before)) tag = "fin";
+        if (!seen.has(v) || VIN_PREC[tag] > VIN_PREC[seen.get(v)]) seen.set(v, tag);
       }
     };
     const up = text.toUpperCase();
-    scan(up);
+    consider(up);
     if (fuzzy) {
       // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN,
       // so normalizing them inside candidate runs recovers the real number.
       const runRe = new RegExp("(?<![A-Z0-9])[A-Z0-9](?:" + VIN_SEP + "[A-Z0-9]){16}(?![A-Z0-9])", "g");
-      scan(up.replace(runRe, (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
+      consider(up.replace(runRe, (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
     }
-    return Array.from(out);
+    const vins = [], fins = [];
+    const hasVin = Array.from(seen.values()).includes("vin");
+    seen.forEach((tag, v) => {
+      const isFin = tag === "fin" || (tag === "?" && hasVin && /\d/.test(v[3]));
+      (isFin ? fins : vins).push(v);
+    });
+    return { vins, fins };
   }
+  // Back-compat helper - just the VINs (used to decide whether a PDF needs OCR).
+  function findVins(text, fuzzy) { return findVinsDetailed(text, fuzzy).vins; }
 
   // OCR engine (lazy, from a CDN — overridable via window.__TESS_*). The VIN
   // scan runs a POOL of Tesseract workers so several images / scanned PDFs are
@@ -1583,22 +1631,22 @@
       let rec = null;
       try { rec = await DB.get(it.id); } catch (e) {}
       if (!rec || !rec.blob) return;
-      let vins;
+      let vins, fins;
       try {
         const getWorker = () => vinGuard(laneWorker(ctx), OCR_LOAD_MS);
         const r = await extractVinText(rec, !ocrGaveUp, getWorker);
-        vins = findVins(r.text, r.fuzzy);
+        ({ vins, fins } = findVinsDetailed(r.text, r.fuzzy));
       } catch (e) {
         if (e && e.ocrCancel) return;                   // Stop pressed mid-OCR
         if (e && e.ocrUnavailable) { ocrGaveUp = true; needOcr++; return; } // engine down: skip OCR from here on
         if (e && e.ocrSkip) { needOcr++; return; }      // this file's OCR stalled — retry later
         failed++; return;                               // anything else — leave unscanned
       }
-      rec.vins = vins;
+      rec.vins = vins; rec.fins = fins;
       rec.vinScan = Date.now();
       rec.searchText = DB.buildSearchText(rec);
       try { await DB.put(rec); } catch (e) { return; }  // put, not update: preserves updatedAt
-      it.vins = vins; it.vinScan = rec.vinScan;
+      it.vins = vins; it.fins = fins; it.vinScan = rec.vinScan;
       if (vins.length) found++;
     }
 
@@ -1640,10 +1688,15 @@
     try {
       const getWorker = () => vinGuard(laneWorker(ctx), OCR_LOAD_MS);
       const r = await extractVinText(rec, true, getWorker);
-      const vins = findVins(r.text, r.fuzzy);
-      const existing = $("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
-      $("#d-vin").value = Array.from(new Set(existing.concat(vins))).join(", ");
-      toast(vins.length ? `Found ${vins.length} VIN${vins.length > 1 ? "s" : ""} — Save to keep.` : "No VIN found in this file.");
+      const { vins, fins } = findVinsDetailed(r.text, r.fuzzy);
+      const merge = (sel, add) => {
+        const have = $(sel).value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+        $(sel).value = Array.from(new Set(have.concat(add))).join(", ");
+      };
+      merge("#d-vin", vins);
+      if (fins.length) { merge("#d-fin", fins); $("#d-fin-field").hidden = false; }
+      toast(vins.length ? `Found ${vins.length} VIN${vins.length > 1 ? "s" : ""}${fins.length ? " + " + fins.length + " FIN" : ""} — Save to keep.`
+        : (fins.length ? `Found a FIN (datacard number) but no VIN — Save to keep.` : "No VIN found in this file."));
     } catch (e) {
       toast((e && (e.ocrUnavailable || e.ocrSkip || e.ocrCancel))
         ? "Couldn't run OCR on this file — it needs an internet connection the first time."
