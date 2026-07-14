@@ -5,13 +5,20 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "vault-app-v4";
-const SHELL = [
+const CACHE = "vault-app-v5";
+// Required for the app to boot offline — the install fails (and retries) if
+// any of these can't be cached.
+const CORE = [
   "./",
   "./index.html",
   "./styles.css",
   "./db.js",
   "./app.js",
+];
+// Nice-to-have — cached tolerantly so a single hiccup (a momentarily
+// unreachable icon, a proxy blip) can NEVER fail the install and strand the
+// user on a stale, un-updatable service worker.
+const EXTRAS = [
   "../bridge.js",
   "../debug.js",
   "./manifest.webmanifest",
@@ -24,7 +31,9 @@ const SHELL = [
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then((c) => c.addAll(CORE).then(() => Promise.all(EXTRAS.map((u) => c.add(u).catch(() => {})))))
+      .then(() => self.skipWaiting())
   );
 });
 
