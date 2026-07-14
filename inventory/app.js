@@ -387,6 +387,7 @@
     $("#restoreBtn").addEventListener("click", function () { mn.hidden = true; $("#restoreInput").click(); });
     $("#resetBtn").addEventListener("click", function () { mn.hidden = true; resetSeed(); });
     $("#legendBtn").addEventListener("click", function () { mn.hidden = true; $("#legend").classList.add("show"); });
+    $("#debugBtn").addEventListener("click", function () { mn.hidden = true; if (window.FVDebug) window.FVDebug.open(); });
     $("#csvInput").addEventListener("change", function (e) { if (e.target.files[0]) importCSV(e.target.files[0]); e.target.value = ""; });
     $("#restoreInput").addEventListener("change", function (e) { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ""; });
 

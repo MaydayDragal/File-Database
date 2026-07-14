@@ -3,12 +3,13 @@
    runtime-caches the OCR engine (tesseract.js from CDN) after first use. */
 "use strict";
 
-var SHELL_CACHE = "li-db-shell-v1";
+var SHELL_CACHE = "li-db-shell-v2";
 var RUNTIME_CACHE = "li-db-runtime-v1";
 
 var SHELL = [
   "./",
   "index.html",
+  "../debug.js",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-192.png",

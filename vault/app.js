@@ -1178,6 +1178,7 @@
     else if (action === "sync-folder") runFolderSync(false);
     else if (action === "auto-sync") toggleAutoSync();
     else if (action === "persist") requestPersistence();
+    else if (action === "debug") { if (window.FVDebug) window.FVDebug.open(); }
     else if (action === "about") { updateStorage(); $("#about").hidden = false; }
   }
 

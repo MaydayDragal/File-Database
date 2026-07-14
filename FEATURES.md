@@ -81,7 +81,7 @@ Platform Shell
 │   ├── manifest id "/" — pre-platform installs upgrade in place
 │   ├── Shortcuts: Add files (?action=add) · Starred (?view=starred) · #li · #inventory
 │   └── ⤓ Install button on beforeinstallprompt; hidden after install
-└── Service worker (cache "platform-shell-v1")
+└── Service worker (cache "platform-shell-v2")
     ├── Precache: shell core (required) + bridge.js/toolbox/icons (tolerant — can't brick install)
     ├── Fetch: skips /vault/ /li/ /inventory/ paths entirely (their own SWs rule there)
     ├── Navigations network-first, cached per-URL; assets cache-first
@@ -175,7 +175,7 @@ File Vault
     │   theme follows shell broadcasts; never writes fv-theme
     ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
     │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v2": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
+    └── SW cache "vault-app-v3": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
 ```
 
 **Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
@@ -234,7 +234,7 @@ LI Documents
 └── Platform integration
     ├── Embedded: hides h1 / ← Files / Install; theme follows shell; ← Files posts vault-nav
     ├── Standalone: ← Files goes to ../index.html#vault; dark/light/system fully supported
-    └── Own SW (li-db-shell-v1 / li-db-runtime-v1: nav network-first, CDN cache-first,
+    └── Own SW (li-db-shell-v2 / li-db-runtime-v1: nav network-first, CDN cache-first,
         assets stale-while-revalidate) + own manifest (scope /li/)
 ```
 
@@ -276,7 +276,7 @@ Tool Inventory
     ├── Embedded: hides h1 / install; "⌂ File Database" link only shows standalone
     ├── Theme: full light/dark/system (platform-theme listener + pre-paint script)
     ├── No bridge usage — it's a reference catalog, not a file inbox
-    └── Own SW (tool-inventory-v5) + manifest (scope /inventory/); shell badge peeks its DB
+    └── Own SW (tool-inventory-v6) + manifest (scope /inventory/); shell badge peeks its DB
 ```
 
 **Tied into:** shell only (badge, theme). Deliberately isolated otherwise.
@@ -356,6 +356,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | IndexedDB `LIDocsDB` (docs, files, settings) | LI | Parsed docs, PDF blobs; settings: autosave/autosaveOn/syncDir/autoSyncOn handles |
 | IndexedDB `tool-inventory` (tools, meta) | Inventory | 1,688 tool rows; meta: source, seedVersion |
 | IndexedDB `vault-bridge` (outbox) | bridge.js | In-flight cross-app file handoffs |
+| IndexedDB `fv-debug` (entries) | debug.js | Origin-wide debug log — errors/warnings/app messages from every app (ring buffer ≤600) |
 | localStorage `fv-theme` | Shell (embedded) / Vault (standalone) | "light"/"dark"; absent = system. Read by every app's pre-paint script |
 | localStorage `fd-app` | Shell | Last-used app tab |
 
@@ -363,10 +364,10 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 
 | Scope | File | Cache | Strategy highlights |
 |---|---|---|---|
-| `/` | `sw.js` | `platform-shell-v1` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v2` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
-| `/li/` | `li/sw.js` | `li-db-shell-v1` + runtime | Nav network-first; Tesseract CDN cache-first |
-| `/inventory/` | `inventory/sw.js` | `tool-inventory-v5` | `tools.json` network-first; part photos cached lazily |
+| `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
+| `/vault/` | `vault/sw.js` | `vault-app-v3` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
+| `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
+| `/inventory/` | `inventory/sw.js` | `tool-inventory-v6` | `tools.json` network-first; part photos cached lazily |
 
 ### 6.5 Theme system (one choice, five consumers)
 
@@ -389,6 +390,18 @@ Every app runs a head script: `window.parent !== window` → `<html class="embed
 CSS under `html.embedded` hides per-app chrome the shell already provides:
 brand/h1 · back-to-platform links · install buttons · (vault) theme toggle.
 Everything functional stays. Standalone keeps 100 % of the chrome.
+
+### 6.7 `debug.js` — platform debug log (error & log tracking)
+
+| Aspect | Detail |
+|---|---|
+| Loaded by | All five pages, before their own code (`<script src="debug.js">` / `../debug.js`) |
+| Captures | Uncaught exceptions (`window` "error") · unhandled promise rejections · failed resource loads (capture phase) · `console.error`/`console.warn` (patched pass-through) · explicit app calls |
+| API | `window.FVDebug`: `log/info/warn/error(msg, data?)` · `open()/close()/toggle()` · `getAll(cb)` · `clear()` |
+| Storage | IndexedDB **`fv-debug`** / store `entries` — origin-wide, so ONE log covers shell + all four apps; ring buffer (≤600 entries, trimmed to 400); never leaves the device |
+| Entry | `{t, level, app, src, msg, stack}` — `app` = shell/vault/li/inventory/toolbox, `src` = window/promise/resource/console/app |
+| Viewer | Self-contained overlay on any page: **Ctrl+Shift+D**, `FVDebug.open()`, or a menu entry (vault ⋮ "Debug log…" · LI ☰ "🐞 Debug log" · Inventory ☰ "🐞 Debug log"); level filter · Copy · Download `.log` · Clear · live-refreshes while open |
+| Safety | Dependency-free, never throws, no console output of its own; IndexedDB failure falls back to an in-memory buffer |
 
 ---
 
@@ -423,7 +436,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 7 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 8 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -434,6 +447,7 @@ Isolation guarantees worth knowing:
 | `e2e-sync.mjs` | Folder sync with a mocked directory picker: link/import/dedup/changed-file re-import/auto-sync timer + persistence |
 | `e2e-pdfthumb.mjs` | PDF thumbnails: import-time render, IndexedDB persistence, background backfill after reload |
 | `e2e-vin.mjs` | VIN scan & grouping: content/filename/PDF-text detection, By-VIN grouped view, vin: filter, sidebar list, search, detail field, persistence, incremental re-scan + offline OCR skip |
+| `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
 
 ---
 
@@ -442,6 +456,7 @@ Isolation guarantees worth knowing:
 ```
 /                       Platform shell (index.html · shell.js · shell.css · sw.js · manifest)
 ├── bridge.js           Cross-app file bus (shared by vault, li, toolbox)
+├── debug.js            Platform debug log — error/warning capture + viewer (all five pages)
 ├── icons/              Platform PWA icons (tools/gen_icons.py writes here + vault/icons)
 ├── vault/              File Vault (app.js · db.js · styles.css · sw.js · manifest · icons/)
 │   └── vendor/         pdf.js + worker (PDF first-page thumbnails, offline)

@@ -82,6 +82,12 @@ PDF Toolkit. Everything runs in the browser; the **only online feature** is
 OCR, which lazy‑loads the Tesseract.js engine from a CDN the first time you
 use it.
 
+**🐞 Debug log** — every page quietly records errors and warnings (uncaught
+exceptions, promise rejections, failed loads, `console.error`/`warn`) into one
+local, on‑device log. Press **Ctrl+Shift+D** anywhere — or use “Debug log” in
+the Files ⋮ / LI ☰ / Inventory ☰ menus — to view, filter, copy, download or
+clear it. Handy when something misbehaves and you want to see why.
+
 ## Features
 
 The Files app (File Vault) is the heart of the platform:

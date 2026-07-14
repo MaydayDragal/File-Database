@@ -68,6 +68,7 @@
           <div class="menu__sep"></div>
           <button data-action="persist" role="menuitem">Request persistent storage</button>
           <div class="menu__sep"></div>
+          <button data-action="debug" role="menuitem" title="Errors and warnings recorded on this device (Ctrl+Shift+D)">Debug log…</button>
           <button data-action="about" role="menuitem">About &amp; help</button>
         </div>
       </div>
@@ -247,6 +248,7 @@
   <input id="file-input" type="file" multiple hidden />
   <input id="import-input" type="file" accept=".fvault,application/json,.json" hidden />
 
+  <script src="../debug.js"></script>
   <script src="db.js"></script>
   <script src="../bridge.js"></script>
   <script src="app.js"></script>
