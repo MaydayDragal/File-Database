@@ -1357,12 +1357,28 @@
   // from the match. The outer lookarounds still require the whole run to be
   // bounded by non-letters/digits, so it can't be a slice of a longer code.
   const VIN_SEP = "[ \\t\\u00A0]{0,2}";
+
+  // Mercedes-Benz World Manufacturer Identifiers (first 3 VIN chars). This is a
+  // Mercedes-only tool (LI docs, XENTRY, datacards), and a real MB VIN/FIN always
+  // begins with one of these — so requiring a known WMI is the single strongest
+  // way to keep REAL vehicle numbers and reject look-alikes (engine numbers like
+  // 112600009311006RE, OCR'd prose, padded fields). Add a prefix here if a
+  // legitimate VIN is ever missed.
+  const MB_WMI = new Set([
+    "WDB", "WDD", "WDC", "W1K", "W1N",        // Germany — passenger / SUV
+    "WDF", "W1V", "W1W", "W1X", "W1Y",        // Germany — vans / commercial
+    "WD3", "WD4",                             // Sprinter / vans
+    "WMX", "WME",                             // AMG / Smart
+    "4JG", "55S",                             // USA (Alabama / Vance)
+    "8AC", "9BM", "MB1",                      // Argentina / Brazil / India
+  ]);
+
   // Reject 17-char strings that only LOOK like a VIN. Real VIN/FIN examples that
-  // MUST pass: W1KLF4HB1RA068698, W1KEG5DB0PF022748, W1K2140471A068698. Junk that
-  // MUST fail: FREEMAPUPDATES50A ("...free map updates 50A" glued by spaces) and
-  // OCR'd blank/zero-filled form fields like 000000000000000ER / 000000000000000FR.
+  // MUST pass: 4JGFB4GB9SB387878, W1KLF4HB1RA068698, W1K2140471A068698. Junk that
+  // MUST fail: FREEMAPUPDATES50A ("...free map updates 50A"), OCR'd blank fields
+  // 000000000000000ER, and engine numbers like 112600009311006RE.
   function looksLikeVin(v) {
-    if (v[0] === "0") return false;             // position 1 (WMI region) is never 0
+    if (!MB_WMI.has(v.slice(0, 3))) return false; // must start with a real MB WMI
     const digits = (v.match(/\d/g) || []).length;
     if (digits < 4) return false;               // a real VIN/FIN has a numeric serial
     if (17 - digits < 2) return false;          // ...but keeps its WMI letters too

@@ -139,11 +139,12 @@ File Vault
 │   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9]; tolerant of spaces/tabs BETWEEN
 │   │   characters (PDF/OCR text often splits a VIN, e.g. "W1KLF4HB1 RA068698")
 │   │   so split VINs are still found; OCR text retried with I→1 / O,Q→0; ≤25/file
-│   ├── Garbage rejection: a candidate must start with a real WMI region (never
-│   │   "0"), carry a numeric serial (≥4 digits), not spell a word (no 7+ letter
-│   │   run), and have ≥6 distinct chars — so space-joins like "…free map updates
-│   │   50A" → FREEMAPUPDATES50A and OCR'd blank fields like 000000000000000ER
-│   │   are thrown out
+│   ├── Only real VINs: a candidate must begin with a known Mercedes-Benz WMI
+│   │   (WDB/WDC/WDD/W1K/W1N/WDF/W1V/4JG/55S/… — extendable set), carry a numeric
+│   │   serial (≥4 digits), not spell a word (no 7+ letter run), and have ≥6
+│   │   distinct chars. This throws out engine numbers (112600009311006RE),
+│   │   OCR'd blank fields (000000000000000ER), and space-joins
+│   │   (FREEMAPUPDATES50A) while keeping every real MB VIN/FIN
 │   ├── VIN vs FIN: Mercedes datacards hold both the ISO VIN (labelled "VIN")
 │   │   and a Baumuster-based FIN/datacard number (e.g. W1K2140471A068698). The
 │   │   VIN drives grouping; the FIN is stored separately (record.fins), shown as
@@ -465,7 +466,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 12 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 13 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -480,6 +481,7 @@ Isolation guarantees worth knowing:
 | `e2e-vin-skip-video.mjs` | VIN scan skips videos: a seeded video is never scanned, its filename VIN isn't matched, and its detail-drawer Detect button is hidden |
 | `e2e-vin-recall.mjs` | VIN recall: space-split VINs recovered from text; OCR skipped when the PDF text layer already has a VIN, used as fallback when it doesn't |
 | `e2e-vin-datacard.mjs` | Real Mercedes datacard: VIN grouped as VIN, Baumuster FIN kept separate (searchable, own chip/field), FREEMAPUPDATES50A garbage rejected |
+| `e2e-vin-wmi.mjs` | WMI validation: real VIN (4JG…) tagged; a Mercedes engine number (112600009311006RE) and a non-MB VIN are rejected |
 | `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
 
 ---
