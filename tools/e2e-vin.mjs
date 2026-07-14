@@ -71,9 +71,12 @@ fs.writeFileSync(files.img, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAA
 const browser = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
 const ctx = await browser.newContext({ viewport: { width: 1200, height: 850 } });
 const page = await ctx.newPage();
-// Block the Tesseract CDN so the OCR path fails fast (simulates offline).
-await page.route("https://cdn.jsdelivr.net/**", (r) => r.abort());
-await page.route("https://tessdata.projectnaptha.com/**", (r) => r.abort());
+// HANG the Tesseract CDN (hold the request open, never respond) — the worst
+// case that used to wedge the scan forever. Short OCR timeouts keep the test
+// fast while still exercising the real give-up-and-move-on path.
+await page.addInitScript(() => { window.__VIN_OCR_LOAD_MS = 1500; window.__VIN_OCR_RECOGNIZE_MS = 1500; });
+await page.route("https://cdn.jsdelivr.net/**", () => { /* never fulfilled */ });
+await page.route("https://tessdata.projectnaptha.com/**", () => {});
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
@@ -94,10 +97,18 @@ await page.locator("#file-input").setInputFiles([files.content, files.name, file
 check(await waitFor(async () => (await page.locator("#results .card").count()) === 5), "all 5 fixture files are added");
 
 // --- Run the scan from the ⋮ menu ---
+// This is the regression guard: with OCR hung, the scan must still TERMINATE
+// (not wedge) within a few seconds and report the OCR-needing file.
+const scanStart = Date.now();
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
-check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "")), "scan reports completion");
-check(/1 skipped/.test(await toastText() || ""), "image needing OCR is reported as skipped while offline");
+check(await waitFor(async () => /VIN scan finished/.test(await toastText() || ""), 8000), "scan terminates (does not wedge) even with OCR hung");
+check(Date.now() - scanStart < 8000, `scan finished promptly instead of hanging (${((Date.now() - scanStart) / 1000).toFixed(1)}s)`);
+check(/1 need OCR/.test(await toastText() || ""), "image needing OCR is reported (unavailable, will retry)");
+// The app stays usable right after a hung-OCR scan.
+await page.locator("#results .card", { hasText: "no-vin-here" }).first().click();
+check(await waitFor(async () => !(await page.locator("#detail").isHidden())), "a file still opens right after a hung-OCR scan");
+await page.locator("#detail .detail__head [data-close]").click();
 
 // --- Sidebar: VIN list + By VIN count ---
 check(await waitFor(async () => !(await page.locator("#vins-section").isHidden())), "sidebar VINs section becomes visible");
@@ -145,8 +156,8 @@ check((await page.locator("#nav-vins .nav__item").count()) === 3, "all 3 VINs ar
 // --- A second scan only touches what's new (the OCR-skipped image) ---
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
-check(await waitFor(async () => /VIN scan finished|already been scanned/.test(await toastText() || "")), "second scan completes");
-check(/1 skipped|already been scanned/.test(await toastText() || ""), "second scan retries only the unscanned (OCR-pending) file");
+check(await waitFor(async () => /VIN scan finished|already been scanned/.test(await toastText() || ""), 8000), "second scan completes");
+check(/1 need OCR|already been scanned/.test(await toastText() || ""), "second scan retries only the unscanned (OCR-pending) file");
 
 // --- Stored records carry vins + vinScan ---
 const stored = await page.evaluate(() => new Promise((res) => {

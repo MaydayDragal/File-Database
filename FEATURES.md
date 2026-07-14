@@ -132,6 +132,11 @@ File Vault
 │   │       __TESS_* overrides as the LI app; first 3 pages rendered)
 │   ├── Matching: charset [A-HJ-NPR-Z0-9]{17}, must mix letters+digits;
 │   │   OCR text also retried with I→1 / O,Q→0 corrections
+│   ├── Never wedges: fast sources always run; OCR is time-boxed per file
+│   │   (load ≤15 s, recognize ≤45 s — window.__VIN_OCR_* override) and the
+│   │   scan is cancellable (Stop). If the OCR engine can't load (locked-down/
+│   │   offline machine) it's dropped for the rest of the run — those files
+│   │   are left unscanned to retry, not re-hung on one by one
 │   ├── Incremental: files are stamped vinScan when read, so re-runs only
 │   │   touch new files; OCR-needing files skipped offline stay unstamped
 │   ├── Stored per record (vins[]) without touching updatedAt; kept in
@@ -175,7 +180,7 @@ File Vault
     │   theme follows shell broadcasts; never writes fv-theme
     ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
     │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v3": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
+    └── SW cache "vault-app-v4": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
 ```
 
 **Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
@@ -365,7 +370,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | Scope | File | Cache | Strategy highlights |
 |---|---|---|---|
 | `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v3` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
+| `/vault/` | `vault/sw.js` | `vault-app-v4` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
 | `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
 | `/inventory/` | `inventory/sw.js` | `tool-inventory-v6` | `tools.json` network-first; part photos cached lazily |
 

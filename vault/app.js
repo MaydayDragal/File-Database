@@ -1393,6 +1393,26 @@
     if (w) { try { w.terminate(); } catch (e) {} }
   }
 
+  // OCR (network + recognition) is the only part of a scan that can stall.
+  // Every OCR wait goes through vinGuard so it can NEVER wedge the app: it
+  // resolves with the underlying promise, but rejects on its own after `ms`
+  // OR the moment a running scan is cancelled. The underlying worker keeps
+  // going in the background (tessDone() terminates it) — we just stop waiting.
+  const OCR_LOAD_MS = window.__VIN_OCR_LOAD_MS || 15000;       // cap for loading/creating the OCR engine
+  const OCR_RECOGNIZE_MS = window.__VIN_OCR_RECOGNIZE_MS || 45000;  // cap for recognizing one image / page
+  function vinGuard(promise, ms) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const settle = (fn, v) => { if (done) return; done = true; clearTimeout(to); clearInterval(iv); fn(v); };
+      const to = setTimeout(() => settle(reject, ocrErr("ocrSkip")), ms);
+      const iv = setInterval(() => { if (vinCancel) settle(reject, ocrErr("ocrCancel")); }, 120);
+      Promise.resolve(promise).then((v) => settle(resolve, v), (e) => settle(reject, e));
+    });
+  }
+  // Tagged OCR errors so the scan can react: unavailable (engine won't load →
+  // give up OCR for the rest of the run) vs skip (this one file) vs cancel.
+  function ocrErr(kind) { const e = new Error(kind); e[kind] = true; return e; }
+
   // Draw an image blob onto a bounded canvas so huge photos OCR quickly.
   function blobToCanvas(blob, maxSide) {
     return new Promise((resolve) => {
@@ -1414,9 +1434,11 @@
   }
 
   // Text of a PDF: the real text layer when it has one, OCR of the first
-  // pages otherwise. Broken/encrypted PDFs come back empty (filename-only);
-  // only an unavailable OCR engine throws, so the caller can retry later.
-  async function pdfVinText(blob) {
+  // pages otherwise. Broken/encrypted PDFs come back empty (filename-only, so
+  // they still count as scanned). When a scanned PDF needs OCR but `allowOcr`
+  // is false, or the engine won't load, it throws a tagged ocrErr so the
+  // caller leaves the file unscanned and retries it on a later (online) run.
+  async function pdfVinText(blob, allowOcr) {
     let doc = null;
     try {
       const lib = await ensurePdfjs();
@@ -1434,25 +1456,34 @@
         } catch (e) { /* unreadable page — keep going */ }
       }
       if (text.replace(/\s+/g, "").length >= 40) return { text, ocr: false };
-      // No real text layer — a scanned document. Render + OCR the first pages.
-      const w = await getTessWorker();
+      // No real text layer — a scanned document. OCR is needed.
+      if (!allowOcr) throw ocrErr("ocrUnavailable");
+      let w;
+      try { w = await vinGuard(getTessWorker(), OCR_LOAD_MS); }
+      catch (e) { throw ocrErr("ocrUnavailable"); } // engine won't load — stop OCR for this run
       let out = "";
       const oPages = Math.min(doc.numPages, 3);
       for (let i = 1; i <= oPages; i++) {
+        let canvas = null;
         try {
           const page = await doc.getPage(i);
           const unit = page.getViewport({ scale: 1 });
           const scale = Math.min(3, 1800 / Math.max(unit.width, 1));
           const vp = page.getViewport({ scale });
-          const canvas = document.createElement("canvas");
+          canvas = document.createElement("canvas");
           canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
           const ctx = canvas.getContext("2d");
           ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
           await page.render({ canvasContext: ctx, viewport: vp }).promise;
-          const r = await w.recognize(canvas);
+        } catch (e) { if (canvas) canvas.width = canvas.height = 0; continue; } // bad page render — skip it
+        try {
+          const r = await vinGuard(w.recognize(canvas), OCR_RECOGNIZE_MS);
           out += ((r.data && r.data.text) || "") + "\n";
-          canvas.width = canvas.height = 0; // release the big canvas promptly
-        } catch (e) { /* one bad page — keep going */ }
+        } catch (e) {
+          canvas.width = canvas.height = 0;
+          throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrSkip"); // OCR stalled — leave this file for later
+        }
+        canvas.width = canvas.height = 0; // release the big canvas promptly
       }
       return { text: text + "\n" + out, ocr: true };
     } finally {
@@ -1462,20 +1493,28 @@
 
   // Gather everything worth searching for a VIN in one record. `fuzzy` marks
   // OCR-derived text so findVins() also tries the I/O/Q-corrected reading.
-  async function extractVinText(rec) {
+  // `allowOcr` gates the (slow, network-backed) OCR path for images and
+  // scanned PDFs; when OCR is needed but unavailable this throws a tagged
+  // ocrErr so the scan can skip the file and retry it later.
+  async function extractVinText(rec, allowOcr) {
     let text = rec.name || "", fuzzy = false;
     const nameLc = text.toLowerCase();
     if (rec.kind === "pdf") {
-      const r = await pdfVinText(rec.blob);
+      const r = await pdfVinText(rec.blob, allowOcr);
       text += "\n" + r.text;
       fuzzy = r.ocr;
     } else if (rec.kind === "image") {
-      const w = await getTessWorker(); // throws when offline — caller retries later
+      if (!allowOcr) throw ocrErr("ocrUnavailable");
+      let w;
+      try { w = await vinGuard(getTessWorker(), OCR_LOAD_MS); }
+      catch (e) { throw ocrErr("ocrUnavailable"); } // engine won't load — stop OCR for this run
       try {
         const cv = await blobToCanvas(rec.blob, 2200);
-        const r = await w.recognize(cv || rec.blob);
+        const r = await vinGuard(w.recognize(cv || rec.blob), OCR_RECOGNIZE_MS);
         text += "\n" + ((r.data && r.data.text) || "");
-      } catch (e) { /* unreadable image — filename-only */ }
+      } catch (e) {
+        throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrSkip"); // OCR stalled — leave this file for later
+      }
       fuzzy = true;
     } else if (rec.kind === "text" || /\.(csv|rtf)$/.test(nameLc)) {
       try { text += "\n" + (await rec.blob.slice(0, VIN_TEXT_MAX).text()); } catch (e) {}
@@ -1484,7 +1523,13 @@
   }
 
   // Scan the whole vault (new/unscanned files only; force = everything).
-  let vinScanning = false, vinCancel = false;
+  // The scan is fully interruptible and can never wedge: the fast sources
+  // (filename, text/CSV, PDF text layer) always run, and OCR — the only part
+  // that can stall — is time-boxed per file. If OCR proves unavailable (the
+  // engine can't load, e.g. a locked-down/offline machine), it's dropped for
+  // the rest of the run and those files are left unscanned to retry later,
+  // instead of hanging on every one.
+  let vinScanning = false, vinCancel = false, ocrGaveUp = false;
   async function scanVins(force) {
     if (vinScanning) { toast("A VIN scan is already running…"); return; }
     const todo = items.filter((it) => force || !it.vinScan);
@@ -1492,8 +1537,8 @@
       toast("Every file has already been scanned for VINs. Shift-click the menu item to rescan everything.");
       return;
     }
-    vinScanning = true; vinCancel = false;
-    let found = 0, done = 0, skipped = 0;
+    vinScanning = true; vinCancel = false; ocrGaveUp = false;
+    let found = 0, done = 0, needOcr = 0, failed = 0;
     try {
       for (const it of todo) {
         if (vinCancel) break;
@@ -1504,13 +1549,13 @@
         if (!rec || !rec.blob) continue;
         let vins;
         try {
-          const r = await extractVinText(rec);
+          const r = await extractVinText(rec, !ocrGaveUp);
           vins = findVins(r.text, r.fuzzy);
         } catch (e) {
-          // Usually the OCR engine couldn't load (needs internet once) —
-          // leave the file unscanned so the next run retries it.
-          skipped++;
-          continue;
+          if (e && e.ocrCancel) continue;                 // Stop pressed mid-OCR — bail on next loop check
+          if (e && e.ocrUnavailable) { ocrGaveUp = true; needOcr++; continue; } // engine down: skip OCR from here on
+          if (e && e.ocrSkip) { needOcr++; continue; }    // this file's OCR stalled — retry later
+          failed++; continue;                             // anything else — leave unscanned
         }
         rec.vins = vins;
         rec.vinScan = Date.now();
@@ -1518,15 +1563,17 @@
         try { await DB.put(rec); } catch (e) { continue; } // put, not update: preserves updatedAt
         it.vins = vins; it.vinScan = rec.vinScan;
         if (vins.length) found++;
-        await new Promise((r) => setTimeout(r, 10)); // breathe between files
+        await new Promise((r) => setTimeout(r, 0)); // yield to the UI between files
       }
     } finally {
       vinScanning = false;
       tessDone();
     }
     render();
-    toast(`VIN scan ${vinCancel ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN` +
-      (skipped ? ` (${skipped} skipped: OCR needs internet once)` : "") + ".");
+    let msg = `VIN scan ${vinCancel ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN`;
+    if (needOcr) msg += ` · ${needOcr} need OCR (unavailable now — reconnect and scan again)`;
+    if (failed) msg += ` · ${failed} unreadable`;
+    toast(msg + ".");
   }
 
   // Detail-drawer "Detect" button: scan just the open file and fill the field.
@@ -1538,13 +1585,15 @@
     const btn = $("#d-scan-vin");
     btn.disabled = true; btn.textContent = "Scanning…";
     try {
-      const r = await extractVinText(rec);
+      const r = await extractVinText(rec, true);
       const vins = findVins(r.text, r.fuzzy);
       const existing = $("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
       $("#d-vin").value = Array.from(new Set(existing.concat(vins))).join(", ");
       toast(vins.length ? `Found ${vins.length} VIN${vins.length > 1 ? "s" : ""} — Save to keep.` : "No VIN found in this file.");
     } catch (e) {
-      toast("Couldn't read this file — OCR needs internet the first time.");
+      toast((e && (e.ocrUnavailable || e.ocrSkip || e.ocrCancel))
+        ? "Couldn't run OCR on this file — it needs an internet connection the first time."
+        : "Couldn't read this file.");
     } finally {
       btn.disabled = false; btn.textContent = "Detect";
       if (!vinScanning) tessDone();
