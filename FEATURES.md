@@ -130,10 +130,12 @@ File Vault
 │   │   ├── Filenames + text/CSV/RTF files → read directly (first 1 MB)
 │   │   ├── PDFs → text layer via the vendored pdf.js (first 10 pages)
 │   │   └── OCR (Tesseract.js, lazy CDN — same __TESS_* overrides as LI) is a
-│   │       FALLBACK: used only when a PDF has no text layer, or its text/
-│   │       filename yields no VIN (the VIN may sit in a scanned image/stamp),
-│   │       and always for images. A text PDF whose VIN is searchable is never
-│   │       OCR'd.
+│   │       FALLBACK: used only when a page is SPARSE/scanned (little/no text)
+│   │       and its text/filename yields no VIN (the VIN may sit in an image),
+│   │       and always for images. A PDF with a rich text layer (≥400 chars) and
+│   │       no VIN is taken at its word — NOT OCR'd — so datasheets/manuals can't
+│   │       have VIN-shaped noise fabricated from their prose. Fuzzy I→1/O→0 OCR
+│   │       correction only touches runs that already hold ≥2 real digits.
 │   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9]; tolerant of spaces/tabs BETWEEN
 │   │   characters (PDF/OCR text often splits a VIN, e.g. "W1KLF4HB1 RA068698")
 │   │   so split VINs are still found; OCR text retried with I→1 / O,Q→0; ≤25/file

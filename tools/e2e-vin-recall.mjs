@@ -32,9 +32,17 @@ const VIN_SPLIT = "W1KLF4HB1RA068698";  // appears space-split in a text file
 const VIN_PDFTEXT = "WDC1660241A555777"; // in a PDF text layer (should skip OCR)
 const VIN_OCR = "WDB2030461A654321";     // only OCR (fake engine) provides this
 
-// Build a 1-page PDF whose text layer is exactly `body`.
+// Build a 1-page PDF whose text layer is `body`. If `body` contains "\n" it is
+// laid out over multiple positioned lines so pdf.js extracts every character
+// (a single very long line gets clipped/under-extracted in this minimal PDF).
 function buildPdf(body) {
-  const stream = `BT /F1 10 Tf 40 150 Td (${body}) Tj ET`;
+  let inner;
+  if (body.includes("\n")) {
+    inner = body.split("\n").map((ln, i) => `1 0 0 1 30 ${230 - i * 16} Tm (${ln}) Tj`).join(" ");
+  } else {
+    inner = `40 150 Td (${body}) Tj`;
+  }
+  const stream = `BT /F1 10 Tf ${inner} ET`;
   const objs = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -55,9 +63,24 @@ fs.mkdirSync(fixDir, { recursive: true });
 const fSplit = path.join(fixDir, "recall-split.txt");
 const fHasVin = path.join(fixDir, "recall-hasvin.pdf");
 const fNoVin = path.join(fixDir, "recall-novin.pdf");
+const fRich = path.join(fixDir, "recall-richnovin.pdf");
 fs.writeFileSync(fSplit, `Repair order. Vehicle W1K LF4HB1 RA068698 booked in for service today.\n`);
 fs.writeFileSync(fHasVin, buildPdf(`Delivery note - vehicle identification number ${VIN_PDFTEXT} on file.`));
 fs.writeFileSync(fNoVin, buildPdf("This paperwork lists absolutely no vehicle numbers in its text at all."));
+// A datasheet-style PDF: a RICH text layer (>=400 chars) with NO VIN. It must
+// NOT be OCR'd (OCR of prose only manufactures VIN-shaped noise like
+// "DRIVE APPLICATIONS" -> DR1VEAPPL1CAT10NS).
+fs.writeFileSync(fRich, buildPdf([
+  "Power MOSFET datasheet - Strong FET Power MOSFET device",
+  "Drive applications without limitation of the product",
+  "Notes on repetitive current rising from zero to eighty",
+  "Continuous source of compliance with its stated ratings",
+  "Product of Infineon - application note and conditions",
+  "Half bridge and full bridge topologies are supported",
+  "Synchronous rectifier applications and resonant mode",
+  "Absolute maximum ratings and thermal resistance data",
+  "Gate charge total and junction to case measurements",
+].join("\n")));
 
 const browser = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
 const ctx = await browser.newContext({ viewport: { width: 1150, height: 820 } });
@@ -83,8 +106,8 @@ await page.addInitScript((vinOcr) => {
 
 await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
-await page.locator("#file-input").setInputFiles([fSplit, fHasVin, fNoVin]);
-check(await waitFor(async () => (await page.locator("#results .card").count()) === 3), "3 fixtures imported");
+await page.locator("#file-input").setInputFiles([fSplit, fHasVin, fNoVin, fRich]);
+check(await waitFor(async () => (await page.locator("#results .card").count()) === 4), "4 fixtures imported");
 
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
@@ -99,10 +122,11 @@ const vinsOf = (frag) => (vinList.find((x) => x.name.includes(frag)) || { vins: 
 
 check(vinsOf("recall-split").includes(VIN_SPLIT), `space-split VIN recovered from text (${VIN_SPLIT})`);
 check(vinsOf("recall-hasvin").includes(VIN_PDFTEXT), `PDF text-layer VIN detected (${VIN_PDFTEXT})`);
-check(vinsOf("recall-novin").includes(VIN_OCR), `no-VIN PDF fell back to OCR and found ${VIN_OCR}`);
+check(vinsOf("recall-novin").includes(VIN_OCR), `sparse no-VIN PDF fell back to OCR and found ${VIN_OCR}`);
+check(vinsOf("recall-richnovin").length === 0, "rich-text no-VIN datasheet yields NO VIN (not OCR-fabricated)");
 
 const ocrCalls = await page.evaluate(() => window.__ocrCalls);
-check(ocrCalls === 1, `OCR ran ONLY for the no-VIN PDF, not the text-VIN one (recognize calls = ${ocrCalls})`);
+check(ocrCalls === 1, `OCR ran ONLY for the sparse no-VIN PDF — not the text-VIN one nor the rich datasheet (recognize calls = ${ocrCalls})`);
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|Warning|Failed to load resource/i.test(e));
 console.log(realErrors.length ? "\nConsole errors:\n" + realErrors.join("\n") : "\nNo unexpected console errors.");

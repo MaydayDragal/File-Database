@@ -1347,6 +1347,8 @@
   // from a CDN exactly like the LI app (overridable via window.__TESS_*).
   const VIN_TEXT_MAX = 1024 * 1024; // read at most 1 MB of a text file
   const VIN_MAX_PER_FILE = 25;      // a datacard can reference several vehicles
+  const VIN_RICH_TEXT = 400;        // a PDF text layer this size is a real document,
+                                    // not a scan — no VIN in it means there is no VIN
 
   // A VIN is 17 chars from [A-HJ-NPR-Z0-9] (I, O and Q are never used). PDF and
   // OCR text extraction very often SPLITS a VIN with spaces (e.g. the datacard
@@ -1398,10 +1400,15 @@
     const up = text.toUpperCase();
     consider(up);
     if (fuzzy) {
-      // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN,
-      // so normalizing them inside candidate runs recovers the real number.
+      // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN, so
+      // normalizing them inside candidate runs recovers the real number — BUT a
+      // real VIN keeps genuine serial digits that OCR reads correctly, so only
+      // correct runs that already hold >=2 real digits. This stops OCR'd prose
+      // ("WITHOUT LIMITATION" -> W1TH0UTL1M1TAT10N) from being fabricated into a VIN.
       const runRe = new RegExp("(?<![A-Z0-9])[A-Z0-9](?:" + VIN_SEP + "[A-Z0-9]){16}(?![A-Z0-9])", "g");
-      consider(up.replace(runRe, (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
+      consider(up.replace(runRe, (run) =>
+        (run.match(/[0-9]/g) || []).length < 2 ? run
+          : run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
     }
     const vins = [], fins = [];
     const hasVin = Array.from(seen.values()).includes("vin");
@@ -1521,15 +1528,18 @@
           text += "\n";
         } catch (e) { /* unreadable page — keep going */ }
       }
-      const hasText = text.replace(/\s+/g, "").length >= 40;
+      const plain = text.replace(/\s+/g, "");
       // The searchable text (or filename) already exposes a VIN — trust it, no OCR.
       if (findVins((baseText || "") + "\n" + text, false).length) return { text, ocr: false };
-      // No VIN from the easy text. OCR is the fallback — the VIN may be inside a
-      // scanned image. But if OCR is unavailable: a PDF that DID have a text
-      // layer still counts as scanned (we did the easy search); only a truly
-      // text-less PDF is left to retry OCR later.
+      // A rich text layer with NO VIN means the document genuinely has none — do
+      // NOT OCR it. OCR of ordinary prose only manufactures VIN-shaped noise
+      // (e.g. a datasheet's "DRIVE APPLICATIONS" → "DR1VEAPPL1CAT10NS"). OCR is
+      // reserved for SPARSE / scanned pages, where a VIN can hide inside an image.
+      if (plain.length >= VIN_RICH_TEXT) return { text, ocr: false };
+      // Sparse text and OCR unavailable: a page that had SOME text still counts
+      // as scanned; a truly text-less page is left to retry OCR later.
       if (!allowOcr) {
-        if (hasText) return { text, ocr: false };
+        if (plain.length >= 40) return { text, ocr: false };
         throw ocrErr("ocrUnavailable");
       }
       let w;
