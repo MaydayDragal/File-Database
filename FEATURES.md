@@ -126,12 +126,18 @@ File Vault
 │   └── Detail drawer edits: name/collection/tags/VIN/note → Save
 ├── VIN grouping (⋮ → "Scan files for VINs" / sidebar ↻; Shift-click = full rescan)
 │   ├── Reads every file for 17-char Vehicle Identification Numbers
+│   │   (videos are skipped — no readable VIN, and their blobs are large)
 │   │   ├── Filenames + text/CSV/RTF files → read directly (first 1 MB)
 │   │   ├── PDFs → text layer via the vendored pdf.js (first 10 pages)
-│   │   └── Images & scanned PDFs → OCR (Tesseract.js, lazy CDN — same
-│   │       __TESS_* overrides as the LI app; first 3 pages rendered)
-│   ├── Matching: charset [A-HJ-NPR-Z0-9]{17}, must mix letters+digits;
-│   │   OCR text also retried with I→1 / O,Q→0 corrections
+│   │   └── OCR (Tesseract.js, lazy CDN — same __TESS_* overrides as LI) is a
+│   │       FALLBACK: used only when a PDF has no text layer, or its text/
+│   │       filename yields no VIN (the VIN may sit in a scanned image/stamp),
+│   │       and always for images. A text PDF whose VIN is searchable is never
+│   │       OCR'd.
+│   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9], must mix letters+digits;
+│   │   tolerant of spaces/tabs BETWEEN characters (PDF/OCR text often splits a
+│   │   VIN, e.g. "W1KLF4HB1 RA068698") so split VINs are still found; OCR text
+│   │   also retried with I→1 / O,Q→0 corrections; ≤25 VINs per file
 │   ├── Multi-core: files run across up to POOL_MAX lanes (cores−1, capped 4;
 │   │   window.__VIN_OCR_WORKERS override), so several images/scanned PDFs OCR
 │   │   in parallel on separate Tesseract workers. (WASM/CPU — no browser GPU
@@ -185,7 +191,7 @@ File Vault
     │   theme follows shell broadcasts; never writes fv-theme
     ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
     │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v6": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
+    └── SW cache "vault-app-v7": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
 ```
 
 **Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
@@ -375,7 +381,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | Scope | File | Cache | Strategy highlights |
 |---|---|---|---|
 | `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v6` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
+| `/vault/` | `vault/sw.js` | `vault-app-v7` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
 | `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
 | `/inventory/` | `inventory/sw.js` | `tool-inventory-v6` | `tools.json` network-first; part photos cached lazily |
 
@@ -446,7 +452,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 9 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 11 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -458,6 +464,8 @@ Isolation guarantees worth knowing:
 | `e2e-pdfthumb.mjs` | PDF thumbnails: import-time render, IndexedDB persistence, background backfill after reload |
 | `e2e-vin.mjs` | VIN scan & grouping: content/filename/PDF-text detection, By-VIN grouped view, vin: filter, sidebar list, search, detail field, persistence, incremental re-scan + offline OCR skip |
 | `e2e-vin-parallel.mjs` | VIN scan runs OCR in parallel: a fake engine records peak concurrency = worker-pool size (multi-core), finishing in waves not serially |
+| `e2e-vin-skip-video.mjs` | VIN scan skips videos: a seeded video is never scanned, its filename VIN isn't matched, and its detail-drawer Detect button is hidden |
+| `e2e-vin-recall.mjs` | VIN recall: space-split VINs recovered from text; OCR skipped when the PDF text layer already has a VIN, used as fallback when it doesn't |
 | `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
 
 ---

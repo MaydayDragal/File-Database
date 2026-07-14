@@ -59,6 +59,9 @@
 }
 
 * { box-sizing: border-box; }
+/* The `hidden` attribute must always win — otherwise a display rule from a
+   class (e.g. .btn) overrides it and JS-toggled elements never actually hide. */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;

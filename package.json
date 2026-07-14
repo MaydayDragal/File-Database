@@ -7,7 +7,7 @@
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs && node tools/e2e-sync.mjs && node tools/e2e-pdfthumb.mjs && node tools/e2e-vin.mjs && node tools/e2e-vin-parallel.mjs && node tools/e2e-debug.mjs",
+    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs && node tools/e2e-sync.mjs && node tools/e2e-pdfthumb.mjs && node tools/e2e-vin.mjs && node tools/e2e-vin-parallel.mjs && node tools/e2e-vin-skip-video.mjs && node tools/e2e-vin-recall.mjs && node tools/e2e-debug.mjs",
     "test:vault": "node tools/e2e.mjs",
     "test:merge": "node tools/e2e-merge.mjs",
     "test:inventory": "node tools/e2e-inventory.mjs",
@@ -16,6 +16,8 @@
     "test:pdfthumb": "node tools/e2e-pdfthumb.mjs",
     "test:vin": "node tools/e2e-vin.mjs",
     "test:vin-parallel": "node tools/e2e-vin-parallel.mjs",
+    "test:vin-skip-video": "node tools/e2e-vin-skip-video.mjs",
+    "test:vin-recall": "node tools/e2e-vin-recall.mjs",
     "test:debug": "node tools/e2e-debug.mjs"
   },
   "repository": {

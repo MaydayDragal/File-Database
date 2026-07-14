@@ -681,6 +681,8 @@
     $("#d-send-li").hidden = !(rec.kind === "pdf" && window.VaultBridge);
     // "Send to Toolbox" only when a Toolbox tool exists for this file.
     $("#d-send-toolbox").hidden = !(window.VaultBridge && toolboxTabFor(rec));
+    // No VIN "Detect" for videos — the scan skips them too.
+    $("#d-scan-vin").hidden = !!VIN_SKIP_KIND[rec.kind];
 
     await renderPreview(rec, meta);
 
@@ -1327,18 +1329,24 @@
   // scanned (no-text-layer) PDFs through OCR — Tesseract.js, lazily loaded
   // from a CDN exactly like the LI app (overridable via window.__TESS_*).
   const VIN_TEXT_MAX = 1024 * 1024; // read at most 1 MB of a text file
-  const VIN_MAX_PER_FILE = 8;
+  const VIN_MAX_PER_FILE = 25;      // a datacard can reference several vehicles
 
-  // A VIN is 17 chars from [A-HJ-NPR-Z0-9] (I, O and Q are never used). The
-  // lookarounds stop matches inside longer alphanumeric runs (hashes, IDs).
+  // A VIN is 17 chars from [A-HJ-NPR-Z0-9] (I, O and Q are never used). PDF and
+  // OCR text extraction very often SPLITS a VIN with spaces (e.g. the datacard
+  // text comes out "W1KLF4HB1 RA068698", or even one character per cell), so we
+  // tolerate up to a couple of spaces/tabs between characters and strip them
+  // from the match. The outer lookarounds still require the whole run to be
+  // bounded by non-letters/digits, so it can't be a slice of a longer code.
+  const VIN_SEP = "[ \\t\\u00A0]{0,2}";
   function findVins(text, fuzzy) {
     const out = new Set();
     if (!text) return [];
     const scan = (t) => {
-      const re = /(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])/g;
+      const re = new RegExp("(?<![A-Z0-9])[A-HJ-NPR-Z0-9](?:" + VIN_SEP + "[A-HJ-NPR-Z0-9]){16}(?![A-Z0-9])", "g");
       let m;
       while ((m = re.exec(t)) && out.size < VIN_MAX_PER_FILE) {
-        const v = m[0];
+        const v = m[0].replace(/[ \t\u00A0]/g, "");
+        if (v.length !== 17) continue;
         const digits = (v.match(/\d/g) || []).length;
         // Real VINs mix letters and digits — this rejects 17-letter words
         // and bare 17-digit numbers.
@@ -1350,8 +1358,8 @@
     if (fuzzy) {
       // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN,
       // so normalizing them inside candidate runs recovers the real number.
-      scan(up.replace(/(?<![A-Z0-9])[A-Z0-9]{17}(?![A-Z0-9])/g,
-        (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
+      const runRe = new RegExp("(?<![A-Z0-9])[A-Z0-9](?:" + VIN_SEP + "[A-Z0-9]){16}(?![A-Z0-9])", "g");
+      scan(up.replace(runRe, (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
     }
     return Array.from(out);
   }
@@ -1439,12 +1447,14 @@
     });
   }
 
-  // Text of a PDF: the real text layer when it has one, OCR of the first
-  // pages otherwise. Broken/encrypted PDFs come back empty (filename-only, so
-  // they still count as scanned). When a scanned PDF needs OCR but `allowOcr`
-  // is false, or the engine won't load, it throws a tagged ocrErr so the
-  // caller leaves the file unscanned and retries it on a later (online) run.
-  async function pdfVinText(blob, allowOcr, getWorker) {
+  // Text of a PDF for VIN detection. The real text layer is used first — if it
+  // (or the filename, `baseText`) already yields a VIN, that's it, NO OCR. OCR
+  // is a fallback used only when the easy text has no VIN (it may sit inside a
+  // scanned image/stamp) or there's no text layer at all. Broken/encrypted PDFs
+  // come back empty (filename-only, still counted as scanned). When OCR is
+  // needed but `allowOcr` is false or the engine won't load, it throws a tagged
+  // ocrErr so the caller can leave the file to retry on a later (online) run.
+  async function pdfVinText(blob, allowOcr, getWorker, baseText) {
     let doc = null;
     try {
       const lib = await ensurePdfjs();
@@ -1461,9 +1471,17 @@
           text += "\n";
         } catch (e) { /* unreadable page — keep going */ }
       }
-      if (text.replace(/\s+/g, "").length >= 40) return { text, ocr: false };
-      // No real text layer — a scanned document. OCR is needed.
-      if (!allowOcr) throw ocrErr("ocrUnavailable");
+      const hasText = text.replace(/\s+/g, "").length >= 40;
+      // The searchable text (or filename) already exposes a VIN — trust it, no OCR.
+      if (findVins((baseText || "") + "\n" + text, false).length) return { text, ocr: false };
+      // No VIN from the easy text. OCR is the fallback — the VIN may be inside a
+      // scanned image. But if OCR is unavailable: a PDF that DID have a text
+      // layer still counts as scanned (we did the easy search); only a truly
+      // text-less PDF is left to retry OCR later.
+      if (!allowOcr) {
+        if (hasText) return { text, ocr: false };
+        throw ocrErr("ocrUnavailable");
+      }
       let w;
       try { w = await getWorker(); }
       catch (e) { throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrUnavailable"); } // engine won't load — stop OCR for this run
@@ -1506,7 +1524,7 @@
     let text = rec.name || "", fuzzy = false;
     const nameLc = text.toLowerCase();
     if (rec.kind === "pdf") {
-      const r = await pdfVinText(rec.blob, allowOcr, getWorker);
+      const r = await pdfVinText(rec.blob, allowOcr, getWorker, rec.name || "");
       text += "\n" + r.text;
       fuzzy = r.ocr;
     } else if (rec.kind === "image") {
@@ -1538,9 +1556,13 @@
   // it's dropped for the rest of the run and those files are left unscanned to
   // retry later, instead of hanging on every one.
   let vinScanning = false, vinCancel = false, ocrGaveUp = false;
+  // Kinds a VIN scan never touches — no readable VIN to extract (there's no
+  // video-frame OCR here), and loading a big video blob just to skip it is
+  // pure waste. Everything else (images, PDFs, text/CSV, filenames) is scanned.
+  const VIN_SKIP_KIND = { video: true };
   async function scanVins(force) {
     if (vinScanning) { toast("A VIN scan is already running…"); return; }
-    const todo = items.filter((it) => force || !it.vinScan);
+    const todo = items.filter((it) => !VIN_SKIP_KIND[it.kind] && (force || !it.vinScan));
     if (!todo.length) {
       toast("Every file has already been scanned for VINs. Shift-click the menu item to rescan everything.");
       return;
