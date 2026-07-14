@@ -104,6 +104,8 @@
             updatedAt: v.updatedAt,
             thumb: v.thumb || null, // small Blob or null
             srcMtime: v.srcMtime,   // folder-sync source mtime (if imported by sync)
+            vins: v.vins || [],     // VINs detected in the file (VIN scan)
+            vinScan: v.vinScan || 0,// when the file was last scanned for VINs (0 = never)
           });
           cur.continue();
         };
@@ -122,7 +124,7 @@
     },
 
     buildSearchText(r) {
-      return [r.name, r.collection, r.note, (r.tags || []).join(" ")]
+      return [r.name, r.collection, r.note, (r.tags || []).join(" "), (r.vins || []).join(" ")]
         .join(" ")
         .toLowerCase();
     },

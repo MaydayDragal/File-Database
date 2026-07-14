@@ -123,10 +123,25 @@ File Vault
 │   ├── Tags (any number per file; tag cloud in sidebar; click = filter)
 │   ├── Notes (free text per file)
 │   ├── ★ Star (card, row, and detail toggles; "Starred" smart filter)
-│   └── Detail drawer edits: name/collection/tags/note → Save
+│   └── Detail drawer edits: name/collection/tags/VIN/note → Save
+├── VIN grouping (⋮ → "Scan files for VINs" / sidebar ↻; Shift-click = full rescan)
+│   ├── Reads every file for 17-char Vehicle Identification Numbers
+│   │   ├── Filenames + text/CSV/RTF files → read directly (first 1 MB)
+│   │   ├── PDFs → text layer via the vendored pdf.js (first 10 pages)
+│   │   └── Images & scanned PDFs → OCR (Tesseract.js, lazy CDN — same
+│   │       __TESS_* overrides as the LI app; first 3 pages rendered)
+│   ├── Matching: charset [A-HJ-NPR-Z0-9]{17}, must mix letters+digits;
+│   │   OCR text also retried with I→1 / O,Q→0 corrections
+│   ├── Incremental: files are stamped vinScan when read, so re-runs only
+│   │   touch new files; OCR-needing files skipped offline stay unstamped
+│   ├── Stored per record (vins[]) without touching updatedAt; kept in
+│   │   backups (.fvault) and shown as 🚗 chips on cards/rows
+│   ├── 🚗 "By VIN" smart view — results grouped under one header per VIN
+│   │   (header click = filter to that vehicle) + sidebar VIN list w/ counts
+│   └── Detail drawer: editable VIN field + per-file "Detect" button
 ├── Finding
-│   ├── Live search ("/" focuses) across name + tags + notes + collection
-│   ├── Filters: All · Starred · Recent (40 newest) · kind:x · collection:x · tag:x
+│   ├── Live search ("/" focuses) across name + tags + notes + collection + VINs
+│   ├── Filters: All · Starred · Recent (40 newest) · By VIN · kind:x · collection:x · tag:x · vin:x
 │   │   └── Active-filter chips with one-click removal
 │   ├── Sort: Newest · Oldest · Name A→Z/Z→A · Largest · Smallest
 │   └── Views: grid (g) / list (l) — choice persisted in DB meta "view"
@@ -160,12 +175,13 @@ File Vault
     │   theme follows shell broadcasts; never writes fv-theme
     ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
     │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v1": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
+    └── SW cache "vault-app-v2": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
 ```
 
 **Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
 platform-theme in, badge peeked), LI (receives its renamed PDFs; feeds it raw PDFs),
-Toolbox (feeds it files; receives its outputs), File System Access (folder sync).
+Toolbox (feeds it files; receives its outputs), File System Access (folder sync),
+CDN (VIN-scan OCR only).
 
 ---
 
@@ -179,8 +195,8 @@ LI Documents
 │   ├── ＋ Import PDFs (files or a whole folder) · drag & drop · bridge (from vault)
 │   ├── Reads each PDF's text (inlined pdf.js) and extracts:
 │   │   LI number · version · title · reason for change · function group · date · validity
-│   ├── Scanned PDFs → automatic OCR fallback (Tesseract.js, lazy CDN load — the platform's
-│   │   only online feature; overridable via window.__TESS_* globals)
+│   ├── Scanned PDFs → automatic OCR fallback (Tesseract.js, lazy CDN load — online-only,
+│   │   like the vault's and Toolbox's OCR; overridable via window.__TESS_* globals)
 │   ├── Model series derived from Validity (drives the model filter + vault tags)
 │   ├── Dedup by content identity (LI+version) — re-imports update, never duplicate
 │   └── ↻ Re-read all: re-runs the parser over every stored PDF, preserving hand edits
@@ -348,7 +364,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | Scope | File | Cache | Strategy highlights |
 |---|---|---|---|
 | `/` | `sw.js` | `platform-shell-v1` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v1` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
+| `/vault/` | `vault/sw.js` | `vault-app-v2` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
 | `/li/` | `li/sw.js` | `li-db-shell-v1` + runtime | Nav network-first; Tesseract CDN cache-first |
 | `/inventory/` | `inventory/sw.js` | `tool-inventory-v5` | `tools.json` network-first; part photos cached lazily |
 
@@ -395,7 +411,7 @@ Everything functional stays. Standalone keeps 100 % of the chrome.
 | Component | bridge.js | shell messages | fv-theme | File System Access | Other apps' DBs | CDN |
 |---|---|---|---|---|---|---|
 | Shell | cached only | hub (all) | **owner** (embedded) | — | reads 3 (badges) | — |
-| Vault | send li/toolbox · receive vault | shell-nav out · theme in | owner (standalone) | sync folder | — | — |
+| Vault | send li/toolbox · receive vault | shell-nav out · theme in | owner (standalone) | sync folder | — | Tesseract (VIN OCR) |
 | LI | send vault · receive li | vault-nav/li-changed out · theme in | reads | sync folder · auto-save file | — | Tesseract (OCR) |
 | Inventory | — | theme in | reads | — | — | — |
 | Toolbox | send vault · receive toolbox | toolbox-open/theme in | reads | zip-to-folder picker | — | Tesseract (OCR) |
@@ -407,7 +423,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 6 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 7 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -417,6 +433,7 @@ Isolation guarantees worth knowing:
 | `e2e-shell.mjs` | Tabs/panels/lazy loading, theme broadcast to all frames, deep links (#toolbox/pdf, #files), legacy queries, badges, toolbox→vault save |
 | `e2e-sync.mjs` | Folder sync with a mocked directory picker: link/import/dedup/changed-file re-import/auto-sync timer + persistence |
 | `e2e-pdfthumb.mjs` | PDF thumbnails: import-time render, IndexedDB persistence, background backfill after reload |
+| `e2e-vin.mjs` | VIN scan & grouping: content/filename/PDF-text detection, By-VIN grouped view, vin: filter, sidebar list, search, detail field, persistence, incremental re-scan + offline OCR skip |
 
 ---
 

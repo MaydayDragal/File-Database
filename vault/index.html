@@ -61,6 +61,8 @@
           <div class="menu__sep"></div>
           <button data-action="new-collection" role="menuitem">New collection…</button>
           <div class="menu__sep"></div>
+          <button data-action="scan-vins" role="menuitem" title="Read every file for a 17-character vehicle identification number — OCR is used for images and scanned PDFs. Shift-click to rescan everything.">Scan files for VINs…</button>
+          <div class="menu__sep"></div>
           <button data-action="sync-folder" id="sync-action" role="menuitem">Sync a folder…</button>
           <button data-action="auto-sync" id="autosync-action" role="menuitem">Auto-sync: off</button>
           <div class="menu__sep"></div>
@@ -84,6 +86,9 @@
         <button class="nav__item" data-filter="recent">
           <span class="nav__icon">🕑</span> Recent <span class="nav__count" data-count="recent"></span>
         </button>
+        <button class="nav__item" data-filter="vins" title="Group files by the vehicle identification number found inside them">
+          <span class="nav__icon">🚗</span> By VIN <span class="nav__count" data-count="vins"></span>
+        </button>
       </nav>
 
       <div class="nav__section">
@@ -97,6 +102,14 @@
           <button id="add-collection" class="nav__add" title="New collection" aria-label="New collection">+</button>
         </div>
         <nav id="nav-collections" class="nav"></nav>
+      </div>
+
+      <div class="nav__section" id="vins-section" hidden>
+        <div class="nav__label">
+          VINs
+          <button id="scan-vins-side" class="nav__add" title="Scan new files for VINs (Shift-click: rescan everything)" aria-label="Scan files for VINs">↻</button>
+        </div>
+        <nav id="nav-vins" class="nav"></nav>
       </div>
 
       <div class="nav__section" id="tags-section">
@@ -183,6 +196,14 @@
         <label class="field">
           <span class="field__label">Tags <small>(comma separated)</small></span>
           <input id="d-tags" placeholder="invoice, 2026, urgent" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">VIN <small>(comma separated if several)</small></span>
+          <span class="field__row">
+            <input id="d-vin" placeholder="e.g. WDD2050091R123456" spellcheck="false" autocapitalize="characters" />
+            <button id="d-scan-vin" class="btn btn--ghost" type="button" title="Read this file (OCR for images and scanned PDFs) and detect its VIN">Detect</button>
+          </span>
         </label>
 
         <label class="field">

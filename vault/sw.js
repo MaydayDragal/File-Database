@@ -5,7 +5,7 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "vault-app-v1";
+const CACHE = "vault-app-v2";
 const SHELL = [
   "./",
   "./index.html",

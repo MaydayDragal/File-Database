@@ -313,12 +313,17 @@
     } else if (f.startsWith("collection:")) {
       const c = f.slice(11);
       list = list.filter((i) => (i.collection || "") === c);
+    } else if (f === "vins") {
+      list = list.filter((i) => (i.vins || []).length);
+    } else if (f.startsWith("vin:")) {
+      const v = f.slice(4);
+      list = list.filter((i) => (i.vins || []).includes(v));
     }
     if (state.tag) list = list.filter((i) => (i.tags || []).includes(state.tag));
     if (state.query) {
       const q = state.query.toLowerCase();
       list = list.filter((i) =>
-        [i.name, i.collection, i.note, (i.tags || []).join(" ")].join(" ").toLowerCase().includes(q));
+        [i.name, i.collection, i.note, (i.tags || []).join(" "), (i.vins || []).join(" ")].join(" ").toLowerCase().includes(q));
     }
     if (f !== "recent") list = sortList(list);
     return list;
@@ -357,15 +362,39 @@
     results.hidden = false;
     if (list.length === 0) {
       $("#empty").hidden = false;
-      $("#empty-title").textContent = "No matches";
-      $("#empty-text").textContent = "Nothing here fits the current search or filter. Try clearing filters.";
+      if (state.filter === "vins" && !state.query) {
+        $("#empty-title").textContent = "No VINs detected yet";
+        $("#empty-text").innerHTML = "Use <strong>⋮ → Scan files for VINs</strong> to read every file for a 17-character vehicle identification number. Images and scanned PDFs are read with OCR (needs internet the first time).";
+      } else {
+        $("#empty-title").textContent = "No matches";
+        $("#empty-text").textContent = "Nothing here fits the current search or filter. Try clearing filters.";
+      }
       results.hidden = true;
     } else {
       $("#empty").hidden = true;
     }
 
     const frag = document.createDocumentFragment();
-    for (const it of list) frag.append(renderCard(it));
+    if (state.filter === "vins") {
+      // Group the results under one header per VIN (a file that mentions
+      // several vehicles appears under each of them).
+      const groups = new Map();
+      for (const it of list) (it.vins || []).forEach((v) => {
+        if (!groups.has(v)) groups.set(v, []);
+        groups.get(v).push(it);
+      });
+      Array.from(groups.keys()).sort().forEach((v) => {
+        const head = document.createElement("div");
+        head.className = "group-head";
+        head.innerHTML = `<span class="group-head__icon">🚗</span><span class="group-head__vin">${esc(v)}</span><span class="group-head__count">${groups.get(v).length}</span>`;
+        head.title = "Show only " + v;
+        head.onclick = () => setFilter("vin:" + v);
+        frag.append(head);
+        for (const it of groups.get(v)) frag.append(renderCard(it));
+      });
+    } else {
+      for (const it of list) frag.append(renderCard(it));
+    }
     results.append(frag);
     $("#list-head").hidden = state.view !== "list";
     updateTitle(list.length);
@@ -418,10 +447,16 @@
     sub.className = "card__sub";
     sub.innerHTML = `<span>${fmtBytes(it.size)}</span>` + (it.collection ? `<span>· ${esc(it.collection)}</span>` : "");
     body.append(name, sub);
-    if (it.tags && it.tags.length) {
+    const vins = it.vins || [];
+    if ((it.tags && it.tags.length) || vins.length) {
       const tw = document.createElement("div");
       tw.className = "card__tags";
-      it.tags.slice(0, 4).forEach((t) => {
+      vins.slice(0, 2).forEach((v) => {
+        const s = document.createElement("span");
+        s.className = "tag tag--vin"; s.textContent = v; s.title = "VIN";
+        tw.append(s);
+      });
+      (it.tags || []).slice(0, 4).forEach((t) => {
         const s = document.createElement("span");
         s.className = "tag"; s.textContent = t;
         tw.append(s);
@@ -469,6 +504,11 @@
 
     const tags = document.createElement("div");
     tags.className = "row__tags";
+    (it.vins || []).slice(0, 1).forEach((v) => {
+      const s = document.createElement("span");
+      s.className = "tag tag--vin"; s.textContent = v; s.title = "VIN";
+      tags.append(s);
+    });
     (it.tags || []).slice(0, 3).forEach((t) => {
       const s = document.createElement("span");
       s.className = "tag"; s.textContent = t;
@@ -492,6 +532,8 @@
     else if (f === "recent") title = "Recent";
     else if (f.startsWith("kind:")) title = (KINDS[f.slice(5)] || {}).label || "Files";
     else if (f.startsWith("collection:")) title = f.slice(11) || "Uncategorized";
+    else if (f === "vins") title = "By VIN";
+    else if (f.startsWith("vin:")) title = f.slice(4);
     if (state.query) title = `“${state.query}”`;
     $("#view-title").textContent = title;
     document.title = `${title} · File Vault (${count})`;
@@ -517,16 +559,19 @@
 
   // ---------- Sidebar ----------
   function renderSidebar() {
-    const counts = { all: items.length, starred: 0, recent: Math.min(items.length, 40) };
+    const counts = { all: items.length, starred: 0, recent: Math.min(items.length, 40), vins: 0 };
     const kindCounts = {};
     const collCounts = {};
     const tagCounts = {};
+    const vinCounts = {};
     for (const it of items) {
       if (it.starred) counts.starred++;
       kindCounts[it.kind] = (kindCounts[it.kind] || 0) + 1;
       const c = it.collection || "";
       if (c) collCounts[c] = (collCounts[c] || 0) + 1;
       (it.tags || []).forEach((t) => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
+      if ((it.vins || []).length) counts.vins++;
+      (it.vins || []).forEach((v) => { vinCounts[v] = (vinCounts[v] || 0) + 1; });
     }
     $$("[data-count]").forEach((el) => {
       const k = el.getAttribute("data-count");
@@ -559,6 +604,20 @@
       b.innerHTML = `<span class="nav__icon">📂</span> ${esc(c)} <span class="nav__count">${collCounts[c] || 0}</span>`;
       b.onclick = () => setFilter("collection:" + c);
       collNav.append(b);
+    });
+
+    // VINs (only shown once a scan has found some)
+    const vinNav = $("#nav-vins");
+    vinNav.innerHTML = "";
+    const vinNames = Object.keys(vinCounts).sort();
+    $("#vins-section").hidden = vinNames.length === 0;
+    vinNames.forEach((v) => {
+      const b = document.createElement("button");
+      b.className = "nav__item" + (state.filter === "vin:" + v ? " is-active" : "");
+      b.title = v;
+      b.innerHTML = `<span class="nav__icon">🚗</span> <span class="nav__vin">${esc(v)}</span> <span class="nav__count">${vinCounts[v]}</span>`;
+      b.onclick = () => setFilter("vin:" + v);
+      vinNav.append(b);
     });
 
     // Datalist for collection input
@@ -611,6 +670,8 @@
     $("#d-added").textContent = fmtDate(rec.createdAt);
     $("#d-collection").value = rec.collection || "";
     $("#d-tags").value = (rec.tags || []).join(", ");
+    detailVinOrig = (rec.vins || []).join(", ");
+    $("#d-vin").value = detailVinOrig;
     $("#d-note").value = rec.note || "";
     const starBtn = $("#d-star");
     starBtn.textContent = rec.starred ? "★" : "☆";
@@ -671,17 +732,22 @@
     state.currentId = null;
   }
 
+  let detailVinOrig = "";
   async function saveDetail() {
     const id = state.currentId;
     if (!id) return;
     const tags = $("#d-tags").value.split(",").map((s) => s.trim()).filter(Boolean);
     const uniqueTags = Array.from(new Set(tags));
+    const vins = Array.from(new Set($("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)));
     const patch = {
       name: $("#d-name").value.trim() || "Untitled",
       collection: $("#d-collection").value.trim(),
       tags: uniqueTags,
+      vins,
       note: $("#d-note").value.trim(),
     };
+    // A hand-edited VIN counts as scanned — the bulk scan won't overwrite it.
+    if (vins.join(", ") !== detailVinOrig) patch.vinScan = Date.now();
     const merged = await DB.update(id, patch);
     const idx = items.findIndex((i) => i.id === id);
     if (idx >= 0) items[idx] = Object.assign(items[idx], patch, { updatedAt: merged.updatedAt });
@@ -850,6 +916,7 @@
       out.files.push({
         id: r.id, name: r.name, type: r.type, kind: r.kind, size: r.size,
         tags: r.tags, collection: r.collection, note: r.note, starred: r.starred,
+        vins: r.vins || [], vinScan: r.vinScan || 0,
         createdAt: r.createdAt, updatedAt: r.updatedAt,
         blob: b64, blobType: r.blob.type, thumb: thumb64,
       });
@@ -884,6 +951,7 @@
           id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
           size: f.size != null ? f.size : blob.size, blob, thumb,
           tags: f.tags || [], collection: f.collection || "", note: f.note || "",
+          vins: f.vins || [], vinScan: f.vinScan || 0,
           starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
         };
         rec.searchText = DB.buildSearchText(rec);
@@ -1052,6 +1120,7 @@
     $("#d-open").onclick = openCurrent;
     $("#d-send-li").onclick = sendCurrentToLI;
     $("#d-send-toolbox").onclick = sendCurrentToToolbox;
+    $("#d-scan-vin").onclick = detectVinCurrent;
     $("#d-star").onclick = async () => {
       if (!state.currentId) return;
       await toggleStar(state.currentId);
@@ -1066,11 +1135,14 @@
       if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) moreMenu.hidden = true;
     });
     moreMenu.querySelectorAll("button").forEach((b) => {
-      b.onclick = () => { moreMenu.hidden = true; handleMenu(b.dataset.action); };
+      b.onclick = (e) => { moreMenu.hidden = true; handleMenu(b.dataset.action, e); };
     });
 
     // New collection buttons
     $("#add-collection").onclick = newCollection;
+
+    // Sidebar VIN rescan shortcut (Shift-click = rescan everything)
+    $("#scan-vins-side").onclick = (e) => scanVins(!!e.shiftKey);
 
     // Mobile sidebar
     $("#menu-toggle").onclick = () => {
@@ -1098,10 +1170,11 @@
     $$("#about [data-close]").forEach((el) => { el.onclick = () => hide($("#about")); });
   }
 
-  function handleMenu(action) {
+  function handleMenu(action, e) {
     if (action === "export") exportVault();
     else if (action === "import") $("#import-input").click();
     else if (action === "new-collection") newCollection();
+    else if (action === "scan-vins") scanVins(!!(e && e.shiftKey));
     else if (action === "sync-folder") runFolderSync(false);
     else if (action === "auto-sync") toggleAutoSync();
     else if (action === "persist") requestPersistence();
@@ -1244,6 +1317,237 @@
     // Re-scan when the app regains attention (covers files added while away).
     window.addEventListener("focus", () => { if (syncAuto && syncDir) runFolderSync(true); });
     document.addEventListener("visibilitychange", () => { if (!document.hidden && syncAuto && syncDir) runFolderSync(true); });
+  }
+
+  // ---------- VIN scan & grouping ----------
+  // Finds 17-character Vehicle Identification Numbers inside files so the
+  // vault can group them by vehicle. Filenames and text files are read
+  // directly, PDFs through the vendored pdf.js text layer, and images or
+  // scanned (no-text-layer) PDFs through OCR — Tesseract.js, lazily loaded
+  // from a CDN exactly like the LI app (overridable via window.__TESS_*).
+  const VIN_TEXT_MAX = 1024 * 1024; // read at most 1 MB of a text file
+  const VIN_MAX_PER_FILE = 8;
+
+  // A VIN is 17 chars from [A-HJ-NPR-Z0-9] (I, O and Q are never used). The
+  // lookarounds stop matches inside longer alphanumeric runs (hashes, IDs).
+  function findVins(text, fuzzy) {
+    const out = new Set();
+    if (!text) return [];
+    const scan = (t) => {
+      const re = /(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])/g;
+      let m;
+      while ((m = re.exec(t)) && out.size < VIN_MAX_PER_FILE) {
+        const v = m[0];
+        const digits = (v.match(/\d/g) || []).length;
+        // Real VINs mix letters and digits — this rejects 17-letter words
+        // and bare 17-digit numbers.
+        if (digits >= 2 && 17 - digits >= 2) out.add(v);
+      }
+    };
+    const up = text.toUpperCase();
+    scan(up);
+    if (fuzzy) {
+      // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN,
+      // so normalizing them inside candidate runs recovers the real number.
+      scan(up.replace(/(?<![A-Z0-9])[A-Z0-9]{17}(?![A-Z0-9])/g,
+        (run) => run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
+    }
+    return Array.from(out);
+  }
+
+  // OCR engine (lazy, CDN, single reusable worker — freed after each scan).
+  let _tessLibP = null, _tessWorker = null, _tessWorkerP = null;
+  function loadTess() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (_tessLibP) return _tessLibP;
+    const CDN = "https://cdn.jsdelivr.net/npm";
+    const lib = window.__TESS_LIB || (CDN + "/tesseract.js@5.1.1/dist/tesseract.min.js");
+    _tessLibP = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = lib;
+      s.onload = () => (window.Tesseract ? res(window.Tesseract) : rej(new Error("OCR init failed")));
+      s.onerror = () => { _tessLibP = null; rej(new Error("OCR engine unavailable (needs internet once).")); };
+      document.head.appendChild(s);
+    });
+    return _tessLibP;
+  }
+  function getTessWorker() {
+    if (_tessWorker) return Promise.resolve(_tessWorker);
+    if (_tessWorkerP) return _tessWorkerP;
+    const CDN = "https://cdn.jsdelivr.net/npm";
+    _tessWorkerP = loadTess().then((T) =>
+      T.createWorker("eng", 1, {
+        workerPath: window.__TESS_WORK || (CDN + "/tesseract.js@5.1.1/dist/worker.min.js"),
+        corePath: window.__TESS_CORE || (CDN + "/tesseract.js-core@5.1.0/tesseract-core-simd.wasm.js"),
+        langPath: window.__TESS_LANG || "https://tessdata.projectnaptha.com/4.0.0",
+      }).then(
+        (w) => { _tessWorker = w; _tessWorkerP = null; return w; },
+        (e) => { _tessWorkerP = null; throw e; }
+      ));
+    return _tessWorkerP;
+  }
+  function tessDone() {
+    const w = _tessWorker;
+    _tessWorker = null; _tessWorkerP = null;
+    if (w) { try { w.terminate(); } catch (e) {} }
+  }
+
+  // Draw an image blob onto a bounded canvas so huge photos OCR quickly.
+  function blobToCanvas(blob, maxSide) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url); resolve(c);
+        } catch (e) { URL.revokeObjectURL(url); resolve(null); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  // Text of a PDF: the real text layer when it has one, OCR of the first
+  // pages otherwise. Broken/encrypted PDFs come back empty (filename-only);
+  // only an unavailable OCR engine throws, so the caller can retry later.
+  async function pdfVinText(blob) {
+    let doc = null;
+    try {
+      const lib = await ensurePdfjs();
+      const buf = await blob.arrayBuffer();
+      doc = await lib.getDocument({ data: buf, disableAutoFetch: true, disableStream: true }).promise;
+    } catch (e) { return { text: "", ocr: false }; }
+    try {
+      let text = "";
+      const pages = Math.min(doc.numPages, 10);
+      for (let i = 1; i <= pages; i++) {
+        try {
+          const tc = await (await doc.getPage(i)).getTextContent();
+          tc.items.forEach((it) => { text += (it.str || "") + " "; });
+          text += "\n";
+        } catch (e) { /* unreadable page — keep going */ }
+      }
+      if (text.replace(/\s+/g, "").length >= 40) return { text, ocr: false };
+      // No real text layer — a scanned document. Render + OCR the first pages.
+      const w = await getTessWorker();
+      let out = "";
+      const oPages = Math.min(doc.numPages, 3);
+      for (let i = 1; i <= oPages; i++) {
+        try {
+          const page = await doc.getPage(i);
+          const unit = page.getViewport({ scale: 1 });
+          const scale = Math.min(3, 1800 / Math.max(unit.width, 1));
+          const vp = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          const r = await w.recognize(canvas);
+          out += ((r.data && r.data.text) || "") + "\n";
+          canvas.width = canvas.height = 0; // release the big canvas promptly
+        } catch (e) { /* one bad page — keep going */ }
+      }
+      return { text: text + "\n" + out, ocr: true };
+    } finally {
+      try { doc.destroy(); } catch (e) {}
+    }
+  }
+
+  // Gather everything worth searching for a VIN in one record. `fuzzy` marks
+  // OCR-derived text so findVins() also tries the I/O/Q-corrected reading.
+  async function extractVinText(rec) {
+    let text = rec.name || "", fuzzy = false;
+    const nameLc = text.toLowerCase();
+    if (rec.kind === "pdf") {
+      const r = await pdfVinText(rec.blob);
+      text += "\n" + r.text;
+      fuzzy = r.ocr;
+    } else if (rec.kind === "image") {
+      const w = await getTessWorker(); // throws when offline — caller retries later
+      try {
+        const cv = await blobToCanvas(rec.blob, 2200);
+        const r = await w.recognize(cv || rec.blob);
+        text += "\n" + ((r.data && r.data.text) || "");
+      } catch (e) { /* unreadable image — filename-only */ }
+      fuzzy = true;
+    } else if (rec.kind === "text" || /\.(csv|rtf)$/.test(nameLc)) {
+      try { text += "\n" + (await rec.blob.slice(0, VIN_TEXT_MAX).text()); } catch (e) {}
+    }
+    return { text, fuzzy };
+  }
+
+  // Scan the whole vault (new/unscanned files only; force = everything).
+  let vinScanning = false, vinCancel = false;
+  async function scanVins(force) {
+    if (vinScanning) { toast("A VIN scan is already running…"); return; }
+    const todo = items.filter((it) => force || !it.vinScan);
+    if (!todo.length) {
+      toast("Every file has already been scanned for VINs. Shift-click the menu item to rescan everything.");
+      return;
+    }
+    vinScanning = true; vinCancel = false;
+    let found = 0, done = 0, skipped = 0;
+    try {
+      for (const it of todo) {
+        if (vinCancel) break;
+        done++;
+        toast(`Scanning for VINs… ${done}/${todo.length}`, "Stop", () => { vinCancel = true; });
+        let rec = null;
+        try { rec = await DB.get(it.id); } catch (e) {}
+        if (!rec || !rec.blob) continue;
+        let vins;
+        try {
+          const r = await extractVinText(rec);
+          vins = findVins(r.text, r.fuzzy);
+        } catch (e) {
+          // Usually the OCR engine couldn't load (needs internet once) —
+          // leave the file unscanned so the next run retries it.
+          skipped++;
+          continue;
+        }
+        rec.vins = vins;
+        rec.vinScan = Date.now();
+        rec.searchText = DB.buildSearchText(rec);
+        try { await DB.put(rec); } catch (e) { continue; } // put, not update: preserves updatedAt
+        it.vins = vins; it.vinScan = rec.vinScan;
+        if (vins.length) found++;
+        await new Promise((r) => setTimeout(r, 10)); // breathe between files
+      }
+    } finally {
+      vinScanning = false;
+      tessDone();
+    }
+    render();
+    toast(`VIN scan ${vinCancel ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN` +
+      (skipped ? ` (${skipped} skipped: OCR needs internet once)` : "") + ".");
+  }
+
+  // Detail-drawer "Detect" button: scan just the open file and fill the field.
+  async function detectVinCurrent() {
+    const id = state.currentId;
+    if (!id) return;
+    const rec = await DB.get(id);
+    if (!rec) return;
+    const btn = $("#d-scan-vin");
+    btn.disabled = true; btn.textContent = "Scanning…";
+    try {
+      const r = await extractVinText(rec);
+      const vins = findVins(r.text, r.fuzzy);
+      const existing = $("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+      $("#d-vin").value = Array.from(new Set(existing.concat(vins))).join(", ");
+      toast(vins.length ? `Found ${vins.length} VIN${vins.length > 1 ? "s" : ""} — Save to keep.` : "No VIN found in this file.");
+    } catch (e) {
+      toast("Couldn't read this file — OCR needs internet the first time.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Detect";
+      if (!vinScanning) tessDone();
+    }
   }
 
   function newCollection() {
