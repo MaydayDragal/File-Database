@@ -1355,15 +1355,17 @@
   // from the match. The outer lookarounds still require the whole run to be
   // bounded by non-letters/digits, so it can't be a slice of a longer code.
   const VIN_SEP = "[ \\t\\u00A0]{0,2}";
-  // Reject 17-char strings that only LOOK like a VIN once spaces are collapsed
-  // (e.g. "...free map updates 50A" -> FREEMAPUPDATES50A). A real VIN/FIN carries
-  // a numeric serial (several digits) and never spells a word (no long run of
-  // letters). I/O/Q are already excluded by the charset.
+  // Reject 17-char strings that only LOOK like a VIN. Real VIN/FIN examples that
+  // MUST pass: W1KLF4HB1RA068698, W1KEG5DB0PF022748, W1K2140471A068698. Junk that
+  // MUST fail: FREEMAPUPDATES50A ("...free map updates 50A" glued by spaces) and
+  // OCR'd blank/zero-filled form fields like 000000000000000ER / 000000000000000FR.
   function looksLikeVin(v) {
+    if (v[0] === "0") return false;             // position 1 (WMI region) is never 0
     const digits = (v.match(/\d/g) || []).length;
-    if (digits < 4) return false;          // a real VIN/FIN has a numeric serial
-    if (17 - digits < 2) return false;     // ...but keeps its WMI letters too
-    if (/[A-Z]{7,}/.test(v)) return false; // 7+ letters in a row => a word, not a VIN
+    if (digits < 4) return false;               // a real VIN/FIN has a numeric serial
+    if (17 - digits < 2) return false;          // ...but keeps its WMI letters too
+    if (/[A-Z]{7,}/.test(v)) return false;      // 7+ letters in a row => a word, not a VIN
+    if (new Set(v).size < 6) return false;      // too few distinct chars => a padded/blank field
     return true;
   }
 

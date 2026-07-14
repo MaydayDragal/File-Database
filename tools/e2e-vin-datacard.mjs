@@ -53,8 +53,10 @@ function buildPdf(body) {
 const fixDir = path.join(__dirname, "_fixtures");
 fs.mkdirSync(fixDir, { recursive: true });
 const pdfPath = path.join(fixDir, `${FIN}_datacard.pdf`); // filename carries the FIN, like the user's file
+// Includes real OCR-style junk seen in the wild: a word glued by spaces
+// (FREEMAPUPDATES50A) and zero-filled blank form fields (000000000000000ER/FR).
 fs.writeFileSync(pdfPath, buildPdf(
-  `XENTRY WIS Datacard ${FIN} Engine no. 254920 Sales des. E 300 4MATIC VIN ${VIN} Steering 214460 502 Multi-year free map updates 50A no designation`
+  `XENTRY WIS Datacard ${FIN} Engine no. 254920 Sales des. E 300 4MATIC VIN ${VIN} Steering 214460 502 Multi-year free map updates 50A field 000000000000000ER 000000000000000FR no designation`
 ));
 
 const browser = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
@@ -85,7 +87,10 @@ const rec = await page.evaluate(() => new Promise((res) => {
 check(rec.vins && rec.vins.length === 1 && rec.vins[0] === VIN, `VIN detected as the VIN (${JSON.stringify(rec.vins)})`);
 check(rec.fins && rec.fins.includes(FIN), `FIN detected separately (${JSON.stringify(rec.fins)})`);
 check(!rec.vins.includes(FIN), "FIN is NOT grouped as a VIN");
-check(!rec.vins.includes(GARBAGE) && !(rec.fins || []).includes(GARBAGE), "FREEMAPUPDATES50A garbage was thrown out");
+const allIds = (rec.vins || []).concat(rec.fins || []);
+check(!allIds.includes(GARBAGE), "FREEMAPUPDATES50A garbage was thrown out");
+check(!allIds.some((x) => /^0/.test(x)) && !allIds.includes("000000000000000ER") && !allIds.includes("000000000000000FR"),
+  "zero-filled blank fields (000000000000000ER/FR) were thrown out");
 
 // The By-VIN sidebar shows exactly one VIN group — the real VIN.
 check(await waitFor(async () => !(await page.locator("#vins-section").isHidden())), "VIN section visible");

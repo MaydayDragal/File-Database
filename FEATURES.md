@@ -137,9 +137,11 @@ File Vault
 │   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9]; tolerant of spaces/tabs BETWEEN
 │   │   characters (PDF/OCR text often splits a VIN, e.g. "W1KLF4HB1 RA068698")
 │   │   so split VINs are still found; OCR text retried with I→1 / O,Q→0; ≤25/file
-│   ├── Garbage rejection: a candidate must carry a numeric serial (≥4 digits)
-│   │   and not spell a word (no 7+ letter run), so space-joins like "…free map
-│   │   updates 50A" → FREEMAPUPDATES50A are thrown out
+│   ├── Garbage rejection: a candidate must start with a real WMI region (never
+│   │   "0"), carry a numeric serial (≥4 digits), not spell a word (no 7+ letter
+│   │   run), and have ≥6 distinct chars — so space-joins like "…free map updates
+│   │   50A" → FREEMAPUPDATES50A and OCR'd blank fields like 000000000000000ER
+│   │   are thrown out
 │   ├── VIN vs FIN: Mercedes datacards hold both the ISO VIN (labelled "VIN")
 │   │   and a Baumuster-based FIN/datacard number (e.g. W1K2140471A068698). The
 │   │   VIN drives grouping; the FIN is stored separately (record.fins), shown as
