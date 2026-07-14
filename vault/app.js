@@ -1356,8 +1356,16 @@
     return Array.from(out);
   }
 
-  // OCR engine (lazy, CDN, single reusable worker — freed after each scan).
-  let _tessLibP = null, _tessWorker = null, _tessWorkerP = null;
+  // OCR engine (lazy, from a CDN — overridable via window.__TESS_*). The VIN
+  // scan runs a POOL of Tesseract workers so several images / scanned PDFs are
+  // recognized on different CPU cores at once. (Tesseract is WASM on the CPU —
+  // there is no browser GPU OCR path, so multi-core is the win here.) Each scan
+  // "lane" owns one worker for its lifetime and creates it only when it first
+  // meets a file that actually needs OCR; the shared script load (loadTess)
+  // means a blocked/offline engine fails once for every lane, not once per file.
+  const POOL_MAX = window.__VIN_OCR_WORKERS ||
+    Math.max(1, Math.min((navigator.hardwareConcurrency || 4) - 1, 4));
+  let _tessLibP = null;
   function loadTess() {
     if (window.Tesseract) return Promise.resolve(window.Tesseract);
     if (_tessLibP) return _tessLibP;
@@ -1372,24 +1380,22 @@
     });
     return _tessLibP;
   }
-  function getTessWorker() {
-    if (_tessWorker) return Promise.resolve(_tessWorker);
-    if (_tessWorkerP) return _tessWorkerP;
+  // One worker per lane (ctx.worker), reused for every file that lane handles.
+  // The call site wraps this in vinGuard so a hung load/create can't wedge.
+  async function laneWorker(ctx) {
+    if (ctx.worker) return ctx.worker;
+    const T = await loadTess();
     const CDN = "https://cdn.jsdelivr.net/npm";
-    _tessWorkerP = loadTess().then((T) =>
-      T.createWorker("eng", 1, {
-        workerPath: window.__TESS_WORK || (CDN + "/tesseract.js@5.1.1/dist/worker.min.js"),
-        corePath: window.__TESS_CORE || (CDN + "/tesseract.js-core@5.1.0/tesseract-core-simd.wasm.js"),
-        langPath: window.__TESS_LANG || "https://tessdata.projectnaptha.com/4.0.0",
-      }).then(
-        (w) => { _tessWorker = w; _tessWorkerP = null; return w; },
-        (e) => { _tessWorkerP = null; throw e; }
-      ));
-    return _tessWorkerP;
+    ctx.worker = await T.createWorker("eng", 1, {
+      workerPath: window.__TESS_WORK || (CDN + "/tesseract.js@5.1.1/dist/worker.min.js"),
+      corePath: window.__TESS_CORE || (CDN + "/tesseract.js-core@5.1.0/tesseract-core-simd.wasm.js"),
+      langPath: window.__TESS_LANG || "https://tessdata.projectnaptha.com/4.0.0",
+    });
+    return ctx.worker;
   }
-  function tessDone() {
-    const w = _tessWorker;
-    _tessWorker = null; _tessWorkerP = null;
+  function laneFree(ctx) {
+    const w = ctx && ctx.worker;
+    if (ctx) ctx.worker = null;
     if (w) { try { w.terminate(); } catch (e) {} }
   }
 
@@ -1397,7 +1403,7 @@
   // Every OCR wait goes through vinGuard so it can NEVER wedge the app: it
   // resolves with the underlying promise, but rejects on its own after `ms`
   // OR the moment a running scan is cancelled. The underlying worker keeps
-  // going in the background (tessDone() terminates it) — we just stop waiting.
+  // going in the background (its lane's worker is terminated) — we just stop waiting.
   const OCR_LOAD_MS = window.__VIN_OCR_LOAD_MS || 15000;       // cap for loading/creating the OCR engine
   const OCR_RECOGNIZE_MS = window.__VIN_OCR_RECOGNIZE_MS || 45000;  // cap for recognizing one image / page
   function vinGuard(promise, ms) {
@@ -1438,7 +1444,7 @@
   // they still count as scanned). When a scanned PDF needs OCR but `allowOcr`
   // is false, or the engine won't load, it throws a tagged ocrErr so the
   // caller leaves the file unscanned and retries it on a later (online) run.
-  async function pdfVinText(blob, allowOcr) {
+  async function pdfVinText(blob, allowOcr, getWorker) {
     let doc = null;
     try {
       const lib = await ensurePdfjs();
@@ -1459,8 +1465,8 @@
       // No real text layer — a scanned document. OCR is needed.
       if (!allowOcr) throw ocrErr("ocrUnavailable");
       let w;
-      try { w = await vinGuard(getTessWorker(), OCR_LOAD_MS); }
-      catch (e) { throw ocrErr("ocrUnavailable"); } // engine won't load — stop OCR for this run
+      try { w = await getWorker(); }
+      catch (e) { throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrUnavailable"); } // engine won't load — stop OCR for this run
       let out = "";
       const oPages = Math.min(doc.numPages, 3);
       for (let i = 1; i <= oPages; i++) {
@@ -1496,18 +1502,18 @@
   // `allowOcr` gates the (slow, network-backed) OCR path for images and
   // scanned PDFs; when OCR is needed but unavailable this throws a tagged
   // ocrErr so the scan can skip the file and retry it later.
-  async function extractVinText(rec, allowOcr) {
+  async function extractVinText(rec, allowOcr, getWorker) {
     let text = rec.name || "", fuzzy = false;
     const nameLc = text.toLowerCase();
     if (rec.kind === "pdf") {
-      const r = await pdfVinText(rec.blob, allowOcr);
+      const r = await pdfVinText(rec.blob, allowOcr, getWorker);
       text += "\n" + r.text;
       fuzzy = r.ocr;
     } else if (rec.kind === "image") {
       if (!allowOcr) throw ocrErr("ocrUnavailable");
       let w;
-      try { w = await vinGuard(getTessWorker(), OCR_LOAD_MS); }
-      catch (e) { throw ocrErr("ocrUnavailable"); } // engine won't load — stop OCR for this run
+      try { w = await getWorker(); }
+      catch (e) { throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrUnavailable"); } // engine won't load — stop OCR for this run
       try {
         const cv = await blobToCanvas(rec.blob, 2200);
         const r = await vinGuard(w.recognize(cv || rec.blob), OCR_RECOGNIZE_MS);
@@ -1523,12 +1529,14 @@
   }
 
   // Scan the whole vault (new/unscanned files only; force = everything).
-  // The scan is fully interruptible and can never wedge: the fast sources
-  // (filename, text/CSV, PDF text layer) always run, and OCR — the only part
-  // that can stall — is time-boxed per file. If OCR proves unavailable (the
-  // engine can't load, e.g. a locked-down/offline machine), it's dropped for
-  // the rest of the run and those files are left unscanned to retry later,
-  // instead of hanging on every one.
+  // Files are processed across up to POOL_MAX concurrent "lanes", so several
+  // images / scanned PDFs OCR on different CPU cores at once — the big speed-up
+  // for OCR-heavy vaults. The scan stays fully interruptible and can never
+  // wedge: fast sources (filename, text/CSV, PDF text layer) always run, and
+  // OCR — the only part that can stall — is time-boxed per file. If OCR proves
+  // unavailable (the engine can't load, e.g. a locked-down/offline machine),
+  // it's dropped for the rest of the run and those files are left unscanned to
+  // retry later, instead of hanging on every one.
   let vinScanning = false, vinCancel = false, ocrGaveUp = false;
   async function scanVins(force) {
     if (vinScanning) { toast("A VIN scan is already running…"); return; }
@@ -1538,36 +1546,58 @@
       return;
     }
     vinScanning = true; vinCancel = false; ocrGaveUp = false;
-    let found = 0, done = 0, needOcr = 0, failed = 0;
-    try {
-      for (const it of todo) {
-        if (vinCancel) break;
-        done++;
-        toast(`Scanning for VINs… ${done}/${todo.length}`, "Stop", () => { vinCancel = true; });
-        let rec = null;
-        try { rec = await DB.get(it.id); } catch (e) {}
-        if (!rec || !rec.blob) continue;
-        let vins;
-        try {
-          const r = await extractVinText(rec, !ocrGaveUp);
-          vins = findVins(r.text, r.fuzzy);
-        } catch (e) {
-          if (e && e.ocrCancel) continue;                 // Stop pressed mid-OCR — bail on next loop check
-          if (e && e.ocrUnavailable) { ocrGaveUp = true; needOcr++; continue; } // engine down: skip OCR from here on
-          if (e && e.ocrSkip) { needOcr++; continue; }    // this file's OCR stalled — retry later
-          failed++; continue;                             // anything else — leave unscanned
-        }
-        rec.vins = vins;
-        rec.vinScan = Date.now();
-        rec.searchText = DB.buildSearchText(rec);
-        try { await DB.put(rec); } catch (e) { continue; } // put, not update: preserves updatedAt
-        it.vins = vins; it.vinScan = rec.vinScan;
-        if (vins.length) found++;
-        await new Promise((r) => setTimeout(r, 0)); // yield to the UI between files
+    const total = todo.length;
+    let found = 0, done = 0, needOcr = 0, failed = 0, lastP = 0;
+    const progress = () => {
+      const t = Date.now();
+      if (t - lastP < 150 && done < total) return; // throttle DOM churn on big vaults
+      lastP = t;
+      toast(`Scanning for VINs… ${done}/${total}`, "Stop", () => { vinCancel = true; });
+    };
+
+    // Process one file using this lane's OCR worker (created on first need).
+    async function handle(it, ctx) {
+      done++; progress();
+      let rec = null;
+      try { rec = await DB.get(it.id); } catch (e) {}
+      if (!rec || !rec.blob) return;
+      let vins;
+      try {
+        const getWorker = () => vinGuard(laneWorker(ctx), OCR_LOAD_MS);
+        const r = await extractVinText(rec, !ocrGaveUp, getWorker);
+        vins = findVins(r.text, r.fuzzy);
+      } catch (e) {
+        if (e && e.ocrCancel) return;                   // Stop pressed mid-OCR
+        if (e && e.ocrUnavailable) { ocrGaveUp = true; needOcr++; return; } // engine down: skip OCR from here on
+        if (e && e.ocrSkip) { needOcr++; return; }      // this file's OCR stalled — retry later
+        failed++; return;                               // anything else — leave unscanned
       }
+      rec.vins = vins;
+      rec.vinScan = Date.now();
+      rec.searchText = DB.buildSearchText(rec);
+      try { await DB.put(rec); } catch (e) { return; }  // put, not update: preserves updatedAt
+      it.vins = vins; it.vinScan = rec.vinScan;
+      if (vins.length) found++;
+    }
+
+    // Work-stealing lanes share one queue; each keeps pulling the next file
+    // until the queue drains or the scan is cancelled.
+    let idx = 0;
+    const nextItem = () => (idx < todo.length ? todo[idx++] : null);
+    const lanes = Math.max(1, Math.min(POOL_MAX, total));
+    async function lane() {
+      const ctx = { worker: null }; // this lane's OCR worker
+      try {
+        let it;
+        while (!vinCancel && (it = nextItem())) await handle(it, ctx);
+      } finally { laneFree(ctx); }
+    }
+    try {
+      const runners = [];
+      for (let k = 0; k < lanes; k++) runners.push(lane());
+      await Promise.all(runners);
     } finally {
       vinScanning = false;
-      tessDone();
     }
     render();
     let msg = `VIN scan ${vinCancel ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN`;
@@ -1584,8 +1614,10 @@
     if (!rec) return;
     const btn = $("#d-scan-vin");
     btn.disabled = true; btn.textContent = "Scanning…";
+    const ctx = { worker: null }; // a private one-off OCR worker for this file
     try {
-      const r = await extractVinText(rec, true);
+      const getWorker = () => vinGuard(laneWorker(ctx), OCR_LOAD_MS);
+      const r = await extractVinText(rec, true, getWorker);
       const vins = findVins(r.text, r.fuzzy);
       const existing = $("#d-vin").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
       $("#d-vin").value = Array.from(new Set(existing.concat(vins))).join(", ");
@@ -1596,7 +1628,7 @@
         : "Couldn't read this file.");
     } finally {
       btn.disabled = false; btn.textContent = "Detect";
-      if (!vinScanning) tessDone();
+      laneFree(ctx);
     }
   }
 

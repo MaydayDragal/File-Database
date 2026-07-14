@@ -132,6 +132,11 @@ File Vault
 │   │       __TESS_* overrides as the LI app; first 3 pages rendered)
 │   ├── Matching: charset [A-HJ-NPR-Z0-9]{17}, must mix letters+digits;
 │   │   OCR text also retried with I→1 / O,Q→0 corrections
+│   ├── Multi-core: files run across up to POOL_MAX lanes (cores−1, capped 4;
+│   │   window.__VIN_OCR_WORKERS override), so several images/scanned PDFs OCR
+│   │   in parallel on separate Tesseract workers. (WASM/CPU — no browser GPU
+│   │   OCR path exists.) Each lane lazily creates one worker only when it
+│   │   first meets an OCR file; the shared script load fails once for all lanes
 │   ├── Never wedges: fast sources always run; OCR is time-boxed per file
 │   │   (load ≤15 s, recognize ≤45 s — window.__VIN_OCR_* override) and the
 │   │   scan is cancellable (Stop). If the OCR engine can't load (locked-down/
@@ -180,7 +185,7 @@ File Vault
     │   theme follows shell broadcasts; never writes fv-theme
     ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
     │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v5": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
+    └── SW cache "vault-app-v6": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
 ```
 
 **Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
@@ -370,7 +375,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | Scope | File | Cache | Strategy highlights |
 |---|---|---|---|
 | `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v5` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
+| `/vault/` | `vault/sw.js` | `vault-app-v6` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
 | `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
 | `/inventory/` | `inventory/sw.js` | `tool-inventory-v6` | `tools.json` network-first; part photos cached lazily |
 
@@ -441,7 +446,7 @@ Isolation guarantees worth knowing:
 
 ---
 
-## 9. Test coverage map (`npm test` — 8 suites, all headless Chromium)
+## 9. Test coverage map (`npm test` — 9 suites, all headless Chromium)
 
 | Suite | Guards |
 |---|---|
@@ -452,6 +457,7 @@ Isolation guarantees worth knowing:
 | `e2e-sync.mjs` | Folder sync with a mocked directory picker: link/import/dedup/changed-file re-import/auto-sync timer + persistence |
 | `e2e-pdfthumb.mjs` | PDF thumbnails: import-time render, IndexedDB persistence, background backfill after reload |
 | `e2e-vin.mjs` | VIN scan & grouping: content/filename/PDF-text detection, By-VIN grouped view, vin: filter, sidebar list, search, detail field, persistence, incremental re-scan + offline OCR skip |
+| `e2e-vin-parallel.mjs` | VIN scan runs OCR in parallel: a fake engine records peak concurrency = worker-pool size (multi-core), finishing in waves not serially |
 | `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
 
 ---
