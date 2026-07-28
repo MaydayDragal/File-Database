@@ -247,6 +247,23 @@ check(await inv.locator("#modelChip").isHidden(), "unpin cleared the inventory's
 const pinSurvives = await page.evaluate(() => localStorage.getItem("fd-vehicle"));
 check(pinSurvives === null, "unpin also clears the persisted pin");
 
+// ---------- 11. Manual VIN scan must not wipe intake-tagged VINs ----------
+// The receipt got its VIN from the pin (not from its contents) and carries no
+// vinScan stamp, so the manual scan processes it, finds nothing in the text,
+// and must UNION (keep the tag) rather than overwrite with the empty result.
+await page.click("#tab-vault");
+await page.waitForTimeout(400);
+await vault.locator("#more-btn").click();
+await vault.locator('[data-action="scan-vins"]').click();
+await page.waitForTimeout(3000);
+const tagSurvivedScan = await page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("file-vault");
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+  r.onsuccess = () => { const db = r.result; const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); const rec = g.result.find((x) => x.name === "receipt-no-vin.txt"); res(!!(rec && (rec.vins || []).includes("WDD2130461A123456"))); }; g.onerror = () => { db.close(); res(false); }; };
+  r.onerror = () => res(false);
+}));
+check(tagSurvivedScan, "manual 'Scan files for VINs' preserves the intake-tagged VIN (union, not clobber)");
+
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-integration.png") });
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|invalid|structure|xref|tesseract|fetch/i.test(e));

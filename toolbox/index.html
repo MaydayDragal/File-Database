@@ -4473,5 +4473,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 })();
 </script>
+<script>
+// Platform keyboard parity: Alt+1–4 app switching and Ctrl/Cmd+K quick-open
+// forwarded up to the shell, same as the other embedded apps.
+(function () {
+  "use strict";
+  var embedded = false;
+  try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
+  if (!embedded) return;
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-quickopen" }, "*"); } catch (x) {}
+    }
+  });
+})();
+</script>
 </body>
 </html>

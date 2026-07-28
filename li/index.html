@@ -2138,6 +2138,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // and "related" jumps from the other apps). Nav messages that arrive before
   // the database has loaded are replayed after boot.
   var bootReady = false, pendingNav = [];
+  // A cross-app jump means "show me THIS" — hidden toggles (★ Starred,
+  // ⚠ Needs review) would otherwise silently empty the results.
+  function resetViewFilters() {
+    $("search").value = ""; $("fgFilter").value = ""; $("modelFilter").value = "";
+    if (starOnly) { starOnly = false; var sb = $("starFilter"); sb.classList.remove("on"); sb.textContent = "☆ Starred"; }
+    if (needsOnly) { needsOnly = false; $("needsFilter").classList.remove("on"); }
+  }
   function handleShellNav(d) {
     if (!bootReady) { pendingNav.push(d); return; }
     if (d.type === "platform-backup") {
@@ -2150,18 +2157,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         dDirty = false; navStack = [];
         openDetail("li:" + d.li);
       } else {
-        $("search").value = d.li; $("fgFilter").value = ""; $("modelFilter").value = "";
+        resetViewFilters();
+        $("search").value = d.li;
         applyView();
         if (!view.length) toast("No LI document " + d.li + " in this database.");
       }
     } else if (d.type === "li-search" && d.q != null) {
-      $("search").value = String(d.q); $("fgFilter").value = ""; $("modelFilter").value = "";
+      resetViewFilters();
+      $("search").value = String(d.q);
       applyView();
     } else if (d.type === "li-filter" && d.model != null) {
+      resetViewFilters();
       var msel = $("modelFilter");
       msel.value = String(d.model);
       if (d.model && msel.value !== String(d.model)) { msel.value = ""; toast("No LI documents for model " + d.model + "."); }
-      $("search").value = "";
       applyView();
     }
   }

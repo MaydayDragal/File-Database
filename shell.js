@@ -76,7 +76,8 @@
     if (a && !a.loaded) { a.loaded = true; $(a.frame).src = a.src; }
   }
 
-  function routeFiles(list) {
+  function routeFiles(list, opts) {
+    opts = opts || {};
     var files = Array.prototype.slice.call(list || []).filter(Boolean);
     if (!files.length) return;
     if (!window.VaultBridge) { toast("Couldn't add files — transfer bus unavailable."); return; }
@@ -104,9 +105,11 @@
       ensureLoaded(target);
       arr.forEach(function (f) {
         // While a vehicle is pinned, files headed for the vault are tagged
-        // with its VIN — new paperwork joins the car with zero clicks.
+        // with its VIN — new paperwork joins the car with zero clicks. A drop
+        // forwarded from inside an open vault collection keeps that collection.
         var meta = { fromShell: true };
         if (target === "vault" && vehiclePin) meta.vin = vehiclePin.vin;
+        if (target === "vault" && opts.collection) meta.collection = opts.collection;
         window.VaultBridge.send(target, { name: f.name, type: f.type, blob: f, meta: meta })
           .catch(function () { toast('Couldn’t add “' + f.name + '”.'); });
       });
@@ -483,7 +486,7 @@
       else if (d.type === "li-changed") updateBadges();
       // An embedded app forwards files dropped/pasted over it, so the platform
       // files them through one router regardless of which tab is showing.
-      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files);
+      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files, { collection: d.collection || "" });
       else if (d.type === "shell-open-picker") $("#shell-file-input").click();
       // Toast relay: an app in a BACKGROUND tab announced something (import
       // finished, sync ran, bridge delivery). Surface it with an app prefix —

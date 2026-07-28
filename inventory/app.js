@@ -29,6 +29,18 @@
   // replayed once the database has loaded.
   var bootReady = false, pendingNav = [];
   function normToolNo(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+  // A cross-app jump means "show me THIS" — every other active filter would
+  // silently hide the results ("No tools match group 54" with the starred
+  // toggle secretly on), so reset the whole view state first.
+  function resetFilters() {
+    state.q = ""; $("#search").value = "";
+    state.grp = ""; $("#fGrp").value = "";
+    state.ct = ""; $("#fCt").value = "";
+    state.note = ""; $("#fNote").value = "";
+    state.model = ""; state.xgrp = "";
+    if (state.starred) { state.starred = false; $("#starFilter").classList.remove("on"); }
+    if (state.offered) { state.offered = false; $("#offeredFilter").classList.remove("on"); }
+  }
   function handleShellNav(d) {
     if (!bootReady) { pendingNav.push(d); return; }
     if (d.type === "platform-backup") {
@@ -36,8 +48,7 @@
     } else if (d.type === "inventory-import" && d.file) {
       importDb(d.file);
     } else if (d.type === "inventory-filter") {
-      state.q = ""; $("#search").value = "";
-      state.grp = ""; $("#fGrp").value = "";
+      resetFilters();
       if (d.grp != null) state.xgrp = String(d.grp);
       if (d.model != null) state.model = String(d.model);
       apply();
@@ -45,10 +56,11 @@
     } else if (d.type === "inventory-open" && d.toolNo) {
       var want = normToolNo(d.toolNo);
       var t = all.find(function (x) { return normToolNo(x.toolNo) === want; });
-      state.q = ""; $("#search").value = "";
+      resetFilters();
       if (t) { apply(); openDetail(t.id); }
       else { state.q = want; $("#search").value = want; apply(); }
     } else if (d.type === "inventory-search" && d.q != null) {
+      resetFilters();
       state.q = String(d.q).trim(); $("#search").value = String(d.q);
       apply();
     }
@@ -314,7 +326,14 @@
     if (embedded) { try { window.parent.postMessage({ type: "shell-nav", app: app, payload: payload }, "*"); return; } catch (e) {} }
     window.open("../index.html#" + hashPath);
   }
-  function firstGroup(t) { var m = String(t.svcGrp || "").match(/\d{2}/); return m ? m[0] : ""; }
+  // A tool's most SPECIFIC function group: svcGrp is often multi-valued and
+  // led by the generic "00" bucket ("00, 54") — prefer the first non-00 group
+  // so cross-links land on the repair docs the tool actually belongs to.
+  function firstGroup(t) {
+    var gs = String(t.svcGrp || "").match(/\d{2}/g) || [];
+    for (var i = 0; i < gs.length; i++) if (gs[i] !== "00") return gs[i];
+    return gs[0] || "";
+  }
 
   // ---------- database file (.tidb) — the whole inventory + photos ----------
   var TIDB_MAGIC = [0x54, 0x49, 0x44, 0x42]; // "TIDB"
@@ -336,7 +355,13 @@
     dl(blob, "tool-inventory-" + stamp + ".tidb");
     toast("Saved database: " + all.length + " tools, " + ids.length + " photos.");
   }
+  var importingDb = false;
   function importDb(file) {
+    // Re-entrancy guard: two overlapping clear→put chains (double-click on
+    // "Load the built-in catalog", two .tidb files dropped) could interleave
+    // into a mix of both databases.
+    if (importingDb) { toast("An import is already running — wait for it to finish."); return Promise.resolve(); }
+    importingDb = true;
     return file.slice(0, 12).arrayBuffer().then(function (buf) {
       var head = new DataView(buf);
       var isTidb = head.byteLength >= 12 && TIDB_MAGIC.every(function (b, i) { return head.getUint8(i) === b; });
@@ -357,7 +382,8 @@
           .then(function () { all = tools; return loadPhotos(); })
           .then(function () { fillFilters(); apply(); updateSub(); toast("Loaded database: " + tools.length + " tools, " + photoRecs.length + " photos."); });
       });
-    }).catch(function (e) { console.error(e); toast("Couldn't open the database file — it may be corrupt."); });
+    }).catch(function (e) { console.error(e); toast("Couldn't open the database file — it may be corrupt."); })
+      .finally(function () { importingDb = false; });
   }
   // Back-compat: the old plain-JSON backup (tools only, no photos).
   function importLegacyJson(file) {
@@ -508,14 +534,20 @@
         if (!e.dataTransfer) return;
         e.preventDefault();
         if (ev === "drop" && e.dataTransfer.files && e.dataTransfer.files[0]) {
-          var f = e.dataTransfer.files[0];
-          if (/\.tidb$/i.test(f.name) || /\.json$/i.test(f.name)) importDb(f);
-          else if (/\.csv$/i.test(f.name)) importCSV(f);
-          else if (embedded) {
-            // Not an inventory format — hand the whole drop to the platform's
-            // unified intake instead of silently swallowing it.
-            var files = Array.prototype.slice.call(e.dataTransfer.files);
-            try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); } catch (x) {}
+          // Partition the WHOLE drop: inventory formats import here, anything
+          // else goes to the platform's unified intake (a mixed drop must not
+          // silently discard the non-inventory files).
+          var files = Array.prototype.slice.call(e.dataTransfer.files);
+          var local = [], rest = [];
+          files.forEach(function (f) { (/\.(tidb|json|csv)$/i.test(f.name) ? local : rest).push(f); });
+          if (local.length) {
+            var f = local[0];
+            if (/\.csv$/i.test(f.name)) importCSV(f); else importDb(f);
+            if (local.length > 1) toast("One database/CSV at a time — " + (local.length - 1) + " skipped.");
+          }
+          if (rest.length) {
+            if (embedded) { try { window.parent.postMessage({ type: "shell-add-files", files: rest }, "*"); } catch (x) {} }
+            else toast(rest.length + " file(s) aren't Tool Inventory formats (.tidb/.json/.csv) — ignored.");
           }
         }
       });

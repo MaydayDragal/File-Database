@@ -332,7 +332,9 @@
     stored.searchText = DB.buildSearchText(stored);
     await DB.put(stored); // put, not update: preserves updatedAt
     const it = items.find((x) => x.id === rec.id);
-    if (it) { it.vins = vins; it.fins = fins; it.vinScan = stored.vinScan; }
+    // Mirror the UNIONED arrays — the detected-only set would drop the
+    // pinned-vehicle tag from the visible list until the next reload.
+    if (it) { it.vins = stored.vins; it.fins = stored.fins; it.vinScan = stored.vinScan; }
     render();
     if (!quiet && vins.length) toast(`Filed “${stored.name}” under ${vins[0]}${vins.length > 1 ? " +" + (vins.length - 1) : ""} — see 🚗 By VIN.`);
     return vins.length ? 1 : 0;
@@ -1272,7 +1274,10 @@
     const files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
     if (embedded) {
-      try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); return; } catch (e) {}
+      // Carry the open collection along, so a drop into "Taxes 2026" still
+      // files there after the round-trip through the shell's router.
+      const collection = state.filter.startsWith("collection:") ? state.filter.slice(11) : "";
+      try { window.parent.postMessage({ type: "shell-add-files", files: files, collection: collection }, "*"); return; } catch (e) {}
     }
     addFiles(files);
   }
@@ -1391,7 +1396,12 @@
       const typing = document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
       if (typing) return;
       if (e.key === "/") { e.preventDefault(); $("#search-input").focus(); }
-      else if (e.key.toLowerCase() === "a") { $("#file-input").click(); }
+      else if (e.key.toLowerCase() === "a") {
+        // Embedded, "add" goes through the platform's one front door (routing
+        // + pinned-VIN tagging) — same as the hidden Add button would.
+        if (embedded) { try { window.parent.postMessage({ type: "shell-open-picker" }, "*"); } catch (x) {} }
+        else $("#file-input").click();
+      }
       else if (e.key.toLowerCase() === "g") setView("grid");
       else if (e.key.toLowerCase() === "l") setView("list");
     });
@@ -1881,11 +1891,15 @@
         if (e && e.ocrSkip) { needOcr++; return; }      // this file's OCR stalled — retry later
         failed++; return;                               // anything else — leave unscanned
       }
-      rec.vins = vins; rec.fins = fins;
+      // Union with what's already on the record (e.g. the pinned-vehicle tag
+      // from the unified intake) — a scan that finds nothing must not wipe an
+      // existing VIN. A forced full rescan (Shift-click) replaces.
+      rec.vins = force ? vins : Array.from(new Set(vins.concat(rec.vins || [])));
+      rec.fins = force ? fins : Array.from(new Set(fins.concat(rec.fins || [])));
       rec.vinScan = Date.now();
       rec.searchText = DB.buildSearchText(rec);
       try { await DB.put(rec); } catch (e) { return; }  // put, not update: preserves updatedAt
-      it.vins = vins; it.fins = fins; it.vinScan = rec.vinScan;
+      it.vins = rec.vins; it.fins = rec.fins; it.vinScan = rec.vinScan;
       if (vins.length) found++;
     }
 
