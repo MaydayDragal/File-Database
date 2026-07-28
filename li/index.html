@@ -2157,10 +2157,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     } else if (d.type === "li-search" && d.q != null) {
       $("search").value = String(d.q); $("fgFilter").value = ""; $("modelFilter").value = "";
       applyView();
-    } else if (d.type === "li-filter" && d.model) {
+    } else if (d.type === "li-filter" && d.model != null) {
       var msel = $("modelFilter");
       msel.value = String(d.model);
-      if (msel.value !== String(d.model)) { msel.value = ""; toast("No LI documents for model " + d.model + "."); }
+      if (d.model && msel.value !== String(d.model)) { msel.value = ""; toast("No LI documents for model " + d.model + "."); }
       $("search").value = "";
       applyView();
     }

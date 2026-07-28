@@ -56,6 +56,11 @@ iframes. The shell owns everything the apps share:
   - An LI document links to the **special tools for its function group and
     model series** (bin locations, photos, prices); a tool links back to
     **every LI document that mentions it** (full-text) and its group's docs.
+  - **Pin the car you're working on** — 📌 a VIN (from a vehicle header, a
+    file's Related chips, or Ctrl+K) and a 🚗 chip appears in the top bar:
+    Files shows that vehicle's paperwork, LI Documents and the Tool
+    Inventory scope to its model series, and files you add are tagged with
+    the VIN automatically. ✕ unpins.
   - **Ctrl+K** anywhere: paste a VIN, LI number or tool number and land on
     the record — or search any app with the query carried over.
   - **Deep links for records**: `#li/LI54.10-P-070001`, `#inventory/group/54`,

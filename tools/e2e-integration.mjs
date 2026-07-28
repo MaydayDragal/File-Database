@@ -198,6 +198,55 @@ await page.keyboard.press("Alt+2");
 await page.waitForTimeout(500);
 check(await page.locator("#tab-li.is-active").count() === 1, "Alt+2 pressed inside an iframe switches to LI Documents");
 
+// ---------- 10. Pinned Active Vehicle ----------
+// Pin the datacard's VIN via quick-open; every data tab scopes to the car.
+await page.keyboard.press("Control+k");
+await page.fill("#qo-input", "WDD2130461A123456");
+await page.waitForTimeout(250);
+const pinRow = page.locator("#qo-results .qo-row", { hasText: "Pin WDD2130461A123456" });
+check(await pinRow.count() === 1, "quick-open offers 'Pin as the active vehicle' for a VIN");
+await pinRow.click();
+await page.waitForTimeout(400);
+check(await page.locator("#vehicle-chip:not([hidden])").count() === 1, "the vehicle chip appears in the top bar");
+check((await page.locator("#vehicle-chip-main").textContent()).includes("123456"), "chip shows the VIN tail");
+
+// Inventory (already loaded) is re-scoped to the vehicle's model series.
+await page.click("#tab-inventory");
+await page.waitForTimeout(500);
+const pinChip = ((await inv.locator("#modelChip").textContent()) || "").trim();
+check(/Model 213/.test(pinChip), `pin scoped the Tool Inventory to model 213 (${pinChip})`);
+
+// Vault: chip click jumps to the vehicle's files (vin: filter → just its file).
+await page.click("#vehicle-chip-main");
+await page.waitForTimeout(500);
+check(await page.locator("#tab-vault.is-active").count() === 1, "clicking the chip opens Files");
+const vaultCards = await vault.locator(".card").count();
+check(vaultCards === 1, `Files is filtered to the pinned vehicle (${vaultCards} card)`);
+
+// While pinned, a front-door file with NO VIN of its own is tagged with the car.
+fs.writeFileSync(path.join(FIX, "receipt-no-vin.txt"), "parts receipt, no vehicle number here");
+await page.setInputFiles("#shell-file-input", path.join(FIX, "receipt-no-vin.txt"));
+const taggedWithPin = await waitFor(async () => {
+  const rec = await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open("file-vault");
+    r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+    r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res(null); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.find((x) => x.name === "receipt-no-vin.txt") || null); }; g.onerror = () => { db.close(); res(null); }; };
+    r.onerror = () => res(null);
+  }));
+  return !!(rec && rec.vins && rec.vins.includes("WDD2130461A123456"));
+});
+check(taggedWithPin, "a front-door file with no VIN of its own is tagged with the pinned vehicle");
+
+// Unpin clears the chip and the scopes.
+await page.click("#vehicle-chip-unpin");
+await page.waitForTimeout(500);
+check(await page.locator("#vehicle-chip[hidden]").count() === 1, "unpin hides the chip");
+await page.click("#tab-inventory");
+await page.waitForTimeout(400);
+check(await inv.locator("#modelChip").isHidden(), "unpin cleared the inventory's model scope");
+const pinSurvives = await page.evaluate(() => localStorage.getItem("fd-vehicle"));
+check(pinSurvives === null, "unpin also clears the persisted pin");
+
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-integration.png") });
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|invalid|structure|xref|tesseract|fetch/i.test(e));

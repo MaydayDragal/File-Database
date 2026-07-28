@@ -103,7 +103,11 @@
       if (!arr.length) return;
       ensureLoaded(target);
       arr.forEach(function (f) {
-        window.VaultBridge.send(target, { name: f.name, type: f.type, blob: f, meta: { fromShell: true } })
+        // While a vehicle is pinned, files headed for the vault are tagged
+        // with its VIN — new paperwork joins the car with zero clicks.
+        var meta = { fromShell: true };
+        if (target === "vault" && vehiclePin) meta.vin = vehiclePin.vin;
+        window.VaultBridge.send(target, { name: f.name, type: f.type, blob: f, meta: meta })
           .catch(function () { toast('Couldn’t add “' + f.name + '”.'); });
       });
     }
@@ -213,6 +217,58 @@
     updateBadges();
   }
 
+  // ---------- pinned "Active Vehicle" (platform-wide current-car context) ----------
+  // A tech works on one car at a time. Pin its VIN once and every data tab
+  // scopes to that vehicle: Files filters to the VIN, LI Documents and the
+  // Tool Inventory filter to the model series derived from the VIN's
+  // Baumuster digits (chars 4-6). Files added through the front door while
+  // pinned are tagged with the VIN automatically. Unpin clears the scope.
+  var vehiclePin = null; // { vin, series }
+  try { var vp = JSON.parse(localStorage.getItem("fd-vehicle") || "null"); if (vp && vp.vin) vehiclePin = vp; } catch (e) {}
+  function seriesOfVin(vin) {
+    var s = String(vin || "").toUpperCase();
+    return s.length === 17 && /^\d{3}$/.test(s.slice(3, 6)) ? s.slice(3, 6) : "";
+  }
+  function vehicleScopeMsg(app) {
+    if (app === "vault") return { type: "vault-filter", filter: vehiclePin ? "vin:" + vehiclePin.vin : "all" };
+    var model = vehiclePin ? vehiclePin.series : "";
+    if (app === "li") return { type: "li-filter", model: model };
+    if (app === "inventory") return { type: "inventory-filter", model: model };
+    return null;
+  }
+  function sendVehicleScope(app) {
+    var m = vehicleScopeMsg(app);
+    if (m) frameMessage(app, m);
+  }
+  function renderVehicleChip() {
+    var chip = $("#vehicle-chip");
+    if (!chip) return;
+    chip.hidden = !vehiclePin;
+    if (vehiclePin) {
+      $("#vehicle-chip-main").textContent = "🚗 …" + vehiclePin.vin.slice(-6);
+      $("#vehicle-chip-main").title = "Active vehicle " + vehiclePin.vin +
+        (vehiclePin.series ? " (model " + vehiclePin.series + ")" : "") + " — click for its files";
+    }
+  }
+  function pinVehicle(vin) {
+    vin = String(vin || "").toUpperCase().trim();
+    if (!vin) return;
+    vehiclePin = { vin: vin, series: seriesOfVin(vin) };
+    try { localStorage.setItem("fd-vehicle", JSON.stringify(vehiclePin)); } catch (e) {}
+    renderVehicleChip();
+    ["vault", "li", "inventory"].forEach(function (k) { if (APPS[k].loaded) sendVehicleScope(k); });
+    toast("Pinned " + vin + (vehiclePin.series ? " — tabs now scope to model " + vehiclePin.series : "") + ".");
+  }
+  function unpinVehicle() {
+    if (!vehiclePin) return;
+    var was = vehiclePin.vin;
+    vehiclePin = null;
+    try { localStorage.removeItem("fd-vehicle"); } catch (e) {}
+    renderVehicleChip();
+    ["vault", "li", "inventory"].forEach(function (k) { if (APPS[k].loaded) sendVehicleScope(k); });
+    toast("Unpinned " + was + ".");
+  }
+
   // ---------- Ctrl+K quick-open (ID router) ----------
   // Recognizes the platform's shared IDs and jumps straight to the record;
   // anything else offers a search in each app with the query carried over.
@@ -233,6 +289,7 @@
     if (QO_VIN.test(s) && !QO_TOOL.test(s)) {
       var vin = s.toUpperCase();
       rows.push({ icon: "🚗", label: "Files for vehicle " + vin, app: "vault", msg: { type: "vault-filter", filter: "vin:" + vin } });
+      rows.push({ icon: "📌", label: "Pin " + vin + " as the active vehicle", run: function () { pinVehicle(vin); } });
     }
     rows.push({ icon: "📁", label: "Search Files for “" + s + "”", app: "vault", msg: { type: "vault-search", q: s } });
     rows.push({ icon: "🗄️", label: "Search LI Documents for “" + s + "”", app: "li", msg: { type: "li-search", q: s } });
@@ -256,7 +313,12 @@
       b.className = "qo-row" + (i === 0 ? " is-first" : "");
       b.innerHTML = '<span class="qo-row__icon">' + r.icon + "</span><span></span>";
       b.lastChild.textContent = r.label;
-      b.onclick = function () { qoClose(); activate(r.app); frameMessage(r.app, r.msg); };
+      b.onclick = function () {
+        qoClose();
+        if (r.run) { r.run(); return; }
+        activate(r.app);
+        frameMessage(r.app, r.msg);
+      };
       box.append(b);
     });
   }
@@ -324,6 +386,9 @@
         if (!f.src) return;
         APPS[k].ready = true;
         broadcastTheme(f);
+        // Apply the pinned-vehicle scope BEFORE flushing queued messages, so
+        // an explicit deep link/navigation queued for this app wins over it.
+        if (vehiclePin && (k === "vault" || k === "li" || k === "inventory")) sendVehicleScope(k);
         APPS[k].pending.splice(0).forEach(function (m) {
           try { f.contentWindow.postMessage(m, "*"); } catch (e) {}
         });
@@ -331,6 +396,15 @@
       });
     });
     $("#theme-btn").addEventListener("click", cycleTheme);
+
+    // Pinned-vehicle chip: click = that vehicle's files; ✕ = unpin.
+    renderVehicleChip();
+    $("#vehicle-chip-main").addEventListener("click", function () {
+      if (!vehiclePin) return;
+      activate("vault");
+      frameMessage("vault", { type: "vault-filter", filter: "vin:" + vehiclePin.vin });
+    });
+    $("#vehicle-chip-unpin").addEventListener("click", unpinVehicle);
 
     // One-click platform backup: each app runs its own existing export
     // (.fvault, .lidb, .tidb) — three files, one button, no menu spelunking.
@@ -423,6 +497,8 @@
         activate(Object.keys(APPS)[d.n - 1]);
       }
       else if (d.type === "shell-quickopen") qoOpen();
+      // An app asks to pin the active vehicle (vault By-VIN header / detail).
+      else if (d.type === "shell-pin-vehicle" && d.vin) pinVehicle(d.vin);
     });
     window.addEventListener("focus", updateBadges);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) updateBadges(); });

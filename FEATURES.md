@@ -92,6 +92,14 @@ Platform Shell
 │   ├── ?view=li|inventory → opens that app        (legacy hub URLs)
 │   ├── ?view=starred / ?action=add → opens the vault WITH the query passed into its iframe
 │   └── Consumed queries are stripped from the URL so reload follows the hash, not the shortcut
+├── Pinned "Active Vehicle" (platform-wide current-car context; localStorage fd-vehicle)
+│   ├── Pin from: vault By-VIN header 📌 · a file's Related chips · quick-open's VIN row
+│   ├── Chip in the top bar: 🚗 …<VIN tail> (click = that vehicle's files) + ✕ unpin
+│   ├── Scoping: vault → vin:<VIN> filter · LI + inventory → model series from the VIN's
+│   │   Baumuster digits; applied on pin and on app first-load (BEFORE queued deep links,
+│   │   so explicit navigation wins); unpin clears all three scopes
+│   └── Front-door files headed to the vault while pinned get meta.vin → tagged with the
+│       car (auto VIN detect UNIONS its findings instead of clobbering the pin)
 ├── Ctrl+K quick-open (ID router — works from inside any iframe, forwarded up)
 │   ├── Recognizes an LI number → open that doc · a tool number (3-3-2-2-2) → open that tool ·
 │   │   a 17-char VIN → that vehicle's files

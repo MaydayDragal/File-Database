@@ -324,8 +324,10 @@
     if (!vins.length && !fins.length) return 0;
     const stored = await DB.get(rec.id);
     if (!stored) return 0;
-    stored.vins = vins;
-    stored.fins = fins;
+    // Union, don't clobber: the record may already carry the pinned vehicle's
+    // VIN from the unified intake — detection adds evidence on top of it.
+    stored.vins = Array.from(new Set(vins.concat(stored.vins || [])));
+    stored.fins = Array.from(new Set(fins.concat(stored.fins || [])));
     stored.vinScan = Date.now();
     stored.searchText = DB.buildSearchText(stored);
     await DB.put(stored); // put, not update: preserves updatedAt
@@ -441,15 +443,22 @@
         // group → jump links to the LI docs / special tools for this vehicle.
         let series = seriesOfId(v);
         if (!series) for (const it of groups.get(v)) { for (const f of it.fins || []) { series = seriesOfId(f); if (series) break; } if (series) break; }
-        const links = series
-          ? `<span class="group-head__links"><button type="button" class="group-head__link" data-series-li="${series}" title="LI documents for model ${series}">🗄️ LI ${series}</button><button type="button" class="group-head__link" data-series-tools="${series}" title="Special tools for model ${series}">🔧 Tools ${series}</button></span>`
+        const seriesLinks = series
+          ? `<button type="button" class="group-head__link" data-series-li="${series}" title="LI documents for model ${series}">🗄️ LI ${series}</button><button type="button" class="group-head__link" data-series-tools="${series}" title="Special tools for model ${series}">🔧 Tools ${series}</button>`
           : "";
+        // Pinning is a platform feature — only offered when the shell hosts us.
+        const pinLink = embedded ? `<button type="button" class="group-head__link" data-pin="${esc(v)}" title="Pin ${esc(v)} as the active vehicle — every tab then scopes to this car">📌 Pin</button>` : "";
+        const links = (seriesLinks || pinLink) ? `<span class="group-head__links">${seriesLinks}${pinLink}</span>` : "";
         head.innerHTML = `<span class="group-head__icon">🚗</span><span class="group-head__vin">${esc(v)}</span>${links}<span class="group-head__count">${groups.get(v).length}</span>`;
         head.title = "Show only " + v;
         head.onclick = () => setFilter("vin:" + v);
         head.querySelectorAll(".group-head__link").forEach((b) => {
           b.onclick = (e) => {
             e.stopPropagation();
+            if (b.dataset.pin) {
+              try { window.parent.postMessage({ type: "shell-pin-vehicle", vin: b.dataset.pin }, "*"); } catch (x) {}
+              return;
+            }
             const s = b.dataset.seriesLi || b.dataset.seriesTools;
             if (b.dataset.seriesLi) crossNav("li", { type: "li-filter", model: s }, "li/model/" + s);
             else crossNav("inventory", { type: "inventory-filter", model: s }, "inventory/model/" + s);
@@ -768,6 +777,10 @@
       chips.push({ label: "🔧 Tools · model " + s, title: "Special tools valid for model series " + s,
         go: () => crossNav("inventory", { type: "inventory-filter", model: s }, "inventory/model/" + s) });
     });
+    if (embedded) (rec.vins || []).forEach((v) => {
+      chips.push({ label: "📌 Pin " + v.slice(-6), title: "Pin " + v + " as the active vehicle — every tab then scopes to this car",
+        go: () => { try { window.parent.postMessage({ type: "shell-pin-vehicle", vin: v }, "*"); } catch (e) {} } });
+    });
     $("#d-related-field").hidden = !chips.length;
     chips.forEach((c) => {
       const b = document.createElement("button");
@@ -1006,6 +1019,9 @@
       collection,
       note: m.title ? ("LI: " + m.title) : "",
       starred: false,
+      // A pinned active vehicle tags every front-door file with its VIN.
+      vins: m.vin ? [String(m.vin).toUpperCase()] : [],
+      fins: [],
       createdAt: now,
       updatedAt: now,
     };
