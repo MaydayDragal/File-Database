@@ -30,9 +30,8 @@
       "icon.png"
     ],
     "win": {
-      "target": "dir",
-      "icon": "icon.ico",
-      "signAndEditExecutable": false
+      "target": "portable",
+      "icon": "icon.ico"
     },
     "portable": {
       "artifactName": "FileDatabase-Portable-App.${ext}"

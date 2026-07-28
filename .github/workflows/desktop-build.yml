@@ -49,7 +49,7 @@ jobs:
       - name: Build portable Windows app
         working-directory: desktop
         # Native rebrand on Windows (icon + version info); no wine needed.
-        run: npx --no-install electron-builder --win portable -c.win.signAndEditExecutable=true
+        run: npx --no-install electron-builder --win portable --publish never
 
       - name: Show build output
         working-directory: desktop
