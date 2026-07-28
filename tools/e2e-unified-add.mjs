@@ -34,16 +34,23 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 let failures = 0;
 const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failures++; };
 
-// Read a sibling app's IndexedDB count from the shell page (same origin).
+// Read a sibling app's IndexedDB from the shell page (same origin). Guarded
+// like the shell's badge peek: aborting onupgradeneeded means the peek can
+// NEVER create an app's database before the app itself does (a premature
+// create would block the app's own store creation — the classic peek bug).
 const dbCount = (dbName, store) => page.evaluate(({ dbName, store }) => new Promise((resolve) => {
   const r = indexedDB.open(dbName);
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains(store)) return resolve(0); const c = db.transaction(store, "readonly").objectStore(store).count(); c.onsuccess = () => resolve(c.result); c.onerror = () => resolve(-1); };
-  r.onerror = () => resolve(-1);
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains(store)) { db.close(); return resolve(0); } const c = db.transaction(store, "readonly").objectStore(store).count(); c.onsuccess = () => { db.close(); resolve(c.result); }; c.onerror = () => { db.close(); resolve(-1); }; };
+  r.onerror = () => resolve(0);
+  r.onblocked = () => resolve(0);
 }), { dbName, store });
 const vaultCollections = () => page.evaluate(() => new Promise((resolve) => {
   const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) return resolve([]); const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => resolve(g.result.map((x) => ({ name: x.name, collection: x.collection }))); g.onerror = () => resolve([]); };
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return resolve([]); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); resolve(g.result.map((x) => ({ name: x.name, collection: x.collection }))); }; g.onerror = () => { db.close(); resolve([]); }; };
   r.onerror = () => resolve([]);
+  r.onblocked = () => resolve([]);
 }));
 const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(200); } return false; };
 

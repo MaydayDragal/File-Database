@@ -316,6 +316,10 @@
           <h3>Referenced documents</h3>
           <div class="refchips" id="dRefChips"></div>
         </div>
+        <div class="refs" id="dXApps" style="display:none">
+          <h3>Special tools</h3>
+          <div class="refchips" id="dXAppChips"></div>
+        </div>
         <div class="cmp" id="dCmp" style="display:none">
           <h3>Compare versions</h3>
           <div class="row2"><select id="dCmpA"></select><span class="muted">→</span><select id="dCmpB"></select></div>
@@ -463,7 +467,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function fmtBytes(b) { if (!b) return "0 B"; var u = ["B", "KB", "MB", "GB"], i = Math.floor(Math.log(b) / Math.log(1024)); i = Math.min(i, u.length - 1); return (b / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + u[i]; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   var toastT = 0;
-  function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600); }
+  function toast(msg) {
+    // Relay to the platform shell so background-tab events (imports, sync,
+    // OCR) still surface; the shell only shows relays for background tabs.
+    try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "shell-toast", app: "li", msg: String(msg) }, "*"); } catch (e) {}
+    var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
 
   // ---------- filename rules (Windows-safe) ----------
   var WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
@@ -925,6 +934,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     $("dReason").value = d.reason || ""; $("dFg").value = d.fgroup || ""; $("dDate").value = d.date || ""; $("dValid").value = d.validity || "";
     updNewName();
     renderRefs(d);
+    renderCrossApps(d);
     dDirty = false;
     getFile(d.id).then(function (blob) { if (curDoc !== d || !$("detailOverlay").classList.contains("show")) return; if (curUrl) URL.revokeObjectURL(curUrl); curUrl = blob ? URL.createObjectURL(asPdf(blob)) : null; $("dFrame").src = curUrl || "about:blank"; });
   }
@@ -957,6 +967,41 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     dDirty = false;
     if (curGroup) navStack.push(curGroup.key); // remember where we came from
     openDetail(key, true);
+  }
+  // Cross-app: this repair document → the special tools it calls for, by the
+  // function group embedded in its LI number (LI54.30-… = group 54) and its
+  // model-series validity. Jumps into the Tool Inventory pre-filtered.
+  function crossNav(app, payload, hashPath) {
+    var emb = false; try { emb = window.parent && window.parent !== window; } catch (e) { emb = true; }
+    if (emb) { try { window.parent.postMessage({ type: "shell-nav", app: app, payload: payload }, "*"); return; } catch (x) {} }
+    window.open("../index.html#" + hashPath);
+  }
+  function liGroupOf(d) {
+    var m = String(d.li || "").match(/^[A-Z]{2}(\d{2})\./i);
+    if (m) return m[1];
+    m = String(d.fgroup || "").match(/^(\d{2})/);
+    return m ? m[1] : "";
+  }
+  function renderCrossApps(d) {
+    var box = $("dXApps"), chips = $("dXAppChips");
+    chips.innerHTML = "";
+    var grp = liGroupOf(d), models = modelsOf(d);
+    function chip(txt, title, go) {
+      var el = document.createElement("span");
+      el.className = "refchip have";
+      el.textContent = txt; el.title = title;
+      el.addEventListener("click", go);
+      chips.appendChild(el);
+    }
+    if (grp) chip("🔧 Tools · group " + grp, "Special tools for function group " + grp + " — bin locations, photos, prices", function () {
+      crossNav("inventory", { type: "inventory-filter", grp: grp }, "inventory/group/" + grp);
+    });
+    models.forEach(function (s) {
+      chip("🔧 Tools · model " + s, "Special tools valid for model series " + s, function () {
+        crossNav("inventory", { type: "inventory-filter", model: s }, "inventory/model/" + s);
+      });
+    });
+    box.style.display = (grp || models.length) ? "block" : "none";
   }
   $("dVerSel").addEventListener("change", function () { loadVersion(+this.value); });
   function collectDetail() { return { li: $("dLi").value, ver: $("dVer").value, title: $("dTitleIn").value, reason: $("dReason").value, fgroup: $("dFg").value, date: $("dDate").value, validity: $("dValid").value }; }
@@ -1849,11 +1894,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       })();
     });
   }
-  $("backupBtn").addEventListener("click", function () {
+  function runBackup() {
     if (!docs.length) { toast("Database is empty."); return; }
     toast("Building backup…");
     buildBackup().then(function (b) { dlBlob(b, "LI-database-backup.lidb"); }, function () { toast("Couldn't build the backup."); });
-  });
+  }
+  $("backupBtn").addEventListener("click", runBackup);
 
   // ---------- auto-save to a chosen file (e.g. on a flash drive) ----------
   var asHandle = null, asOn = false, asTimer = 0, asBusy = false, asAgain = false, asFailed = false, asPending = false;
@@ -1935,8 +1981,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }).catch(function () {});
   }
   $("restoreBtn").addEventListener("click", function () { $("restoreInput").click(); });
-  $("restoreInput").addEventListener("change", function (e) {
-    var f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  function restoreBackupFile(f) {
     JSZip.loadAsync(f).then(function (zip) {
       var mf = zip.file("manifest.json"); if (!mf) { toast("Not a valid backup file."); return; }
       return mf.async("string").then(function (s) {
@@ -1949,6 +1994,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         })();
       });
     }).catch(function () { toast("Couldn't read that backup."); });
+  }
+  $("restoreInput").addEventListener("change", function (e) {
+    var f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    restoreBackupFile(f);
   });
 
   // ---------- folder sync (optional) ----------
@@ -2062,16 +2111,74 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       .then(function () { syncLabel(); autoSyncLabel(); if (autoSyncOn && syncDir) startAutoSync(); });
   }
 
+  // ---------- keyboard (platform parity) ----------
+  // "/" focuses search (like the other apps); Alt+1–4 forwards platform-wide
+  // app switching up to the shell when embedded.
+  document.addEventListener("keydown", function (e) {
+    var emb = false; try { emb = window.parent && window.parent !== window; } catch (x) { emb = true; }
+    if (emb && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
+      return;
+    }
+    if (emb && (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-quickopen" }, "*"); } catch (x) {}
+      return;
+    }
+    var el = document.activeElement;
+    if (e.key === "/" && el && el.tagName !== "INPUT" && el.tagName !== "TEXTAREA" && el.tagName !== "SELECT") {
+      e.preventDefault();
+      $("search").focus();
+    }
+  });
+
   // ---------- boot ----------
-  // Follow the platform shell's theme (system | light | dark). The shell persists the choice.
+  // Messages from the platform shell: theme + cross-app navigation (deep links
+  // and "related" jumps from the other apps). Nav messages that arrive before
+  // the database has loaded are replayed after boot.
+  var bootReady = false, pendingNav = [];
+  function handleShellNav(d) {
+    if (!bootReady) { pendingNav.push(d); return; }
+    if (d.type === "platform-backup") {
+      runBackup();
+    } else if (d.type === "li-restore" && d.file) {
+      restoreBackupFile(d.file);
+    } else if (d.type === "li-open" && d.li) {
+      if (groupsByKey["li:" + d.li]) {
+        if (dDirty && !confirm("Discard unsaved changes to this document?")) return;
+        dDirty = false; navStack = [];
+        openDetail("li:" + d.li);
+      } else {
+        $("search").value = d.li; $("fgFilter").value = ""; $("modelFilter").value = "";
+        applyView();
+        if (!view.length) toast("No LI document " + d.li + " in this database.");
+      }
+    } else if (d.type === "li-search" && d.q != null) {
+      $("search").value = String(d.q); $("fgFilter").value = ""; $("modelFilter").value = "";
+      applyView();
+    } else if (d.type === "li-filter" && d.model) {
+      var msel = $("modelFilter");
+      msel.value = String(d.model);
+      if (msel.value !== String(d.model)) { msel.value = ""; toast("No LI documents for model " + d.model + "."); }
+      $("search").value = "";
+      applyView();
+    }
+  }
   window.addEventListener("message", function (ev) {
     var d = ev && ev.data;
-    if (!d || d.type !== "platform-theme") return;
-    if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
-    else document.documentElement.removeAttribute("data-theme");
+    if (!d) return;
+    if (d.type === "platform-theme") {
+      if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
+      else document.documentElement.removeAttribute("data-theme");
+      return;
+    }
+    if (d.type === "li-open" || d.type === "li-search" || d.type === "li-filter" || d.type === "li-restore" || d.type === "platform-backup") handleShellNav(d);
   });
   openDB().then(function (db) { DB = db; if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); return refresh(); }).then(function () {
-    if (!docs.length) $("importOverlay").classList.add("show");
+    bootReady = true;
+    if (pendingNav.length) pendingNav.splice(0).forEach(handleShellNav);
+    else if (!docs.length) $("importOverlay").classList.add("show");
     openFromHash(); // deep-link: open the document named in #LI… if present
     return Promise.all([resumeAutosave(), resumeSyncDir()]);
   }).catch(function (e) { $("empty").innerHTML = '<div class="empty">Couldn\'t open the local database.<br><span class="muted">' + esc(e && e.message) + "</span></div>"; });

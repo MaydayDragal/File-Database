@@ -50,6 +50,7 @@
     <select id="fNote" title="Note"></select>
     <button class="btn btn-ghost btn-sm" id="offeredFilter" title="Show only tools we offer (from the XENTRY catalog)">🛒 Offered</button>
     <button class="btn btn-ghost btn-sm" id="starFilter" title="Show starred only">★ Starred</button>
+    <button class="btn btn-ghost btn-sm" id="modelChip" title="Filtering by model series — click to clear" hidden></button>
     <span class="count" id="count"></span>
   </div>
 
@@ -92,6 +93,8 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost btn-sm" id="dCopy">Copy tool #</button>
+        <button class="btn btn-ghost btn-sm" id="dLiGroup" hidden></button>
+        <button class="btn btn-ghost btn-sm" id="dLiFind" title="Search the LI documents' full text for this tool number">🗄️ Find in LI docs</button>
         <span class="spacer"></span>
         <button class="btn btn-ghost btn-sm" data-close>Close</button>
         <button class="btn btn-primary btn-sm" id="dSave">Save</button>

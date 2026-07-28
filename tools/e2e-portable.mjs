@@ -53,6 +53,11 @@ await sleep(2500);
 const invF = page.frames().find((f) => f.url().includes("/inventory/"));
 const invEmpty = invF ? await invF.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)).catch(() => false) : false;
 ok(invEmpty, "inventory boots to its empty-state prompt from local files");
+// The USB build ships the catalog (app/data/FileInventory.tidb) — the empty
+// state must offer the one-click load even over file://.
+let invOffer = 0;
+for (let i = 0; i < 20 && !invOffer; i++) { invOffer = invF ? await invF.locator("#loadBuiltinBtn").count().catch(() => 0) : 0; if (!invOffer) await sleep(300); }
+ok(invOffer === 1, "USB build offers the bundled tool catalog (one-click load)");
 await sleep(1200); await ctx.close();
 
 ctx = await chromium.launchPersistentContext(DATA, { executablePath: EXE, args });

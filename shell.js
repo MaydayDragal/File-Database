@@ -80,8 +80,24 @@
     var files = Array.prototype.slice.call(list || []).filter(Boolean);
     if (!files.length) return;
     if (!window.VaultBridge) { toast("Couldn't add files — transfer bus unavailable."); return; }
-    var toLI = [], toVault = [];
-    files.forEach(function (f) { (looksLikeLI(f) ? toLI : toVault).push(f); });
+    var toLI = [], toVault = [], special = [];
+    files.forEach(function (f) {
+      var n = (f.name || "").toLowerCase();
+      // The platform's own database files open in their app instead of being
+      // stored as opaque blobs: .tidb → Tool Inventory, .fvault → Files
+      // restore, .lidb → LI restore. (.zip stays a regular file — only LI's
+      // own .lidb extension is unambiguous.)
+      if (/\.tidb$/.test(n)) special.push({ app: "inventory", msg: { type: "inventory-import", file: f }, label: "Tool Inventory" });
+      else if (/\.fvault$/.test(n)) special.push({ app: "vault", msg: { type: "vault-restore", file: f }, label: "Files (restore)" });
+      else if (/\.lidb$/.test(n)) special.push({ app: "li", msg: { type: "li-restore", file: f }, label: "LI Documents (restore)" });
+      else (looksLikeLI(f) ? toLI : toVault).push(f);
+    });
+
+    special.forEach(function (s) {
+      ensureLoaded(s.app);
+      frameMessage(s.app, s.msg);
+      toast("Opening " + s.msg.file.name + " in " + s.label + "…");
+    });
 
     function deliver(target, arr) {
       if (!arr.length) return;
@@ -94,14 +110,19 @@
     deliver("li", toLI);
     deliver("vault", toVault);
 
-    var parts = [];
-    if (toVault.length) parts.push(toVault.length + " to Files");
-    if (toLI.length) parts.push(toLI.length + " to LI Documents");
-    toast("Added " + files.length + (files.length === 1 ? " file" : " files") + " — " + parts.join(" · ") + ".");
+    var n = toLI.length + toVault.length;
+    if (n) {
+      var parts = [];
+      if (toVault.length) parts.push(toVault.length + " to Files");
+      if (toLI.length) parts.push(toLI.length + " to LI Documents");
+      toast("Added " + n + (n === 1 ? " file" : " files") + " — " + parts.join(" · ") + ".");
+    }
 
-    // If the whole batch belongs to one app, surface it so the user sees the
-    // result; a mixed batch stays put (switching would hide half of it).
-    var only = toLI.length && !toVault.length ? "li" : (toVault.length && !toLI.length ? "vault" : null);
+    // Surface the app that received the batch: a database file opens its app;
+    // otherwise a single-target batch switches, a mixed batch stays put.
+    var only = special.length === 1 && !n ? special[0].app
+      : (!special.length && toLI.length && !toVault.length) ? "li"
+      : (!special.length && toVault.length && !toLI.length) ? "vault" : null;
     if (only && only !== current) activate(only);
 
     // New rows land after the receiver ingests (LI may OCR) — nudge the badges.
@@ -112,10 +133,41 @@
   function parseHash() {
     var h = (location.hash || "").replace(/^#\/?/, "");
     if (!h) return null;
-    var parts = h.split("/");
-    var app = parts[0] === "files" ? "vault" : parts[0];
+    var i = h.indexOf("/");
+    var head = i === -1 ? h : h.slice(0, i);
+    var sub = i === -1 ? null : h.slice(i + 1);
+    var app = head === "files" ? "vault" : head;
     if (!APPS[app]) return null;
-    return { app: app, tab: parts[1] || null };
+    return { app: app, tab: app === "toolbox" ? sub : null, sub: sub };
+  }
+
+  // Record-level deep links: translate a hash sub-path into the target app's
+  // message contract. #li/LI54.10-P-070001 opens that document, #li/group/54
+  // shows group-54 docs (every LI number embeds its group, so a "LI54." search
+  // is precise), #inventory/group/54 filters tools, #inventory/model/214 and
+  // #li/model/214 filter by model series, #vault/vin/<VIN> opens that vehicle.
+  function subMessage(app, sub) {
+    if (!sub) return null;
+    var dec = sub;
+    try { dec = decodeURIComponent(sub); } catch (e) {}
+    var m;
+    if (app === "li") {
+      if ((m = dec.match(/^group\/(\d{2})/))) return { type: "li-search", q: "LI" + m[1] + "." };
+      if ((m = dec.match(/^model\/(\d{3})$/))) return { type: "li-filter", model: m[1] };
+      if ((m = dec.match(/^search\/(.+)$/))) return { type: "li-search", q: m[1] };
+      return { type: "li-open", li: dec };
+    }
+    if (app === "inventory") {
+      if ((m = dec.match(/^group\/(\d{1,2})$/))) return { type: "inventory-filter", grp: m[1] };
+      if ((m = dec.match(/^model\/(\d{3})$/))) return { type: "inventory-filter", model: m[1] };
+      if ((m = dec.match(/^search\/(.+)$/))) return { type: "inventory-search", q: m[1] };
+      return { type: "inventory-open", toolNo: dec.replace(/^tool\//, "") };
+    }
+    if (app === "vault") {
+      if ((m = dec.match(/^vin\/([A-Za-z0-9]{6,17})$/))) return { type: "vault-filter", filter: "vin:" + m[1].toUpperCase() };
+      if ((m = dec.match(/^search\/(.+)$/))) return { type: "vault-search", q: m[1] };
+    }
+    return null;
   }
 
   function frameMessage(app, msg) {
@@ -143,9 +195,14 @@
       $(app.frame).src = src;
     }
     if (name === "toolbox" && opts.tab) frameMessage("toolbox", { type: "toolbox-open", tab: opts.tab });
+    else if (opts.sub) {
+      var sm = subMessage(name, opts.sub);
+      if (sm) frameMessage(name, sm);
+    }
     current = name;
     document.title = app.title + " · File Database";
-    var hash = "#" + name + (name === "toolbox" && opts.tab ? "/" + opts.tab : "");
+    var subPart = name === "toolbox" ? opts.tab : (opts.sub && subMessage(name, opts.sub) ? opts.sub : null);
+    var hash = "#" + name + (subPart ? "/" + subPart : "");
     if (location.hash !== hash || location.search) {
       // Also drop any legacy ?view=/?action= query once it has been consumed,
       // so a reload follows the hash (the latest navigation) instead of
@@ -154,6 +211,54 @@
     }
     try { localStorage.setItem("fd-app", name); } catch (e) {}
     updateBadges();
+  }
+
+  // ---------- Ctrl+K quick-open (ID router) ----------
+  // Recognizes the platform's shared IDs and jumps straight to the record;
+  // anything else offers a search in each app with the query carried over.
+  var QO_LI = /^[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}$/i;
+  var QO_TOOL = /^(\d{3})\s*(\d{3})\s*(\d{2})\s*(\d{2})\s*(\d{2})$/;
+  var QO_VIN = /^[A-HJ-NPR-Z0-9]{17}$/i;
+  function qoRows(q) {
+    var s = q.trim(), rows = [], m;
+    if (!s) return rows;
+    if (QO_LI.test(s)) {
+      var li = s.toUpperCase();
+      rows.push({ icon: "🗄️", label: "Open " + li + " in LI Documents", app: "li", msg: { type: "li-open", li: li } });
+    }
+    if ((m = s.match(QO_TOOL))) {
+      var tn = [m[1], m[2], m[3], m[4], m[5]].join(" ");
+      rows.push({ icon: "🔧", label: "Open tool " + tn + " in the Tool Inventory", app: "inventory", msg: { type: "inventory-open", toolNo: tn } });
+    }
+    if (QO_VIN.test(s) && !QO_TOOL.test(s)) {
+      var vin = s.toUpperCase();
+      rows.push({ icon: "🚗", label: "Files for vehicle " + vin, app: "vault", msg: { type: "vault-filter", filter: "vin:" + vin } });
+    }
+    rows.push({ icon: "📁", label: "Search Files for “" + s + "”", app: "vault", msg: { type: "vault-search", q: s } });
+    rows.push({ icon: "🗄️", label: "Search LI Documents for “" + s + "”", app: "li", msg: { type: "li-search", q: s } });
+    rows.push({ icon: "🔧", label: "Search the Tool Inventory for “" + s + "”", app: "inventory", msg: { type: "inventory-search", q: s } });
+    return rows;
+  }
+  function qoOpen() {
+    $("#quickopen").hidden = false;
+    var inp = $("#qo-input");
+    inp.value = "";
+    $("#qo-results").innerHTML = "";
+    setTimeout(function () { inp.focus(); }, 0);
+  }
+  function qoClose() { $("#quickopen").hidden = true; }
+  function qoRender() {
+    var box = $("#qo-results");
+    box.innerHTML = "";
+    qoRows($("#qo-input").value).forEach(function (r, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "qo-row" + (i === 0 ? " is-first" : "");
+      b.innerHTML = '<span class="qo-row__icon">' + r.icon + "</span><span></span>";
+      b.lastChild.textContent = r.label;
+      b.onclick = function () { qoClose(); activate(r.app); frameMessage(r.app, r.msg); };
+      box.append(b);
+    });
   }
 
   // ---------- tab badges (peek sibling app databases without creating them) ----------
@@ -179,7 +284,15 @@
   }
   function setBadge(key, n) {
     var el = document.querySelector('[data-count="' + key + '"]');
-    if (el) el.textContent = (n === null || n === undefined) ? "" : String(n);
+    if (!el) return;
+    var next = (n === null || n === undefined) ? "" : String(n);
+    if (el.textContent !== next && next !== "") {
+      // Pulse so a background app's count change is noticeable.
+      el.classList.remove("pulse");
+      void el.offsetWidth; // restart the animation
+      el.classList.add("pulse");
+    }
+    el.textContent = next;
   }
   var badgeT = null;
   function updateBadges() {
@@ -219,6 +332,17 @@
     });
     $("#theme-btn").addEventListener("click", cycleTheme);
 
+    // One-click platform backup: each app runs its own existing export
+    // (.fvault, .lidb, .tidb) — three files, one button, no menu spelunking.
+    // Staggered so three save prompts don't land at the same instant.
+    $("#backup-all-btn").addEventListener("click", function () {
+      toast("Backing up all three databases…");
+      ["vault", "li", "inventory"].forEach(function (k, i) {
+        ensureLoaded(k);
+        setTimeout(function () { frameMessage(k, { type: "platform-backup" }); }, i * 1200);
+      });
+    });
+
     // Unified "Add files": one button + one hidden input for the whole platform.
     var fileInput = $("#shell-file-input");
     $("#add-btn").addEventListener("click", function () { fileInput.click(); });
@@ -237,6 +361,29 @@
       if (e.dataTransfer.files && e.dataTransfer.files.length) routeFiles(e.dataTransfer.files);
     });
 
+    // Alt+1–4 switches apps from anywhere in the shell chrome (apps forward
+    // the same combo up from inside their iframes as {shell-switch});
+    // Ctrl/Cmd+K opens quick-open (forwarded as {shell-quickopen}).
+    window.addEventListener("keydown", function (e) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+        e.preventDefault();
+        activate(Object.keys(APPS)[+e.key - 1]);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        qoOpen();
+      } else if (e.key === "Escape" && !$("#quickopen").hidden) {
+        qoClose();
+      }
+    });
+
+    // Quick-open wiring
+    $("#qo-input").addEventListener("input", qoRender);
+    $("#qo-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { var first = $("#qo-results .qo-row"); if (first) first.click(); }
+      else if (e.key === "Escape") qoClose();
+    });
+    $("#quickopen").addEventListener("click", function (e) { if (e.target === $("#quickopen")) qoClose(); });
+
     // ARIA tabs keyboard pattern: arrows move + activate, Home/End jump.
     $("#tabs").addEventListener("keydown", function (e) {
       var order = Object.keys(APPS);
@@ -252,13 +399,30 @@
     // Cross-app navigation + notifications from the apps
     window.addEventListener("message", function (e) {
       var d = e.data || {};
-      if (d.type === "shell-nav" && APPS[d.app]) activate(d.app, { tab: d.tab || null });
+      if (d.type === "shell-nav" && APPS[d.app]) {
+        activate(d.app, { tab: d.tab || null });
+        // Apps can attach a ready-made message for the target app (cross-app
+        // links: "tools for group 54", "open LI…"). The shell just routes it.
+        if (d.payload && d.payload.type) frameMessage(d.app, d.payload);
+      }
       else if (d.type === "vault-nav" && d.to === "files") activate("vault");   // legacy contract
       else if (d.type === "li-changed") updateBadges();
       // An embedded app forwards files dropped/pasted over it, so the platform
       // files them through one router regardless of which tab is showing.
       else if (d.type === "shell-add-files" && d.files) routeFiles(d.files);
       else if (d.type === "shell-open-picker") $("#shell-file-input").click();
+      // Toast relay: an app in a BACKGROUND tab announced something (import
+      // finished, sync ran, bridge delivery). Surface it with an app prefix —
+      // otherwise it toasts invisibly inside a hidden iframe.
+      else if (d.type === "shell-toast" && APPS[d.app] && d.msg) {
+        if (d.app !== current) toast(APPS[d.app].title + ": " + d.msg);
+        updateBadges();
+      }
+      // Keyboard forwarded from inside an iframe (Alt+1–4 app switching).
+      else if (d.type === "shell-switch" && d.n >= 1 && d.n <= 4) {
+        activate(Object.keys(APPS)[d.n - 1]);
+      }
+      else if (d.type === "shell-quickopen") qoOpen();
     });
     window.addEventListener("focus", updateBadges);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) updateBadges(); });
@@ -269,7 +433,7 @@
     var params = new URLSearchParams(location.search);
     var view = params.get("view"), action = params.get("action");
     var fromHash = parseHash();
-    if (fromHash) activate(fromHash.app, { tab: fromHash.tab });
+    if (fromHash) activate(fromHash.app, { tab: fromHash.tab, sub: fromHash.sub });
     else if (view === "li" || view === "inventory") activate(view);
     else if (view === "starred" || action === "add") activate("vault", { query: location.search });
     else {
@@ -279,8 +443,12 @@
     }
     window.addEventListener("hashchange", function () {
       var h = parseHash();
-      if (h && h.app !== current) activate(h.app, { tab: h.tab });
+      if (h && h.app !== current) activate(h.app, { tab: h.tab, sub: h.sub });
       else if (h && h.app === "toolbox" && h.tab) frameMessage("toolbox", { type: "toolbox-open", tab: h.tab });
+      else if (h && h.sub) {
+        var sm = subMessage(h.app, h.sub);
+        if (sm) frameMessage(h.app, sm);
+      }
     });
 
     // PWA install

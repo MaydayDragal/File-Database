@@ -5,6 +5,7 @@
 // Run: node tools/build-portable.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,6 +33,15 @@ for (const rel of INCLUDE) {
   if (!fs.existsSync(src)) { console.warn("skip (missing):", rel); continue; }
   fs.cpSync(src, path.join(APP, rel), { recursive: true });
   tally(path.join(APP, rel));
+}
+
+// Ship the special-tools catalog so the Tool Inventory can offer a one-click
+// "Load the built-in catalog" offline (app/data/ = the site's ../data/).
+if (fs.existsSync(path.join(ROOT, "inventory-data", "tools.json"))) {
+  execFileSync(process.execPath, [path.join(ROOT, "tools", "build-inventory-db.mjs")], { stdio: "inherit" });
+  fs.mkdirSync(path.join(APP, "data"), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, "dist-db", "FileInventory.tidb"), path.join(APP, "data", "FileInventory.tidb"));
+  tally(path.join(APP, "data"));
 }
 
 // Launchers + readme

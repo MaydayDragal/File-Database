@@ -59,6 +59,11 @@ Platform Shell
 │   ├── Auto-routing (silent, no prompt): a PDF whose NAME carries a Mercedes
 │   │   document number (LI_DOCNUM, same pattern the LI app uses) → LI Documents;
 │   │   every other file → Files (the Vault)
+│   ├── The platform's OWN formats open in their app instead of being stored as blobs:
+│   │   .tidb → Tool Inventory import · .fvault → vault restore · .lidb → LI restore
+│   ├── Files landing in the vault get an immediate no-OCR VIN read (filename, text,
+│   │   PDF text layer) — vehicle paperwork groups under its car with zero clicks;
+│   │   files that would need OCR stay unstamped for the manual VIN scan to pick up
 │   ├── Delivery: shell loads bridge.js and VaultBridge.send()s each file to its
 │   │   target's outbox (meta.fromShell); ensures the target iframe is loaded so it ingests now
 │   ├── Drops over an app's iframe are caught inside that app and forwarded up as
@@ -79,16 +84,40 @@ Platform Shell
 │   └── System mode live-follows the OS via a prefers-color-scheme listener
 ├── Deep links & legacy URLs
 │   ├── #vault (alias #files) · #li · #inventory · #toolbox · #toolbox/<toolKey>
-│   ├── hashchange while open switches apps in place
+│   ├── RECORD-level links (subMessage router): #li/<LI number> opens that document ·
+│   │   #li/group/54 ("LI54." precise search) · #li/model/214 · #li/search/<q> ·
+│   │   #inventory/group/54 · #inventory/model/214 · #inventory/<toolNo> · #inventory/search/<q> ·
+│   │   #vault/vin/<VIN> · #vault/search/<q>
+│   ├── hashchange while open switches apps in place (and re-forwards the sub-path)
 │   ├── ?view=li|inventory → opens that app        (legacy hub URLs)
 │   ├── ?view=starred / ?action=add → opens the vault WITH the query passed into its iframe
 │   └── Consumed queries are stripped from the URL so reload follows the hash, not the shortcut
+├── Ctrl+K quick-open (ID router — works from inside any iframe, forwarded up)
+│   ├── Recognizes an LI number → open that doc · a tool number (3-3-2-2-2) → open that tool ·
+│   │   a 17-char VIN → that vehicle's files
+│   └── Anything else → "Search Files / LI Documents / Tool Inventory" rows with the query carried over
+├── One-click "Back up everything" (top-bar ⬇ button)
+│   └── Commands each data app to run its own existing export — .fvault + .lidb + .tidb, staggered
+├── Toast relay + badge pulse (the platform feels like ONE app)
+│   ├── Apps forward their toasts up as {shell-toast, app, msg}; the shell shows them app-prefixed
+│   │   ONLY when that app's tab is in the background (foreground apps toast themselves)
+│   └── Badge counts pulse when a background app's row count changes
+├── Keyboard layer (forwarded from inside every iframe)
+│   ├── Alt+1–4 switches apps · Ctrl/Cmd+K opens quick-open · "/" focuses search in every app
+│   └── Escape closes quick-open / app overlays
 ├── Message hub (window "message" listener)
-│   ├── {shell-nav, app, tab?}        → activate app (tab forwarded to toolbox)
+│   ├── {shell-nav, app, tab?, payload?} → activate app; payload (a ready-made app message,
+│   │   e.g. {inventory-filter, grp}) is forwarded to the target — how cross-app links travel
 │   ├── {vault-nav, to:"files"}       → activate vault (legacy contract, still honored)
 │   ├── {li-changed}                  → refresh tab badges
 │   ├── {shell-add-files, files}      → route files through the unified intake (forwarded iframe drop/paste)
 │   ├── {shell-open-picker}           → open the platform file picker (from an app's empty-state)
+│   ├── {shell-toast, app, msg}       → app-prefixed toast for background tabs + badge refresh
+│   ├── {shell-switch, n} / {shell-quickopen} → keyboard forwarded from inside iframes
+│   ├── Shell→app contracts: li-open/li-search/li-filter/li-restore/platform-backup ·
+│   │   inventory-filter/inventory-open/inventory-search/inventory-import/platform-backup ·
+│   │   vault-filter/vault-search/vault-restore/platform-backup (apps queue nav that
+│   │   arrives before their DB boot finishes, then replay it)
 │   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
 ├── PWA (the installable "one app")
 │   ├── manifest id "/" — pre-platform installs upgrade in place
@@ -320,7 +349,16 @@ Tool Inventory
 │   ├── Open database… (.tidb) · Save database (.tidb) — the whole inventory + photos
 │   ├── Import CSV (refresh/extend the list) · Export CSV (current filtered rows)
 │   ├── Legacy JSON backups (tools only) still import; drag-drop .tidb/.json/.csv onto window
+│   ├── Standalone/USB builds ship the catalog (app/data/FileInventory.tidb, built by
+│   │   bundle-app/build-portable) — an empty inventory probes for it and offers a
+│   │   one-click "Load the built-in tool catalog"
 │   └── Legend (category/note explanations)
+├── Cross-app links
+│   ├── Cross-filter chip (from LI / vault / deep links): group membership in svcGrp
+│   │   (multi-valued, e.g. "00, 54") and/or model series in validities[] — click to clear
+│   ├── Tool detail → "🗄️ LI docs · grp NN" (precise "LINN." search) and
+│   │   "🗄️ Find in LI docs" (full-text search for the tool number)
+│   └── inventory-open/-filter/-search/-import + platform-backup message contracts
 └── Platform integration
     ├── Empty by default — open a .tidb to load the catalog (also works embedded in the shell)
     ├── Embedded: hides h1 / install; "⌂ File Database" link only shows standalone

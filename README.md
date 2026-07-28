@@ -45,7 +45,25 @@ iframes. The shell owns everything the apps share:
   everything else to Files. No more hunting for the right app's upload spot
   first; it works the same on every tab, so the platform behaves as one app.
 - **Tabs & badges** — Files / LI Documents / Tool Inventory / Toolbox, with
-  live counts of your files, documents and tools on the tabs.
+  live counts of your files, documents and tools on the tabs (they pulse when
+  a background app's count changes, and background apps' messages surface in
+  the platform's own toast bar).
+- **Everything is connected** — the apps share the Mercedes vocabulary and
+  link into each other:
+  - Add a file with a **VIN** and it's read automatically (no clicks) and
+    grouped under its vehicle; the vehicle header offers **LI docs / Special
+    tools for that model series** in one click.
+  - An LI document links to the **special tools for its function group and
+    model series** (bin locations, photos, prices); a tool links back to
+    **every LI document that mentions it** (full-text) and its group's docs.
+  - **Ctrl+K** anywhere: paste a VIN, LI number or tool number and land on
+    the record — or search any app with the query carried over.
+  - **Deep links for records**: `#li/LI54.10-P-070001`, `#inventory/group/54`,
+    `#vault/vin/…` — bookmarkable, shareable on the same machine.
+  - **⬇ Back up everything** — one button saves all three databases
+    (`.fvault`, `.lidb`, `.tidb`); drop any of those files back on the window
+    to restore/open it in the right app.
+  - **Alt+1–4** switches apps from anywhere; `/` focuses search in every app.
 - **One theme** — the ◐ toggle cycles System → Light → Dark and applies to the
   shell **and every app at once** (remembered, applied before first paint).
 - **Deep links** — `#vault`, `#li`, `#inventory`, `#toolbox` and even

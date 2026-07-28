@@ -16,6 +16,15 @@
   let embedded = false;
   try { embedded = window.parent !== window; } catch (e) { embedded = true; }
 
+  // Cross-app navigation from the shell (deep links, "related" jumps) can
+  // arrive before boot finishes — queue until init installs the real handler.
+  let shellNavQueue = [];
+  let onShellNav = (d) => { shellNavQueue.push(d); };
+  window.addEventListener("message", (e) => {
+    const d = e.data || {};
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup") onShellNav(d);
+  });
+
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
   let items = [];               // array of meta records
   const objectUrls = new Set(); // track for revocation
@@ -96,6 +105,9 @@
   }
   let toastTimer = null;
   function toast(msg, actionLabel, actionFn) {
+    // Relay to the platform shell so events surface even when this app's tab
+    // is in the background (the shell only shows relays for background tabs).
+    if (embedded) { try { window.parent.postMessage({ type: "shell-toast", app: "vault", msg: String(msg) }, "*"); } catch (e) {} }
     const el = $("#toast");
     el.innerHTML = "";
     el.append(document.createTextNode(msg));
@@ -259,6 +271,7 @@
     if (!files.length) return;
     const collection = state.filter.startsWith("collection:") ? state.filter.slice(11) : "";
     let added = 0;
+    const newRecs = [];
     toast(`Adding ${files.length} file${files.length > 1 ? "s" : ""}…`);
     for (const file of files) {
       const kind = classify(file);
@@ -283,6 +296,7 @@
       try {
         await DB.put(record);
         items.push(stripBlob(record));
+        newRecs.push(record);
         added++;
       } catch (e) {
         console.error(e);
@@ -292,6 +306,43 @@
     render();
     updateStorage();
     if (added) toast(`Added ${added} file${added > 1 ? "s" : ""}${collection ? " to " + collection : ""}.`);
+    autoDetectBatch(newRecs);
+  }
+
+  // ---------- Automatic VIN detection on intake ----------
+  // Every file that arrives (add button, unified platform intake, bridge) is
+  // read for a VIN immediately using the FAST sources only — filename, text
+  // files, a PDF's text layer. No OCR: it's slow, needs a one-time download,
+  // and may be unavailable offline. Files that would need OCR (images, scanned
+  // PDFs) are left UNSTAMPED so the manual "Scan files for VINs" — which does
+  // use OCR — still picks them up later.
+  async function autoDetectVins(rec, quiet) {
+    if (VIN_SKIP_KIND[rec.kind]) return 0;
+    let r;
+    try { r = await extractVinText(rec, false, null); } catch (e) { return 0; } // needs OCR — leave for the scan
+    const { vins, fins } = findVinsDetailed(r.text, r.fuzzy);
+    if (!vins.length && !fins.length) return 0;
+    const stored = await DB.get(rec.id);
+    if (!stored) return 0;
+    stored.vins = vins;
+    stored.fins = fins;
+    stored.vinScan = Date.now();
+    stored.searchText = DB.buildSearchText(stored);
+    await DB.put(stored); // put, not update: preserves updatedAt
+    const it = items.find((x) => x.id === rec.id);
+    if (it) { it.vins = vins; it.fins = fins; it.vinScan = stored.vinScan; }
+    render();
+    if (!quiet && vins.length) toast(`Filed “${stored.name}” under ${vins[0]}${vins.length > 1 ? " +" + (vins.length - 1) : ""} — see 🚗 By VIN.`);
+    return vins.length ? 1 : 0;
+  }
+  function autoDetectBatch(recs) {
+    if (!recs.length) return;
+    const quiet = recs.length > 3;
+    (async () => {
+      let hits = 0;
+      for (const rec of recs) { try { hits += await autoDetectVins(rec, quiet); } catch (e) {} }
+      if (quiet && hits) toast(`Detected VINs in ${hits} of the new files — see 🚗 By VIN.`);
+    })();
   }
 
   function stripBlob(r) {
@@ -386,9 +437,24 @@
       Array.from(groups.keys()).sort().forEach((v) => {
         const head = document.createElement("div");
         head.className = "group-head";
-        head.innerHTML = `<span class="group-head__icon">🚗</span><span class="group-head__vin">${esc(v)}</span><span class="group-head__count">${groups.get(v).length}</span>`;
+        // Model series (Baumuster digits) from the VIN or any FIN in the
+        // group → jump links to the LI docs / special tools for this vehicle.
+        let series = seriesOfId(v);
+        if (!series) for (const it of groups.get(v)) { for (const f of it.fins || []) { series = seriesOfId(f); if (series) break; } if (series) break; }
+        const links = series
+          ? `<span class="group-head__links"><button type="button" class="group-head__link" data-series-li="${series}" title="LI documents for model ${series}">🗄️ LI ${series}</button><button type="button" class="group-head__link" data-series-tools="${series}" title="Special tools for model ${series}">🔧 Tools ${series}</button></span>`
+          : "";
+        head.innerHTML = `<span class="group-head__icon">🚗</span><span class="group-head__vin">${esc(v)}</span>${links}<span class="group-head__count">${groups.get(v).length}</span>`;
         head.title = "Show only " + v;
         head.onclick = () => setFilter("vin:" + v);
+        head.querySelectorAll(".group-head__link").forEach((b) => {
+          b.onclick = (e) => {
+            e.stopPropagation();
+            const s = b.dataset.seriesLi || b.dataset.seriesTools;
+            if (b.dataset.seriesLi) crossNav("li", { type: "li-filter", model: s }, "li/model/" + s);
+            else crossNav("inventory", { type: "inventory-filter", model: s }, "inventory/model/" + s);
+          };
+        });
         frag.append(head);
         for (const it of groups.get(v)) frag.append(renderCard(it));
       });
@@ -668,6 +734,52 @@
     $$("#nav-filters .nav__item").forEach((b) => b.classList.toggle("is-active", b.dataset.filter === state.filter));
   }
 
+  // ---------- Cross-app links (the shared Mercedes vocabulary) ----------
+  // Tags stamped by LI hand-offs are LI numbers; VIN/FIN Baumuster digits
+  // (chars 4-6) are the model series. Both become live links into the other
+  // apps instead of dead strings.
+  const LI_TAG_RE = /^[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}$/i;
+  function seriesOfId(id) {
+    const s = String(id || "");
+    return s.length === 17 && /^\d{3}$/.test(s.slice(3, 6)) ? s.slice(3, 6) : "";
+  }
+  function crossNav(app, payload, hashPath) {
+    if (embedded) {
+      try { window.parent.postMessage({ type: "shell-nav", app, payload }, "*"); return; } catch (e) {}
+    }
+    window.open("../index.html#" + hashPath);
+  }
+  function renderRelated(rec) {
+    const box = $("#d-related");
+    box.innerHTML = "";
+    const chips = [];
+    (rec.tags || []).filter((t) => LI_TAG_RE.test(t)).forEach((t) => {
+      const li = t.toUpperCase();
+      chips.push({ label: "🗄️ " + li, title: "Open this document in LI Documents",
+        go: () => crossNav("li", { type: "li-open", li }, "li/" + encodeURIComponent(li)) });
+    });
+    const seen = {};
+    [].concat(rec.fins || [], rec.vins || []).forEach((id) => {
+      const s = seriesOfId(id);
+      if (!s || seen[s]) return;
+      seen[s] = 1;
+      chips.push({ label: "🗄️ LI docs · model " + s, title: "LI documents valid for model series " + s,
+        go: () => crossNav("li", { type: "li-filter", model: s }, "li/model/" + s) });
+      chips.push({ label: "🔧 Tools · model " + s, title: "Special tools valid for model series " + s,
+        go: () => crossNav("inventory", { type: "inventory-filter", model: s }, "inventory/model/" + s) });
+    });
+    $("#d-related-field").hidden = !chips.length;
+    chips.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip chip--link";
+      b.textContent = c.label;
+      b.title = c.title;
+      b.onclick = c.go;
+      box.append(b);
+    });
+  }
+
   // ---------- Detail drawer ----------
   async function openDetail(id) {
     const rec = await DB.get(id);
@@ -699,6 +811,7 @@
     // No VIN "Detect" for videos — the scan skips them too.
     $("#d-scan-vin").hidden = !!VIN_SKIP_KIND[rec.kind];
 
+    renderRelated(rec);
     await renderPreview(rec, meta);
 
     const d = $("#detail");
@@ -902,6 +1015,9 @@
     render();
     updateStorage();
     toast('Added “' + name + '” to File Vault' + (collection ? ' (' + collection + ')' : '') + '.');
+    // Files from the platform's unified intake get an immediate (no-OCR) VIN
+    // read so vehicle paperwork lands grouped under its car automatically.
+    if (m.fromShell) autoDetectBatch([record]);
   }
 
   // ---------- Storage meter ----------
@@ -1240,6 +1356,17 @@
 
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
+      // Alt+1–4 / Ctrl+K: platform-wide shortcuts — forward up to the shell.
+      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+        e.preventDefault();
+        try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
+        return;
+      }
+      if (embedded && (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        try { window.parent.postMessage({ type: "shell-quickopen" }, "*"); } catch (x) {}
+        return;
+      }
       if (e.key === "Escape") {
         if (!$("#about").hidden) return hide($("#about"));
         if (!$("#detail").hidden) return closeDetail();
@@ -1889,6 +2016,19 @@
 
     // Restore a linked sync folder + resume auto-sync if it was on.
     resumeSync();
+
+    // Cross-app navigation (now that data is loaded): apply, then drain any
+    // messages that arrived during boot.
+    onShellNav = (d) => {
+      if (d.type === "vault-filter" && d.filter) setFilter(String(d.filter));
+      else if (d.type === "vault-search" && d.q != null) {
+        $("#search-input").value = String(d.q);
+        state.query = String(d.q).trim();
+        render();
+      } else if (d.type === "vault-restore" && d.file) importVault(d.file);
+      else if (d.type === "platform-backup") exportVault();
+    };
+    shellNavQueue.splice(0).forEach(onShellNav);
 
     // URL actions (from PWA shortcuts)
     const params = new URLSearchParams(location.search);

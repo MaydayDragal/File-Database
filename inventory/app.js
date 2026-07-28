@@ -13,26 +13,66 @@
 
   var DB_NAME = "tool-inventory", DB_VERSION = 2, STORE = "tools", PHOTOS = "photos", META = "meta";
   var db = null, all = [], view = [];
+  var bundledCatalog = null; // .tidb shipped with the standalone/USB builds (probed at boot)
   var photoBlobs = {};   // id -> Blob
   var photoUrls = {};    // id -> object URL
   var srcMeta = { source: "", updated: "" };
-  var state = { q: "", grp: "", ct: "", note: "", starred: false, offered: false, sort: "toolNo", dir: 1 };
+  // model/xgrp are cross-app filters (set by links from LI / the vault, or
+  // #inventory/model|group deep links) — shown as a clearable chip, separate
+  // from the exact-match svcGrp dropdown.
+  var state = { q: "", grp: "", ct: "", note: "", model: "", xgrp: "", starred: false, offered: false, sort: "toolNo", dir: 1 };
   var curId = null, embedded = false;
   try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
 
-  // Theme broadcast from the platform shell (shell persists; we only apply).
+  // Messages from the platform shell: theme + cross-app navigation (deep links
+  // and "related" jumps from the other apps). Nav that arrives before boot is
+  // replayed once the database has loaded.
+  var bootReady = false, pendingNav = [];
+  function normToolNo(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+  function handleShellNav(d) {
+    if (!bootReady) { pendingNav.push(d); return; }
+    if (d.type === "platform-backup") {
+      exportDb();
+    } else if (d.type === "inventory-import" && d.file) {
+      importDb(d.file);
+    } else if (d.type === "inventory-filter") {
+      state.q = ""; $("#search").value = "";
+      state.grp = ""; $("#fGrp").value = "";
+      if (d.grp != null) state.xgrp = String(d.grp);
+      if (d.model != null) state.model = String(d.model);
+      apply();
+      if (!view.length) toast("No tools match" + (d.grp != null ? " group " + d.grp : "") + (d.model != null ? " model " + d.model : "") + ".");
+    } else if (d.type === "inventory-open" && d.toolNo) {
+      var want = normToolNo(d.toolNo);
+      var t = all.find(function (x) { return normToolNo(x.toolNo) === want; });
+      state.q = ""; $("#search").value = "";
+      if (t) { apply(); openDetail(t.id); }
+      else { state.q = want; $("#search").value = want; apply(); }
+    } else if (d.type === "inventory-search" && d.q != null) {
+      state.q = String(d.q).trim(); $("#search").value = String(d.q);
+      apply();
+    }
+  }
   window.addEventListener("message", function (ev) {
     var d = ev.data;
-    if (!d || d.type !== "platform-theme") return;
-    if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
-    else document.documentElement.removeAttribute("data-theme");
+    if (!d) return;
+    if (d.type === "platform-theme") {
+      if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
+      else document.documentElement.removeAttribute("data-theme");
+      return;
+    }
+    if (d.type === "inventory-filter" || d.type === "inventory-open" || d.type === "inventory-search" || d.type === "inventory-import" || d.type === "platform-backup") handleShellNav(d);
   });
 
   // ---------- helpers ----------
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function money(n) { return (n || n === 0) ? "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
   var toastT;
-  function toast(m) { var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600); }
+  function toast(m) {
+    // Relay to the platform shell (shown there only when this tab is in the background).
+    if (embedded) { try { window.parent.postMessage({ type: "shell-toast", app: "inventory", msg: String(m) }, "*"); } catch (e) {} }
+    var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
   function dl(blob, name) { var u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 8000); }
 
   // ---------- IndexedDB ----------
@@ -87,14 +127,36 @@
   }
 
   // ---------- filtering / sorting ----------
+  // Cross-app filters ("tools for model 214" / "tools for group 54"):
+  // model matches 3-digit series lists inside the validity strings; group
+  // matches MEMBERSHIP in svcGrp (which can be multi-valued, e.g. "00, 54").
+  function matchesModel(t, model) {
+    var re = new RegExp("\\b" + model + "\\b");
+    return (t.validities || []).some(function (v) { return re.test(String(v)); });
+  }
+  function matchesGroup(t, grp) {
+    return String(t.svcGrp || "").split(/[,\/\s]+/).indexOf(grp) !== -1;
+  }
+  function syncModelChip() {
+    var chip = $("#modelChip");
+    if (!chip) return;
+    var parts = [];
+    if (state.xgrp) parts.push("Group " + state.xgrp);
+    if (state.model) parts.push("Model " + state.model);
+    chip.hidden = !parts.length;
+    if (parts.length) chip.textContent = "🔗 " + parts.join(" · ") + " ✕";
+  }
   function apply() {
     var q = state.q.toLowerCase();
+    syncModelChip();
     view = all.filter(function (t) {
       if (state.starred && !t.star) return false;
       if (state.offered && !t.offered) return false;
       if (state.grp && t.svcGrp !== state.grp) return false;
       if (state.ct && t.ct !== state.ct) return false;
       if (state.note && t.note !== state.note) return false;
+      if (state.model && !matchesModel(t, state.model)) return false;
+      if (state.xgrp && !matchesGroup(t, state.xgrp)) return false;
       if (q) {
         var hay = (t.toolNo + " " + t.desc + " " + t.catalogName + " " + t.catalogDesc + " " + t.location + " " + t.svcGrp + " " + t.wis + " " + t.comment).toLowerCase();
         if (hay.indexOf(q) === -1) return false;
@@ -119,7 +181,8 @@
     if (!view.length) {
       var em = $("#empty");
       if (!all.length) {
-        em.innerHTML = "No tool database loaded.<br><span class='muted'>Use <b>☰ Menu → Open database…</b> to load a <code>.tidb</code> file, or <b>Import CSV</b>.</span>";
+        em.innerHTML = "No tool database loaded.<br><span class='muted'>Use <b>☰ Menu → Open database…</b> to load a <code>.tidb</code> file, or <b>Import CSV</b>.</span>" +
+          (bundledCatalog ? "<br><button class='btn btn-primary' id='loadBuiltinBtn' style='margin-top:14px'>⬇ Load the built-in tool catalog</button>" : "");
       } else {
         em.textContent = "No tools match your search or filters.";
       }
@@ -221,6 +284,9 @@
     $("#eLoc").value = t.location || "";
     $("#eNote").value = t.note || "";
     $("#eComment").value = t.comment || "";
+    var g = firstGroup(t);
+    $("#dLiGroup").hidden = !g;
+    if (g) { $("#dLiGroup").textContent = "🗄️ LI docs · grp " + g; $("#dLiGroup").title = "LI documents for function group " + g; }
     $("#detail").classList.add("show");
   }
   function kv(k, v, cls) {
@@ -242,6 +308,13 @@
     t.star = !t.star;
     return putOne(t).then(function () { apply(); });
   }
+
+  // ---------- cross-app links ----------
+  function crossNav(app, payload, hashPath) {
+    if (embedded) { try { window.parent.postMessage({ type: "shell-nav", app: app, payload: payload }, "*"); return; } catch (e) {} }
+    window.open("../index.html#" + hashPath);
+  }
+  function firstGroup(t) { var m = String(t.svcGrp || "").match(/\d{2}/); return m ? m[0] : ""; }
 
   // ---------- database file (.tidb) — the whole inventory + photos ----------
   var TIDB_MAGIC = [0x54, 0x49, 0x44, 0x42]; // "TIDB"
@@ -370,6 +443,7 @@
     $("#fCt").addEventListener("change", function (e) { state.ct = e.target.value; apply(); });
     $("#fNote").addEventListener("change", function (e) { state.note = e.target.value; apply(); });
     $("#starFilter").addEventListener("click", function () { state.starred = !state.starred; $("#starFilter").classList.toggle("on", state.starred); apply(); });
+    $("#modelChip").addEventListener("click", function () { state.model = ""; state.xgrp = ""; apply(); });
     $("#offeredFilter").addEventListener("click", function () { state.offered = !state.offered; $("#offeredFilter").classList.toggle("on", state.offered); apply(); });
 
     $$("#thead th[data-sort]").forEach(function (th) {
@@ -392,6 +466,19 @@
     $("#dCopy").addEventListener("click", function () {
       var t = all.find(function (x) { return x.id === curId; }); if (!t) return;
       navigator.clipboard && navigator.clipboard.writeText(t.toolNo).then(function () { toast("Copied " + t.toolNo); }, function () {});
+    });
+    // Cross-app: this tool → the LI documents that need it.
+    $("#dLiGroup").addEventListener("click", function () {
+      var t = all.find(function (x) { return x.id === curId; }); if (!t) return;
+      var g = firstGroup(t);
+      // Every LI number embeds its group (LI54.30-…), so "LI54." is a precise
+      // full-library search for group-54 documents.
+      if (g) crossNav("li", { type: "li-search", q: "LI" + g + "." }, "li/group/" + g);
+    });
+    $("#dLiFind").addEventListener("click", function () {
+      var t = all.find(function (x) { return x.id === curId; }); if (!t) return;
+      var q = normToolNo(t.toolNo);
+      crossNav("li", { type: "li-search", q: q }, "li/search/" + encodeURIComponent(q));
     });
 
     // menu
@@ -424,14 +511,47 @@
           var f = e.dataTransfer.files[0];
           if (/\.tidb$/i.test(f.name) || /\.json$/i.test(f.name)) importDb(f);
           else if (/\.csv$/i.test(f.name)) importCSV(f);
+          else if (embedded) {
+            // Not an inventory format — hand the whole drop to the platform's
+            // unified intake instead of silently swallowing it.
+            var files = Array.prototype.slice.call(e.dataTransfer.files);
+            try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); } catch (x) {}
+          }
         }
       });
     });
 
     document.addEventListener("keydown", function (e) {
+      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+        e.preventDefault();
+        try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
+        return;
+      }
+      if (embedded && (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        try { window.parent.postMessage({ type: "shell-quickopen" }, "*"); } catch (x) {}
+        return;
+      }
       if (e.key === "Escape") { $$(".overlay.show").forEach(function (o) { o.classList.remove("show"); }); if (!mn.hidden) mn.hidden = true; }
       else if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") { e.preventDefault(); $("#search").focus(); }
     });
+
+    // One-click load of the catalog shipped with the standalone/USB builds.
+    $("#empty").addEventListener("click", function (e) {
+      if (e.target && e.target.id === "loadBuiltinBtn" && bundledCatalog) importDb(bundledCatalog);
+    });
+  }
+
+  // The standalone/USB builds ship the full catalog at ../data/FileInventory.tidb.
+  // If the database is empty and that file exists, offer a one-click load.
+  function probeBundledCatalog() {
+    if (all.length) return;
+    fetch("../data/FileInventory.tidb").then(function (r) {
+      if (!r || !r.ok) return null;
+      return r.blob();
+    }).then(function (b) {
+      if (b && b.size > 12 && !all.length) { bundledCatalog = b; render(); }
+    }).catch(function () {});
   }
 
   // ---------- boot ----------
@@ -445,6 +565,9 @@
     wire();
     apply();
     updateSub();
+    bootReady = true;
+    pendingNav.splice(0).forEach(handleShellNav);
+    probeBundledCatalog();
     if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
   }).catch(function (e) {
     $("#empty").style.display = "block";

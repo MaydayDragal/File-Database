@@ -231,6 +231,15 @@ kbd {
   background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); font-weight: 600;
 }
 .chip button { border: none; background: none; color: inherit; font-size: 14px; line-height: 1; }
+.related-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip--link { border: 1px solid transparent; cursor: pointer; }
+.chip--link:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 20%, transparent); }
+.group-head__links { display: inline-flex; gap: 6px; margin-left: 6px; }
+.group-head__link {
+  border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-dim);
+  font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; cursor: pointer;
+}
+.group-head__link:hover { color: var(--brand); border-color: var(--brand); }
 
 /* ---------- Results grid ---------- */
 .results.grid {

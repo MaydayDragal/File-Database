@@ -150,6 +150,41 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn-add:hover { background: var(--brand-strong); }
 .btn-add svg { display: block; }
 
+@keyframes badgepulse { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
+.tab-count.pulse { animation: badgepulse .5s ease; }
+
+/* ---------- Ctrl+K quick-open ---------- */
+.quickopen {
+  position: fixed; inset: 0; z-index: 65;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+.quickopen[hidden] { display: none; }
+.quickopen__panel {
+  width: min(92vw, 560px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.quickopen__panel input {
+  width: 100%; border: 0; outline: none; background: none; color: var(--text);
+  font: inherit; font-size: 15px; padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.quickopen__results { max-height: 320px; overflow-y: auto; }
+.qo-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left; border: 0; background: none; color: var(--text);
+  padding: 10px 16px; font-size: 13.5px; cursor: pointer;
+}
+.qo-row:hover, .qo-row.is-first { background: var(--bg-sunken); }
+.qo-row__icon { flex: none; }
+.quickopen__hint { padding: 8px 16px; font-size: 11.5px; color: var(--text-dim); border-top: 1px solid var(--border); }
+
 /* ---------- global drop zone (one front door for files) ---------- */
 .shell-drop {
   position: fixed; inset: 0; z-index: 55;
