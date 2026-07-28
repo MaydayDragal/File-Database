@@ -88,10 +88,12 @@ if (await li.locator("#importOverlay.show").count()) {
 }
 
 // --- Inventory tab ---
+// Inventory ships empty and loads a portable .tidb database file, so a fresh
+// embed shows its empty-state prompt rather than bundled rows.
 await page.click("#tab-inventory");
 const inv = page.frameLocator("#frame-inventory");
-await inv.locator("#tbody tr").first().waitFor({ timeout: 20000 });
-check(true, "inventory iframe booted with rows");
+await inv.locator("#empty").waitFor({ timeout: 20000 });
+check(await inv.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)), "inventory iframe booted (empty-state prompt)");
 check(await inv.locator("#backBtn").isHidden(), "inventory back link hidden when embedded");
 
 // --- Toolbox tab ---

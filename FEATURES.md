@@ -273,40 +273,46 @@ vault-nav), File System Access (sync folder + auto-save handles), CDN (OCR only)
 
 ---
 
-## 4. Tool Inventory — `/inventory/` (`index.html`, `app.js`, `styles.css`, `tools.json`, `img/`, `sw.js`)
+## 4. Tool Inventory — `/inventory/` (`index.html`, `app.js`, `styles.css`, `sw.js`)
 
-The Mercedes-Benz special-tools catalog: 1,688 master-list tools merged with the XENTRY
-workshop-equipment catalog (999 offered, 995 with part photos).
+A private, offline database of Mercedes-Benz special tools. Like the File Vault and LI
+Database, **the data is not built into the app** — the app ships empty and loads a single
+self-contained portable database file (`.tidb`) that holds every tool *and* its part photo.
+The full catalog (1,688 master-list tools · 999 offered · 975 with photos) is built from
+the source data in `inventory-data/` by `tools/build-inventory-db.mjs`.
 
 ```
 Tool Inventory
-├── Bundled catalog (tools.json, seed v4)
-│   ├── Master list: tool number · description · service group · category (Ct) · bin
-│   │   location · quantity · year · dealer-net price · notes
-│   ├── XENTRY overlay per tool: offered flag · part photo · catalog name & description ·
-│   │   WIS document + version · model validities (89 model-series export files)
-│   └── Seed upgrades: SEED_VERSION bump re-seeds from tools.json while preserving stars,
-│       user edits (location/qty/note/comment) and user-added rows
+├── Portable database file (.tidb) — the data lives here, not in the code
+│   ├── Binary container: "TIDB" · uint32 version · uint32 metaLen · meta JSON · photo bytes
+│   ├── meta JSON: { format:"tool-inventory-db", version, source, updated, tools[], photos[] }
+│   ├── Each tool: tool number · description · service group · category (Ct) · bin location ·
+│   │   quantity · year · dealer-net price · notes · offered flag · catalog name/description ·
+│   │   WIS document + version · model validities
+│   └── Part photos stored INSIDE the file (concatenated PNG bytes), keyed by photo id
+├── Storage: IndexedDB `tool-inventory` (DB v2) — stores: tools · photos (id→Blob) · meta
+│   └── Photos read as blobs → object URLs at boot (no img/*.png URLs)
 ├── Browsing
 │   ├── Search across tool number, descriptions, catalog text, location, WIS, comments
 │   ├── Filters: service group · category (Ct) · note code · 🛒 Offered · ★ Starred
 │   ├── Sort by any column (asc/desc)
-│   ├── Part-photo thumbnails in the list (lazy-loaded, SW-cached after first view)
-│   └── Header stats: total · offered · with photo
+│   ├── Part-photo thumbnails in the list (from the database file's blobs)
+│   └── Header stats: total · offered · with photo (or "No database loaded")
 ├── Detail view
 │   ├── Full record + part photo + catalog description + model validities list
-│   ├── Editable: location · quantity · note · comment (edit flags preserved across re-seeds)
+│   ├── Editable: location · quantity · note · comment
 │   └── ★ star toggle
 ├── Data management (☰ menu)
+│   ├── Open database… (.tidb) · Save database (.tidb) — the whole inventory + photos
 │   ├── Import CSV (refresh/extend the list) · Export CSV (current filtered rows)
-│   ├── Backup / Restore whole database (format "tool-inventory")
-│   ├── Reset to bundled list · Legend (category/note explanations)
-│   └── tools.json fetched network-first by the SW → catalog refreshes don't need cache bumps
+│   ├── Legacy JSON backups (tools only) still import; drag-drop .tidb/.json/.csv onto window
+│   └── Legend (category/note explanations)
 └── Platform integration
+    ├── Empty by default — open a .tidb to load the catalog (also works embedded in the shell)
     ├── Embedded: hides h1 / install; "⌂ File Database" link only shows standalone
     ├── Theme: full light/dark/system (platform-theme listener + pre-paint script)
     ├── No bridge usage — it's a reference catalog, not a file inbox
-    └── Own SW (tool-inventory-v6) + manifest (scope /inventory/); shell badge peeks its DB
+    └── Own SW (tool-inventory-v7, no bundled data) + manifest; shell badge peeks its DB
 ```
 
 **Tied into:** shell only (badge, theme). Deliberately isolated otherwise.
@@ -384,7 +390,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 |---|---|---|
 | IndexedDB `file-vault` (files, meta) | Vault | File records + blobs + thumbs (+ vins/fins/vinScan); meta: theme, view, collections, syncDir, syncAuto |
 | IndexedDB `LIDocsDB` (docs, files, settings) | LI | Parsed docs, PDF blobs; settings: autosave/autosaveOn/syncDir/autoSyncOn handles |
-| IndexedDB `tool-inventory` (tools, meta) | Inventory | 1,688 tool rows; meta: source, seedVersion |
+| IndexedDB `tool-inventory` (tools, photos, meta) | Inventory | Tool rows + part photos (id→Blob) loaded from a portable `.tidb` file; meta: source. Empty until a database is opened |
 | IndexedDB `vault-bridge` (outbox) | bridge.js | In-flight cross-app file handoffs |
 | IndexedDB `fv-debug` (entries) | debug.js | Origin-wide debug log — errors/warnings/app messages from every app (ring buffer ≤600) |
 | localStorage `fv-theme` | Shell (embedded) / Vault (standalone) | "light"/"dark"; absent = system. Read by every app's pre-paint script |
@@ -397,7 +403,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
 | `/vault/` | `vault/sw.js` | `vault-app-v7` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
 | `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
-| `/inventory/` | `inventory/sw.js` | `tool-inventory-v6` | `tools.json` network-first; part photos cached lazily |
+| `/inventory/` | `inventory/sw.js` | `tool-inventory-v7` | App shell only (no bundled data); data loads from a portable `.tidb` file |
 
 ### 6.5 Theme system (one choice, five consumers)
 

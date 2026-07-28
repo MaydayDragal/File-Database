@@ -1,15 +1,21 @@
 /*
  * app.js — Tool Inventory. A private, offline database of special tools.
- * Data lives in this browser (IndexedDB). Ships with a bundled list that
- * loads on first run; you can edit, star, import a CSV, and back up/restore.
+ *
+ * Like the File Vault and LI Database, the data is NOT built into the app: it
+ * lives in this browser (IndexedDB) and travels as a single self-contained
+ * database file (.tidb) that holds every tool AND its photo. Open a .tidb to
+ * load a database, save one to back it up or move it to another machine.
  */
 (function () {
   "use strict";
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-  var DB_NAME = "tool-inventory", STORE = "tools", META = "meta";
+  var DB_NAME = "tool-inventory", DB_VERSION = 2, STORE = "tools", PHOTOS = "photos", META = "meta";
   var db = null, all = [], view = [];
+  var photoBlobs = {};   // id -> Blob
+  var photoUrls = {};    // id -> object URL
+  var srcMeta = { source: "", updated: "" };
   var state = { q: "", grp: "", ct: "", note: "", starred: false, offered: false, sort: "toolNo", dir: 1 };
   var curId = null, embedded = false;
   try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
@@ -27,14 +33,16 @@
   function money(n) { return (n || n === 0) ? "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
   var toastT;
   function toast(m) { var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600); }
+  function dl(blob, name) { var u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 8000); }
 
   // ---------- IndexedDB ----------
   function open() {
     return new Promise(function (res, rej) {
-      var r = indexedDB.open(DB_NAME, 1);
+      var r = indexedDB.open(DB_NAME, DB_VERSION);
       r.onupgradeneeded = function () {
         var d = r.result;
         if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: "id" });
+        if (!d.objectStoreNames.contains(PHOTOS)) d.createObjectStore(PHOTOS, { keyPath: "id" });
         if (!d.objectStoreNames.contains(META)) d.createObjectStore(META, { keyPath: "k" });
       };
       r.onsuccess = function () { db = r.result; res(db); };
@@ -46,12 +54,12 @@
   function getAll() { return reqP(db.transaction(STORE, "readonly").objectStore(STORE).getAll()); }
   function putMany(list) { var t = db.transaction(STORE, "readwrite"), os = t.objectStore(STORE); list.forEach(function (x) { os.put(x); }); return txDone(t); }
   function putOne(x) { var t = db.transaction(STORE, "readwrite"); t.objectStore(STORE).put(x); return txDone(t); }
-  function clearStore() { var t = db.transaction(STORE, "readwrite"); t.objectStore(STORE).clear(); return txDone(t); }
+  function getAllPhotos() { return reqP(db.transaction(PHOTOS, "readonly").objectStore(PHOTOS).getAll()); }
+  function putPhotos(list) { if (!list.length) return Promise.resolve(); var t = db.transaction(PHOTOS, "readwrite"), os = t.objectStore(PHOTOS); list.forEach(function (p) { os.put(p); }); return txDone(t); }
+  function clearData() { var t = db.transaction([STORE, PHOTOS], "readwrite"); t.objectStore(STORE).clear(); t.objectStore(PHOTOS).clear(); return txDone(t); }
   function getMeta(k) { return reqP(db.transaction(META, "readonly").objectStore(META).get(k)).then(function (r) { return r ? r.v : null; }); }
   function setMeta(k, v) { var t = db.transaction(META, "readwrite"); t.objectStore(META).put({ k: k, v: v }); return txDone(t); }
 
-  // ---------- seed ----------
-  var SEED_VERSION = 4;   // bump to push a refreshed bundled list (edits/stars preserved)
   var EDIT_FIELDS = ["location", "qty", "note", "comment"];
   function normalize(t, i) {
     return {
@@ -62,53 +70,19 @@
       price: (t.price === 0 || t.price) ? Number(t.price) : null,
       note: (t.note || "").trim(), note2: (t.note2 || "").trim(), comment: t.comment || "",
       star: !!t.star,
-      edited: (t.edited && typeof t.edited === "object") ? t.edited : {}, // fields the user changed
-      // XENTRY catalog fields
+      edited: (t.edited && typeof t.edited === "object") ? t.edited : {},
       offered: !!t.offered, photo: t.photo || "", wis: t.wis || "", version: t.version || "",
       catalogName: t.catalogName || "", catalogDesc: t.catalogDesc || "",
       validities: Array.isArray(t.validities) ? t.validities : [],
     };
   }
-  function fetchSeed() { return fetch("tools.json").then(function (r) { return r.json(); }); }
-  function loadSeed() {
-    return fetchSeed().then(function (d) {
-      var list = (d.tools || []).map(normalize);
-      return setMeta("source", { name: d.source || "", updated: d.updated || "", count: list.length })
-        .then(function () { return setMeta("seedVersion", SEED_VERSION); })   // store the CODE constant
-        .then(function () { return putMany(list); }).then(function () { return list; });
-    });
-  }
-  // Re-seed to a newer bundled list, carrying over the user's stars and edits.
-  function upgradeSeed(existing) {
-    return fetchSeed().then(function (d) {
-      var fresh = (d.tools || []).map(normalize);
-      var prev = {};
-      existing.forEach(function (t) { (prev[t.toolNo] = prev[t.toolNo] || []).push(t); });
-      fresh.forEach(function (t) {
-        var arr = prev[t.toolNo]; if (!arr || !arr.length) return;
-        // Among rows sharing a tool number, pair by best content match so a
-        // duplicate's star/edits don't attach to the wrong physical tool.
-        var idx = 0;
-        for (var j = 0; j < arr.length; j++) {
-          if (arr[j].desc === t.desc || arr[j].location === t.location) { idx = j; break; }
-        }
-        var old = arr.splice(idx, 1)[0];
-        if (old.star) t.star = true;
-        var ed = old.edited || {};
-        // Preserve every field the user actually edited, regardless of the seed value.
-        EDIT_FIELDS.forEach(function (f) { if (ed[f] && old[f] != null && old[f] !== "") { t[f] = old[f]; t.edited[f] = 1; } });
-        // Back-compat: older records had no edit flags — keep a stored value only
-        // where the fresh seed is blank (avoids clobbering a likely user entry).
-        if (!Object.keys(ed).length) EDIT_FIELDS.forEach(function (f) { if (old[f] && !t[f]) t[f] = old[f]; });
-      });
-      // Preserve user-added tools (e.g. CSV-imported) that aren't in the new seed.
-      var carried = 0, maxIdN = fresh.reduce(function (m, t) { var n = parseInt((t.id || "t0").slice(1), 10); return isNaN(n) ? m : Math.max(m, n); }, 0);
-      Object.keys(prev).forEach(function (k) { prev[k].forEach(function (o) { o.id = "t" + (++maxIdN); fresh.push(o); carried++; }); });
-      return clearStore()
-        .then(function () { return setMeta("source", { name: d.source || "", updated: d.updated || "", count: fresh.length }); })
-        .then(function () { return setMeta("seedVersion", SEED_VERSION); })   // store the CODE constant
-        .then(function () { return putMany(fresh); })
-        .then(function () { return fresh; });
+
+  // ---------- photos (blobs -> object URLs) ----------
+  function releasePhotoUrls() { Object.keys(photoUrls).forEach(function (k) { try { URL.revokeObjectURL(photoUrls[k]); } catch (e) {} }); photoUrls = {}; }
+  function loadPhotos() {
+    releasePhotoUrls(); photoBlobs = {};
+    return getAllPhotos().then(function (list) {
+      (list || []).forEach(function (p) { if (p && p.id && p.blob) { photoBlobs[p.id] = p.blob; photoUrls[p.id] = URL.createObjectURL(p.blob); } });
     });
   }
 
@@ -143,8 +117,13 @@
     tb.innerHTML = "";
     $("#count").textContent = view.length.toLocaleString() + (view.length === 1 ? " tool" : " tools");
     if (!view.length) {
-      $("#empty").textContent = all.length ? "No tools match your search or filters." : "No tools yet.";
-      $("#empty").style.display = "block";
+      var em = $("#empty");
+      if (!all.length) {
+        em.innerHTML = "No tool database loaded.<br><span class='muted'>Use <b>☰ Menu → Open database…</b> to load a <code>.tidb</code> file, or <b>Import CSV</b>.</span>";
+      } else {
+        em.textContent = "No tools match your search or filters.";
+      }
+      em.style.display = "block";
       $("#table").style.display = "none";
       return;
     }
@@ -171,8 +150,7 @@
     syncSortHeaders();
   }
   function thumb(t) {
-    if (t.photo) return '<img class="thumb" loading="lazy" src="img/' + esc(t.photo) + '.png" alt="" ' +
-      "onerror=\"this.replaceWith(Object.assign(document.createElement('span'),{className:'noimg-dot',textContent:'🔧'}))\">";
+    if (t.photo && photoUrls[t.photo]) return '<img class="thumb" loading="lazy" src="' + photoUrls[t.photo] + '" alt="">';
     return '<span class="noimg-dot" aria-hidden="true">🔧</span>';
   }
   function noteBadge(n) {
@@ -187,7 +165,6 @@
     });
   }
 
-  // ---------- filter option population ----------
   function fillFilters() {
     var grps = {}, cts = {}, notes = {};
     all.forEach(function (t) {
@@ -206,6 +183,13 @@
     sel.innerHTML = '<option value="">' + allLabel + '</option>' +
       keys.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + " (" + counts[k] + ")</option>"; }).join("");
   }
+  function updateSub() {
+    if (!all.length) { $("#sub").textContent = "No database loaded"; return; }
+    var offeredN = all.filter(function (t) { return t.offered; }).length;
+    var photoN = all.filter(function (t) { return t.photo && photoUrls[t.photo]; }).length;
+    $("#sub").textContent = all.length.toLocaleString() + " tools · " + offeredN.toLocaleString() + " offered · " + photoN.toLocaleString() + " with photo";
+    if (srcMeta.updated) $("#legendUpdated").textContent = "Pricing reference: " + srcMeta.updated;
+  }
 
   // ---------- detail ----------
   function openDetail(id) {
@@ -215,11 +199,9 @@
     $("#dTitle").textContent = t.toolNo;
     $("#dStar").textContent = t.star ? "★" : "☆";
     $("#dStar").classList.toggle("on", t.star);
-    // Photo
     var photo = $("#dPhoto");
-    if (t.photo) { photo.style.display = ""; photo.innerHTML = '<img src="img/' + esc(t.photo) + '.png" alt="Photo of ' + esc(t.toolNo) + '">'; }
+    if (t.photo && photoUrls[t.photo]) { photo.style.display = ""; photo.innerHTML = '<img src="' + photoUrls[t.photo] + '" alt="Photo of ' + esc(t.toolNo) + '">'; }
     else { photo.style.display = "none"; photo.innerHTML = ""; }
-    // Key/value facts
     $("#dGrid").innerHTML =
       kv("Name", (t.desc || t.catalogName || "—"), "big") +
       kv("Tool number", t.toolNo, "mono") +
@@ -229,7 +211,6 @@
       kv("Offered", t.offered ? "Yes — in the tools we offer" : "Not in the catalog") +
       (t.wis ? kv("WIS reference", t.wis, "mono") : "") +
       (t.version ? kv("Catalog version", t.version) : "");
-    // Rich catalog description + validities
     var extra = $("#dExtra"); extra.innerHTML = "";
     if (t.catalogDesc) extra.innerHTML += '<div class="detail-sec"><div class="detail-sec-h">Details</div><div class="detail-desc">' + esc(t.catalogDesc) + '</div></div>';
     if (t.validities && t.validities.length) {
@@ -251,7 +232,6 @@
     if (!t) return;
     t.edited = t.edited || {};
     var next = { qty: $("#eQty").value.trim(), location: $("#eLoc").value.trim(), note: $("#eNote").value.trim(), comment: $("#eComment").value.trim() };
-    // Flag any field the user actually changed so a future seed update preserves it.
     EDIT_FIELDS.forEach(function (f) { if (String(t[f] || "") !== String(next[f] || "")) t.edited[f] = 1; });
     t.qty = next.qty; t.location = next.location; t.note = next.note; t.comment = next.comment;
     putOne(t).then(function () { apply(); closeDetail(); toast("Saved."); });
@@ -263,7 +243,63 @@
     return putOne(t).then(function () { apply(); });
   }
 
-  // ---------- CSV import / export ----------
+  // ---------- database file (.tidb) — the whole inventory + photos ----------
+  var TIDB_MAGIC = [0x54, 0x49, 0x44, 0x42]; // "TIDB"
+  function exportDb() {
+    if (!all.length) { toast("Nothing to save — the database is empty."); return; }
+    var ids = [], bufs = [], seen = {};
+    all.forEach(function (t) { if (t.photo && photoBlobs[t.photo] && !seen[t.photo]) { seen[t.photo] = 1; ids.push(t.photo); bufs.push(photoBlobs[t.photo]); } });
+    var meta = {
+      format: "tool-inventory-db", version: 1, exportedAt: Date.now(),
+      source: srcMeta.source || "", updated: srcMeta.updated || "",
+      tools: all, photos: ids.map(function (id, i) { return { id: id, len: bufs[i].size }; }),
+    };
+    var metaBytes = new TextEncoder().encode(JSON.stringify(meta));
+    var header = new ArrayBuffer(12); var dv = new DataView(header);
+    TIDB_MAGIC.forEach(function (b, i) { dv.setUint8(i, b); });
+    dv.setUint32(4, 1, true); dv.setUint32(8, metaBytes.length, true);
+    var blob = new Blob([header, metaBytes].concat(bufs), { type: "application/octet-stream" });
+    var stamp = new Date().toISOString().slice(0, 10);
+    dl(blob, "tool-inventory-" + stamp + ".tidb");
+    toast("Saved database: " + all.length + " tools, " + ids.length + " photos.");
+  }
+  function importDb(file) {
+    return file.slice(0, 12).arrayBuffer().then(function (buf) {
+      var head = new DataView(buf);
+      var isTidb = head.byteLength >= 12 && TIDB_MAGIC.every(function (b, i) { return head.getUint8(i) === b; });
+      if (!isTidb) return importLegacyJson(file);
+      var metaLen = head.getUint32(8, true);
+      return file.slice(12, 12 + metaLen).text().then(function (txt) {
+        var meta = JSON.parse(txt);
+        if (!meta || meta.format !== "tool-inventory-db" || !Array.isArray(meta.tools)) { toast("That isn't a Tool Inventory database file."); return; }
+        if (all.length && !confirm("Load this database file? It replaces the current inventory (" + all.length + " tools).")) return;
+        var tools = meta.tools.map(normalize);
+        var off = 12 + metaLen, photoRecs = [];
+        (meta.photos || []).forEach(function (p) { var b = file.slice(off, off + p.len, "image/png"); off += p.len; photoRecs.push({ id: p.id, blob: b }); });
+        srcMeta = { source: meta.source || "", updated: meta.updated || "" };
+        return clearData()
+          .then(function () { return putMany(tools); })
+          .then(function () { return putPhotos(photoRecs); })
+          .then(function () { return setMeta("source", srcMeta); })
+          .then(function () { all = tools; return loadPhotos(); })
+          .then(function () { fillFilters(); apply(); updateSub(); toast("Loaded database: " + tools.length + " tools, " + photoRecs.length + " photos."); });
+      });
+    }).catch(function (e) { console.error(e); toast("Couldn't open the database file — it may be corrupt."); });
+  }
+  // Back-compat: the old plain-JSON backup (tools only, no photos).
+  function importLegacyJson(file) {
+    return file.text().then(function (txt) {
+      var d = JSON.parse(txt);
+      if (!d || d.format !== "tool-inventory" || !Array.isArray(d.tools)) { toast("Not a Tool Inventory database file."); return; }
+      if (all.length && !confirm("Load this backup? It replaces the current inventory.")) return;
+      var tools = d.tools.map(normalize);
+      return clearData().then(function () { return putMany(tools); }).then(function () {
+        all = tools; return loadPhotos();
+      }).then(function () { fillFilters(); apply(); updateSub(); toast("Loaded " + tools.length + " tools (no photos in this backup)."); });
+    });
+  }
+
+  // ---------- CSV import / export (tool data only, no photos) ----------
   function parseCSV(text) {
     var rows = [], row = [], cur = "", i = 0, q = false, ch;
     text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -284,7 +320,6 @@
     file.text().then(function (txt) {
       var rows = parseCSV(txt);
       if (rows.length < 2) { toast("CSV looks empty."); return; }
-      // Locate the header row (contains "Tool Number").
       var hi = 0;
       for (var r = 0; r < Math.min(rows.length, 5); r++) {
         if (rows[r].join(" ").toLowerCase().indexOf("tool number") !== -1) { hi = r; break; }
@@ -295,8 +330,6 @@
         ct: col("ct"), desc: col("description"), location: col("location", "bin"), year: col("year"),
         price: col("dlr net($)", "dlr net", "price"), note: col("note"), comment: col("comment") };
       if (ci.toolNo === -1) { toast("No 'Tool Number' column found."); return; }
-      // Match rows exactly by id when present (unambiguous even for duplicate
-      // tool numbers), otherwise fall back to the first record with that number.
       var byId = {}, byTool = {};
       all.forEach(function (t) { byId[t.id] = t; if (!byTool[t.toolNo]) byTool[t.toolNo] = t; });
       var added = 0, updated = 0, maxIdN = all.reduce(function (m, t) { var n = parseInt((t.id || "t0").slice(1), 10); return isNaN(n) ? m : Math.max(m, n); }, 0);
@@ -314,10 +347,11 @@
         if (ex) { for (var kk in rec) if (rec[kk] !== "" && rec[kk] != null) ex[kk] = rec[kk]; toPut.push(ex); updated++; }
         else { rec.id = "t" + (++maxIdN); rec.star = false; var nn = normalize(rec, maxIdN); all.push(nn); byId[nn.id] = nn; byTool[tn] = nn; toPut.push(nn); added++; }
       }
-      putMany(toPut).then(function () { fillFilters(); apply(); toast("Imported CSV: " + added + " added, " + updated + " updated."); });
+      putMany(toPut).then(function () { fillFilters(); apply(); updateSub(); toast("Imported CSV: " + added + " added, " + updated + " updated."); });
     });
   }
   function exportCSV() {
+    if (!view.length) { toast("Nothing to export."); return; }
     var head = ["ID", "No.", "Qty", "Tool Number", "Svc Grp", "Ct", "Description", "Location", "Year", "Dlr Net($)", "Note", "Comment"];
     var lines = [head.join(",")];
     var q = function (s) { s = String(s == null ? "" : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -327,23 +361,6 @@
     dl(new Blob([lines.join("\n")], { type: "text/csv" }), "tool-inventory.csv");
     toast("Exported " + view.length + " rows to CSV.");
   }
-  function backup() {
-    dl(new Blob([JSON.stringify({ format: "tool-inventory", version: 1, tools: all })], { type: "application/json" }), "tool-inventory-backup.json");
-    toast("Backup saved.");
-  }
-  function restore(file) {
-    file.text().then(function (txt) {
-      var d = JSON.parse(txt);
-      if (!d || d.format !== "tool-inventory" || !Array.isArray(d.tools)) { toast("Not a Tool Inventory backup."); return; }
-      var list = d.tools.map(normalize);
-      clearStore().then(function () { return putMany(list); }).then(function () { all = list; fillFilters(); apply(); toast("Restored " + list.length + " tools."); });
-    }).catch(function () { toast("Restore failed — file may be corrupt."); });
-  }
-  function resetSeed() {
-    if (!confirm("Reset to the bundled tool list? This replaces your current data (stars and edits are lost).")) return;
-    clearStore().then(loadSeed).then(function (list) { all = list; fillFilters(); apply(); toast("Reset to the bundled list."); });
-  }
-  function dl(blob, name) { var u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }
 
   // ---------- events ----------
   function wire() {
@@ -381,15 +398,14 @@
     var mb = $("#menuBtn"), mn = $("#appMenu");
     mb.addEventListener("click", function (e) { e.stopPropagation(); mn.hidden = !mn.hidden; });
     document.addEventListener("click", function (e) { if (!mn.hidden && !mn.contains(e.target) && e.target !== mb) mn.hidden = true; });
-    $("#exportCsvBtn").addEventListener("click", function () { mn.hidden = true; exportCSV(); });
+    $("#openDbBtn").addEventListener("click", function () { mn.hidden = true; $("#dbInput").click(); });
+    $("#saveDbBtn").addEventListener("click", function () { mn.hidden = true; exportDb(); });
     $("#importCsvBtn").addEventListener("click", function () { mn.hidden = true; $("#csvInput").click(); });
-    $("#backupBtn").addEventListener("click", function () { mn.hidden = true; backup(); });
-    $("#restoreBtn").addEventListener("click", function () { mn.hidden = true; $("#restoreInput").click(); });
-    $("#resetBtn").addEventListener("click", function () { mn.hidden = true; resetSeed(); });
+    $("#exportCsvBtn").addEventListener("click", function () { mn.hidden = true; exportCSV(); });
     $("#legendBtn").addEventListener("click", function () { mn.hidden = true; $("#legend").classList.add("show"); });
-    $("#debugBtn").addEventListener("click", function () { mn.hidden = true; if (window.FVDebug) window.FVDebug.open(); });
+    if ($("#debugBtn")) $("#debugBtn").addEventListener("click", function () { mn.hidden = true; if (window.FVDebug) window.FVDebug.open(); });
+    $("#dbInput").addEventListener("change", function (e) { if (e.target.files[0]) importDb(e.target.files[0]); e.target.value = ""; });
     $("#csvInput").addEventListener("change", function (e) { if (e.target.files[0]) importCSV(e.target.files[0]); e.target.value = ""; });
-    $("#restoreInput").addEventListener("change", function (e) { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ""; });
 
     // install
     var deferred = null;
@@ -399,8 +415,18 @@
       else toast("Use the browser menu (⋮) → Install / Create shortcut.");
     });
 
-    // #backBtn is a plain link to the File Database platform, shown standalone
-    // only (embedded, the shell owns cross-app navigation) — no handler needed.
+    // Drag-and-drop a .tidb onto the window to load it.
+    ["dragover", "drop"].forEach(function (ev) {
+      window.addEventListener(ev, function (e) {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        if (ev === "drop" && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          var f = e.dataTransfer.files[0];
+          if (/\.tidb$/i.test(f.name) || /\.json$/i.test(f.name)) importDb(f);
+          else if (/\.csv$/i.test(f.name)) importCSV(f);
+        }
+      });
+    });
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { $$(".overlay.show").forEach(function (o) { o.classList.remove("show"); }); if (!mn.hidden) mn.hidden = true; }
@@ -410,31 +436,18 @@
 
   // ---------- boot ----------
   open().then(function () {
-    return Promise.all([getAll(), getMeta("seedVersion")]);
+    return Promise.all([getAll(), loadPhotos(), getMeta("source")]);
   }).then(function (r) {
-    var list = r[0], ver = r[1];
-    if (list && list.length) {
-      if (ver !== SEED_VERSION) {
-        // A newer bundled list shipped — refresh it, keeping stars and edits.
-        return upgradeSeed(list.map(normalize)).then(function (fresh) { all = fresh; setTimeout(function () { toast("Tool list updated to the latest catalog."); }, 400); });
-      }
-      all = list.map(normalize); return null;
-    }
-    return loadSeed().then(function (seed) { all = seed; });
-  }).then(function () {
-    return getMeta("source");
-  }).then(function (src) {
-    var offeredN = all.filter(function (t) { return t.offered; }).length;
-    var photoN = all.filter(function (t) { return t.photo; }).length;
-    $("#sub").textContent = all.length.toLocaleString() + " tools · " + offeredN.toLocaleString() + " offered · " + photoN.toLocaleString() + " with photo";
-    if (src && src.updated) $("#legendUpdated").textContent = "Pricing reference: " + src.updated;
+    all = (r[0] || []).map(normalize);
+    var src = r[2]; if (src) srcMeta = { source: src.source || "", updated: src.updated || "" };
     if (!embedded) $("#backBtn").hidden = false;   // standalone: offer a way into the platform
     fillFilters();
     wire();
     apply();
+    updateSub();
     if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
   }).catch(function (e) {
     $("#empty").style.display = "block";
-    $("#empty").innerHTML = "Couldn't load the inventory.<br><span class='muted'>" + esc(e && e.message) + "</span>";
+    $("#empty").innerHTML = "Couldn't open the inventory.<br><span class='muted'>" + esc(e && e.message) + "</span>";
   });
 })();

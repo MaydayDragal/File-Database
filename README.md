@@ -181,6 +181,10 @@ So, in the **Files** app:
    or USB stick and **Import** later or on another machine.
 
 The LI Documents and Tool Inventory apps have their own backup/export menus.
+Tool Inventory ships empty and loads its catalog from a portable database file:
+**☰ Menu → Open database…** to load a `.tidb` (every tool plus its part photos in
+one file), and **Save database (.tidb)** to back it up or move it to another
+machine — just like the Vault's `.fvault` and LI's documents.
 
 ---
 
@@ -207,7 +211,9 @@ bridge.js             Shared cross-app file transfer bus (IndexedDB + BroadcastC
 icons/                Generated platform icons
 vault/                📁 File Vault app (markup, app.js, db.js, styles, own SW + manifest)
 li/                   🗄️ LI Document Database (its own app + SW)
-inventory/            🔧 Tool Inventory app (data in tools.json, own SW)
+inventory/            🔧 Tool Inventory app (empty; loads a portable .tidb file, own SW)
+inventory-data/       Source data (tools.json + img/) used to build the .tidb — not shipped in the app
+tools/build-inventory-db.mjs  Builds FileInventory.tidb (tools + photos) from inventory-data/
 toolbox/              🧰 Toolbox — ten file & workshop tools in a single page
 tools/gen_icons.py    Regenerates the root icons (no dependencies)
 tools/e2e.mjs         End-to-end test — File Vault, standalone at /vault/

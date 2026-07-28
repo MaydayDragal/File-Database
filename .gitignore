@@ -8,3 +8,4 @@ tools/debug*.mjs
 tools/shot-*.png
 dist-portable/
 __pycache__/
+dist-db/

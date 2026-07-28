@@ -1,12 +1,12 @@
-/* Tool Inventory service worker — offline app shell + seed data. */
-const CACHE = "tool-inventory-v6";
+/* Tool Inventory service worker — offline app shell.
+   Data is NOT bundled: it loads from a portable .tidb database file. */
+const CACHE = "tool-inventory-v7";
 const SHELL = [
   "./",
   "./index.html",
   "../debug.js",
   "./styles.css",
   "./app.js",
-  "./tools.json",
   "./manifest.webmanifest",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
@@ -33,17 +33,6 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(
       fetch(req).then((res) => { const c = res.clone(); caches.open(CACHE).then((k) => k.put("./index.html", c)); return res; })
         .catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
-  // Network-first for the seed data so a refreshed catalog shows up without
-  // waiting for a cache-version bump; fall back to cache when offline.
-  if (url.pathname.endsWith("/tools.json")) {
-    e.respondWith(
-      fetch(req).then((res) => {
-        if (res && res.status === 200) { const c = res.clone(); caches.open(CACHE).then((k) => k.put(req, c)); }
-        return res;
-      }).catch(() => caches.match(req))
     );
     return;
   }

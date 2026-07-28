@@ -46,11 +46,13 @@ fs.writeFileSync(path.join(tmp, "note.txt"), "portable hello");
 await vf.locator("#file-input").setInputFiles(path.join(tmp, "note.txt"));
 for (let i = 0; i < 30 && (await countVaultFiles(page)) < 1; i++) await sleep(200);
 ok((await countVaultFiles(page)) === 1, "a saved file lands in IndexedDB inside the USB profile");
-// Inventory seed loads (fetch of a local file works thanks to --allow-file-access-from-files)
+// Inventory ships empty (no bundled seed) — it loads a portable .tidb file.
+// From the USB profile it must still boot cleanly to its empty-state prompt.
 const inv = await page.$("#tab-inventory"); if (inv) await inv.click();
 await sleep(2500);
 const invF = page.frames().find((f) => f.url().includes("/inventory/"));
-ok(!!invF && (await invF.locator("#tbody tr").count()) > 1400, "inventory loads its bundled seed from local files");
+const invEmpty = invF ? await invF.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)).catch(() => false) : false;
+ok(invEmpty, "inventory boots to its empty-state prompt from local files");
 await sleep(1200); await ctx.close();
 
 ctx = await chromium.launchPersistentContext(DATA, { executablePath: EXE, args });

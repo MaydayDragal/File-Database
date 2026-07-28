@@ -25,14 +25,13 @@
       <div class="menu-wrap">
         <button class="btn btn-ghost btn-sm" id="menuBtn" aria-haspopup="true">☰ Menu</button>
         <div class="menu" id="appMenu" hidden role="menu">
+          <div class="menu-label">Database</div>
+          <button class="menu-item" id="openDbBtn">📂 Open database…</button>
+          <button class="menu-item" id="saveDbBtn">💾 Save database (.tidb)</button>
+          <div class="menu-sep"></div>
           <div class="menu-label">Data</div>
           <button class="menu-item" id="importCsvBtn">⬆ Import CSV…</button>
           <button class="menu-item" id="exportCsvBtn">⬇ Export CSV (filtered)</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Backup</div>
-          <button class="menu-item" id="backupBtn">💾 Back up database</button>
-          <button class="menu-item" id="restoreBtn">↥ Restore backup…</button>
-          <button class="menu-item" id="resetBtn">↻ Reset to bundled list</button>
           <div class="menu-sep"></div>
           <button class="menu-item" id="legendBtn">❔ Legend &amp; notes</button>
           <button class="menu-item" id="debugBtn" title="Errors and warnings recorded on this device (Ctrl+Shift+D)">🐞 Debug log</button>
@@ -118,7 +117,7 @@
 
   <div class="toast" id="toast"></div>
   <input type="file" id="csvInput" accept=".csv,text/csv" />
-  <input type="file" id="restoreInput" accept=".json,application/json" />
+  <input type="file" id="dbInput" accept=".tidb,.json,application/json" />
 
   <script src="../debug.js"></script>
   <script src="app.js"></script>
