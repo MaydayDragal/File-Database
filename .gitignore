@@ -7,3 +7,4 @@ tools/debug*.mjs
 .DS_Store
 tools/shot-*.png
 dist-portable/
+__pycache__/

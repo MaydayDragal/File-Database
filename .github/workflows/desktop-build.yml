@@ -1,0 +1,77 @@
+name: Build desktop app (Windows)
+
+# Builds the standalone Windows desktop app (Electron) natively on a Windows
+# runner and publishes it as a downloadable release asset + workflow artifact.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/pwa-file-database-hqbppy]
+    paths:
+      - "desktop/**"
+      - "vault/**"
+      - "li/**"
+      - "inventory/**"
+      - "toolbox/**"
+      - "index.html"
+      - "shell.js"
+      - "shell.css"
+      - "bridge.js"
+      - "debug.js"
+      - ".github/workflows/desktop-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bundle web app into desktop/app
+        run: node desktop/bundle-app.mjs
+
+      - name: Generate app icon
+        run: python desktop/make-icon.py
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build portable Windows app
+        working-directory: desktop
+        # Native rebrand on Windows (icon + version info); no wine needed.
+        run: npx --no-install electron-builder --win portable -c.win.signAndEditExecutable=true
+
+      - name: Show build output
+        working-directory: desktop
+        run: dir dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDatabase-Windows-App
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Publish to a Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-app
+          name: File Database — Windows desktop app
+          body: |
+            Standalone portable Windows app (64-bit). Download
+            **FileDatabase-Portable-App.exe**, copy it to a USB stick and run it —
+            its own window, no browser, and your data is kept in a `data` folder
+            next to the .exe. First launch may show a SmartScreen warning
+            (unsigned app) — click **More info → Run anyway**.
+          files: desktop/dist/*.exe
+          make_latest: "false"
