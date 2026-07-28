@@ -264,6 +264,43 @@ const tagSurvivedScan = await page.evaluate(() => new Promise((res) => {
 }));
 check(tagSurvivedScan, "manual 'Scan files for VINs' preserves the intake-tagged VIN (union, not clobber)");
 
+// ---------- 12. PDF preview survives the post-add auto-detect render ----------
+// Regression: the preview's blob URL used to sit in the per-render objectUrls
+// set, so the render() fired by auto VIN detect ~seconds after an add revoked
+// it while the PDF viewer was still streaming → "Failed to load PDF document."
+// Repro: add a PDF through the front door, open its detail IMMEDIATELY, let
+// the detect finish, then verify the iframe's URL still serves the bytes.
+const VALID_PDF = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 40>>stream
+BT /F1 24 Tf 50 100 Td (Hi) Tj ET
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R>>
+%%EOF`;
+fs.writeFileSync(path.join(FIX, "scco WDD2130461A123456.pdf"), VALID_PDF);
+await page.click("#tab-vault");
+await page.waitForTimeout(300);
+await page.setInputFiles("#shell-file-input", path.join(FIX, "scco WDD2130461A123456.pdf"));
+await vault.locator(".card", { hasText: "scco" }).first().click({ timeout: 8000 });
+await vault.locator("#d-preview iframe").waitFor({ timeout: 8000 });
+// Force list re-renders while the viewer streams — auto VIN detect after an
+// add, a search keystroke, a sync import all do this in real use.
+await vault.locator("#search-input").fill("s");
+await page.waitForTimeout(400);
+await vault.locator("#search-input").fill("");
+await page.waitForTimeout(4000); // also lets the auto VIN detect render land
+const previewState = await page.frames().find((f) => f.url().includes("/vault/")).evaluate(async () => {
+  const f = document.querySelector("#d-preview iframe");
+  if (!f) return "no-iframe";
+  try { const r = await fetch(f.src); const b = await r.blob(); return b.size > 100 ? "ok" : "empty"; }
+  catch (e) { return "revoked"; }
+});
+check(previewState === "ok", `PDF preview URL still serves the document after list re-renders (${previewState})`);
+
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-integration.png") });
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|invalid|structure|xref|tesseract|fetch/i.test(e));

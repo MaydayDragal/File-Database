@@ -839,7 +839,12 @@
     const box = $("#d-preview");
     releasePreviewUrls();
     box.innerHTML = "";
-    const url = objUrl(rec.blob);
+    // The preview URL must live on previewUrls ONLY (released when the
+    // preview changes or the drawer closes) — objUrl() would put it in the
+    // per-render objectUrls set, and the next list render() (auto VIN detect,
+    // a bridge delivery, a star toggle) would revoke it while the PDF viewer
+    // is still streaming the document → "Failed to load PDF document."
+    const url = URL.createObjectURL(rec.blob);
     previewUrls.add(url);
     if (rec.kind === "image") {
       const img = document.createElement("img"); img.src = url; img.alt = rec.name; box.append(img);
