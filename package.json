@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A private, offline PWA file database for documents, videos, photos, PDFs and text. Runs entirely in the browser — no install or admin rights required.",
+  "description": "A private, offline PWA file database for documents, videos, photos, PDFs and text. Runs entirely in the browser \u2014 no install or admin rights required.",
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs && node tools/e2e-sync.mjs && node tools/e2e-pdfthumb.mjs && node tools/e2e-vin.mjs && node tools/e2e-vin-parallel.mjs && node tools/e2e-vin-skip-video.mjs && node tools/e2e-vin-recall.mjs && node tools/e2e-vin-datacard.mjs && node tools/e2e-vin-wmi.mjs && node tools/e2e-debug.mjs",
+    "test": "node tools/e2e.mjs && node tools/e2e-merge.mjs && node tools/e2e-inventory.mjs && node tools/e2e-shell.mjs && node tools/e2e-sync.mjs && node tools/e2e-pdfthumb.mjs && node tools/e2e-vin.mjs && node tools/e2e-vin-parallel.mjs && node tools/e2e-vin-skip-video.mjs && node tools/e2e-vin-recall.mjs && node tools/e2e-vin-datacard.mjs && node tools/e2e-vin-wmi.mjs && node tools/e2e-debug.mjs && node tools/e2e-portable.mjs",
     "test:vault": "node tools/e2e.mjs",
     "test:merge": "node tools/e2e-merge.mjs",
     "test:inventory": "node tools/e2e-inventory.mjs",
@@ -20,13 +20,22 @@
     "test:vin-recall": "node tools/e2e-vin-recall.mjs",
     "test:vin-datacard": "node tools/e2e-vin-datacard.mjs",
     "test:vin-wmi": "node tools/e2e-vin-wmi.mjs",
-    "test:debug": "node tools/e2e-debug.mjs"
+    "test:debug": "node tools/e2e-debug.mjs",
+    "build:portable": "node tools/build-portable.mjs",
+    "test:portable": "node tools/e2e-portable.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MaydayDragal/File-Database.git"
   },
-  "keywords": ["pwa", "offline", "indexeddb", "file-manager", "no-admin", "database"],
+  "keywords": [
+    "pwa",
+    "offline",
+    "indexeddb",
+    "file-manager",
+    "no-admin",
+    "database"
+  ],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/MaydayDragal/File-Database/issues"

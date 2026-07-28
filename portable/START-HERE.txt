@@ -1,0 +1,43 @@
+======================================================================
+  FILE DATABASE - Portable edition (runs from this USB drive)
+======================================================================
+
+WHAT THIS IS
+  A private database for your files, LI documents and special-tool
+  inventory. It runs from this USB drive using the web browser that is
+  already on the computer. There is NOTHING to install and it does NOT
+  need administrator rights.
+
+HOW TO START IT
+  Windows :  double-click  "Start File Database.bat"
+  Mac     :  double-click  "Start File Database (Mac).command"
+             (first time: right-click -> Open, to get past the warning)
+
+  A clean app window opens. That's the whole program.
+
+WHERE YOUR DATA LIVES
+  Everything you add is stored in the "data" folder on THIS drive - not
+  on the computer. Unplug the stick and nothing is left behind. Plug it
+  into another PC, start it again, and your files are all there.
+
+  >> Keep the "app" and "data" folders together, and always start the
+     program with the launcher (not by opening app\index.html directly),
+     or the browser won't know to use the data folder on the USB.
+
+FIRST TIME / MOVING YOUR EXISTING DATA
+  If you already built a vault in the online (github.io) version, open
+  that, use  ...  menu -> "Export / back up vault", save the .fvault file
+  onto this USB, then in the portable app use "Import backup" to load it.
+
+GOOD TO KNOW
+  * Use an exFAT- or NTFS-formatted USB stick. (Old FAT32 sticks can't
+    hold single files over 4 GB and may run out of room.)
+  * A fast USB 3.0 stick makes a big difference with lots of files.
+  * Safely eject the drive before pulling it out so nothing is mid-write.
+  * If your workplace blocks running .bat files, you can still open
+    app\index.html directly in Edge/Chrome - but then the data is kept in
+    that PC's browser, so use Export/Import to carry it between machines.
+
+PRIVACY
+  Nothing is uploaded anywhere. Everything runs and stays on this drive.
+======================================================================

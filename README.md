@@ -139,6 +139,29 @@ caching, and some browsers isolate `file://` pages from each other, which can
 break the cross‑app handoffs. Good for a quick try; host it (Option A) for
 daily use.
 
+### Option C — Portable, from a USB drive (no install, no admin, data on the stick)
+
+Build a self‑contained package that runs from a USB drive using the browser
+already on the PC, with **all data kept on the stick** — nothing is left on the
+computer and no admin rights are needed:
+
+```bash
+npm run build:portable      # creates dist-portable/FileDatabase-Portable/
+```
+
+Copy the `FileDatabase-Portable` folder to a USB drive and run
+**`Start File Database.bat`** (Windows) or **`Start File Database (Mac).command`**
+(macOS). The launcher opens Edge/Chrome in an app window with its data profile
+pointed at the `data/` folder next to it, so your vault lives on the USB drive
+and travels between machines. See `portable/START-HERE.txt` for the full guide.
+
+How it works: the launcher runs the installed browser with
+`--app=file://…/app/index.html --user-data-dir=…/data --allow-file-access-from-files`.
+That keeps the IndexedDB profile (and therefore your files) on the stick and
+lets the apps read their local data files. Use an **exFAT/NTFS** stick (FAT32
+caps files at 4 GB). If your workplace blocks running `.bat` files, you can
+still open `app/index.html` directly and use **Export/Import** to carry data.
+
 ---
 
 ## ⚠️ Keep a backup

@@ -6,3 +6,4 @@ tools/debug*.mjs
 *.log
 .DS_Store
 tools/shot-*.png
+dist-portable/
