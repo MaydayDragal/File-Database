@@ -1,6 +1,6 @@
 /* Tool Inventory service worker — offline app shell.
    Data is NOT bundled: it loads from a portable .tidb database file. */
-const CACHE = "tool-inventory-v7";
+const CACHE = "tool-inventory-v8";
 const SHELL = [
   "./",
   "./index.html",
