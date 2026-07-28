@@ -39,7 +39,10 @@ function createWindow(opts) {
     width: 1300, height: 880, minWidth: 900, minHeight: 600,
     backgroundColor: "#0f172a", autoHideMenuBar: true, title: "File Database",
     icon: path.join(__dirname, "icon.png"),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false },
+    // plugins:true enables Chromium's built-in PDF viewer — without it every
+    // PDF preview (vault drawer, LI document view) shows "Failed to load PDF
+    // document." The viewer is implemented as a plugin in Electron.
+    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false, plugins: true },
   }, opts || {}));
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) { shell.openExternal(url); return { action: "deny" }; }
@@ -75,6 +78,12 @@ async function runSelfTest() {
     await wc.loadURL("app://bundle/inventory/index.html");
     await new Promise((r) => setTimeout(r, 3000));
     const rows = await wc.executeJavaScript("document.querySelectorAll('#tbody tr').length");
+    // The inventory ships empty; what matters is that the bundled catalog is
+    // fetchable (its one-click load depends on it) and that the PDF viewer
+    // plugin is enabled (vault + LI previews depend on it).
+    const catalog = await wc.executeJavaScript(
+      "fetch('../data/FileInventory.tidb').then((r)=>r.ok? r.blob().then((b)=>b.size):-r.status).catch(()=>-1)");
+    const pdfViewer = await wc.executeJavaScript("navigator.pdfViewerEnabled === true");
     const before = await wc.executeJavaScript(`new Promise((res)=>{
       const q=indexedDB.open('persist-check',1);
       q.onupgradeneeded=()=>{ if(!q.result.objectStoreNames.contains('s')) q.result.createObjectStore('s'); };
@@ -84,7 +93,7 @@ async function runSelfTest() {
       q.onerror=()=>res('OPEN-ERR');
     })`);
     const filesOnDisk = fs.existsSync(DATA_DIR) ? fs.readdirSync(DATA_DIR).length : 0;
-    console.log("SELFTEST " + JSON.stringify({ rows, before, dataDir: DATA_DIR, filesOnDisk }));
+    console.log("SELFTEST " + JSON.stringify({ rows, catalog, pdfViewer, before, dataDir: DATA_DIR, filesOnDisk }));
   } catch (e) {
     console.log("SELFTEST " + JSON.stringify({ error: String(e && e.message || e) }));
   }
