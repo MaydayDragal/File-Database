@@ -923,78 +923,127 @@
   }
 
   // ---------- Export / Import ----------
+  // Backup format (v2): a small header + a JSON metadata block + the raw file
+  // bytes concatenated. Built as a Blob assembled from parts, so it never holds
+  // the whole (multi-GB) vault as one base64 string in memory — that overflowed
+  // the JS string limit and crashed the tab on large vaults.
+  const FVLT_MAGIC = [0x46, 0x56, 0x4c, 0x54]; // "FVLT"
+
   async function exportVault() {
-    toast("Preparing backup…");
-    const records = [];
-    await DB.each((r) => records.push(r));
-    // Build a JSON container with base64 blobs. Simple and portable.
-    const out = { format: "file-vault", version: 1, exportedAt: Date.now(), files: [] };
-    for (const r of records) {
-      const b64 = await blobToBase64(r.blob);
-      const thumb64 = r.thumb ? await blobToBase64(r.thumb) : null;
-      out.files.push({
-        id: r.id, name: r.name, type: r.type, kind: r.kind, size: r.size,
-        tags: r.tags, collection: r.collection, note: r.note, starred: r.starred,
-        vins: r.vins || [], fins: r.fins || [], vinScan: r.vinScan || 0,
-        createdAt: r.createdAt, updatedAt: r.updatedAt,
-        blob: b64, blobType: r.blob.type, thumb: thumb64,
+    try {
+      toast("Preparing backup…");
+      const meta = { format: "file-vault", version: 2, exportedAt: Date.now(), files: [] };
+      const parts = [];
+      await DB.each((r) => {
+        const blob = r.blob || null;
+        const thumb = r.thumb || null;
+        meta.files.push({
+          id: r.id, name: r.name, type: r.type, kind: r.kind, size: r.size,
+          tags: r.tags, collection: r.collection, note: r.note, starred: r.starred,
+          vins: r.vins || [], fins: r.fins || [], vinScan: r.vinScan || 0,
+          createdAt: r.createdAt, updatedAt: r.updatedAt,
+          blobType: (blob && blob.type) || r.type || "application/octet-stream",
+          blobLen: blob ? blob.size : 0,
+          thumbType: thumb ? (thumb.type || "image/jpeg") : null,
+          thumbLen: thumb ? thumb.size : 0,
+        });
+        if (blob) parts.push(blob);
+        if (thumb) parts.push(thumb);
       });
+      const metaBytes = new TextEncoder().encode(JSON.stringify(meta));
+      const header = new ArrayBuffer(12);
+      const dv = new DataView(header);
+      FVLT_MAGIC.forEach((b, i) => dv.setUint8(i, b));
+      dv.setUint32(4, 2, true);                 // format version
+      dv.setUint32(8, metaBytes.length, true);  // metadata byte length
+      // The Blob constructor concatenates parts by reference (disk-backed) —
+      // no giant string, no base64, safe for multi-GB vaults.
+      const blob = new Blob([header, metaBytes, ...parts], { type: "application/octet-stream" });
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = URL.createObjectURL(blob);
+      a.download = `file-vault-backup-${stamp}.fvault`;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      toast(`Exported ${meta.files.length} files (${fmtBytes(blob.size)}).`);
+    } catch (e) {
+      console.error(e);
+      toast("Export failed: " + (e && e.message ? e.message : "unknown error"));
     }
-    const json = JSON.stringify(out);
-    const blob = new Blob([json], { type: "application/json" });
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 10);
-    a.href = URL.createObjectURL(blob);
-    a.download = `file-vault-backup-${stamp}.fvault`;
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast(`Exported ${out.files.length} files.`);
   }
 
   async function importVault(file) {
     try {
       toast("Reading backup…");
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data || data.format !== "file-vault" || !Array.isArray(data.files)) {
-        toast("That doesn't look like a File Vault backup.");
-        return;
-      }
-      const existing = new Set(items.map((i) => i.id));
-      let imported = 0;
-      for (const f of data.files) {
-        const blob = base64ToBlob(f.blob, f.blobType || f.type);
-        const thumb = f.thumb ? base64ToBlob(f.thumb, "image/jpeg") : null;
-        const id = existing.has(f.id) ? uid() : f.id;
-        const rec = {
-          id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
-          size: f.size != null ? f.size : blob.size, blob, thumb,
-          tags: f.tags || [], collection: f.collection || "", note: f.note || "",
-          vins: f.vins || [], fins: f.fins || [], vinScan: f.vinScan || 0,
-          starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
-        };
-        rec.searchText = DB.buildSearchText(rec);
-        await DB.put(rec);
-        items.push(stripBlob(rec));
-        imported++;
-      }
-      render();
-      updateStorage();
-      toast(`Imported ${imported} files.`);
+      const head = new DataView(await file.slice(0, 12).arrayBuffer());
+      const isBinary = head.byteLength >= 12 && FVLT_MAGIC.every((b, i) => head.getUint8(i) === b);
+      if (isBinary) return importBinary(file, head);
+      return importLegacyJson(file); // older base64 JSON backups
     } catch (e) {
       console.error(e);
       toast("Import failed — the file may be corrupted.");
     }
   }
 
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result).split(",")[1] || "");
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
+  async function importBinary(file, head) {
+    const metaLen = head.getUint32(8, true);
+    const data = JSON.parse(await file.slice(12, 12 + metaLen).text());
+    if (!data || data.format !== "file-vault" || !Array.isArray(data.files)) {
+      toast("That doesn't look like a File Vault backup."); return;
+    }
+    const existing = new Set(items.map((i) => i.id));
+    let off = 12 + metaLen, imported = 0;
+    for (const f of data.files) {
+      const bl = f.blobLen || 0, tl = f.thumbLen || 0;
+      // Blob.slice references the region on disk — no bytes copied into memory.
+      const blob = file.slice(off, off + bl, f.blobType || f.type || "application/octet-stream"); off += bl;
+      const thumb = tl ? file.slice(off, off + tl, f.thumbType || "image/jpeg") : null; off += tl;
+      const id = existing.has(f.id) ? uid() : f.id;
+      const rec = {
+        id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
+        size: f.size != null ? f.size : blob.size, blob, thumb,
+        tags: f.tags || [], collection: f.collection || "", note: f.note || "",
+        vins: f.vins || [], fins: f.fins || [], vinScan: f.vinScan || 0,
+        starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
+      };
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      items.push(stripBlob(rec));
+      imported++;
+    }
+    render();
+    updateStorage();
+    toast(`Imported ${imported} files.`);
   }
+
+  async function importLegacyJson(file) {
+    const data = JSON.parse(await file.text());
+    if (!data || data.format !== "file-vault" || !Array.isArray(data.files)) {
+      toast("That doesn't look like a File Vault backup."); return;
+    }
+    const existing = new Set(items.map((i) => i.id));
+    let imported = 0;
+    for (const f of data.files) {
+      const blob = base64ToBlob(f.blob, f.blobType || f.type);
+      const thumb = f.thumb ? base64ToBlob(f.thumb, "image/jpeg") : null;
+      const id = existing.has(f.id) ? uid() : f.id;
+      const rec = {
+        id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
+        size: f.size != null ? f.size : blob.size, blob, thumb,
+        tags: f.tags || [], collection: f.collection || "", note: f.note || "",
+        vins: f.vins || [], fins: f.fins || [], vinScan: f.vinScan || 0,
+        starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),
+      };
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      items.push(stripBlob(rec));
+      imported++;
+    }
+    render();
+    updateStorage();
+    toast(`Imported ${imported} files.`);
+  }
+
   function base64ToBlob(b64, type) {
     const bin = atob(b64 || "");
     const len = bin.length;

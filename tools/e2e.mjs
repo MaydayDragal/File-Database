@@ -138,9 +138,27 @@ const [download] = await Promise.all([
 ]);
 const dlPath = path.join(tmp, "backup.fvault");
 await download.saveAs(dlPath);
-const backup = JSON.parse(fs.readFileSync(dlPath, "utf8"));
-check(backup.format === "file-vault" && backup.files.length === 3, "export backup has 3 files");
+// New binary container: "FVLT" magic + uint32 version + uint32 metaLen + JSON meta + raw bytes.
+const buf = fs.readFileSync(dlPath);
+check(buf.slice(0, 4).toString("ascii") === "FVLT", "backup uses the streamed binary format (FVLT magic)");
+const metaLen = buf.readUInt32LE(8);
+const backup = JSON.parse(buf.slice(12, 12 + metaLen).toString("utf8"));
+check(backup.format === "file-vault" && backup.version === 2 && backup.files.length === 3, "export backup metadata lists 3 files");
 check(backup.files.some((f) => f.tags && f.tags.includes("finance")), "export preserves tags");
+// Bytes after the metadata equal the sum of every file's blob+thumb length (no base64 bloat).
+const dataBytes = buf.length - (12 + metaLen);
+const expectBytes = backup.files.reduce((n, f) => n + (f.blobLen || 0) + (f.thumbLen || 0), 0);
+check(dataBytes === expectBytes, `payload bytes match declared lengths (${dataBytes} === ${expectBytes})`);
+
+// --- Round-trip: clearing the vault and importing the backup restores it ---
+await page.evaluate(() => window.VaultDB.clearAll());
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+check((await page.locator(".card").count()) === 0, "vault emptied before import");
+await page.setInputFiles("#import-input", dlPath);
+await page.waitForTimeout(800);
+check((await page.locator(".card").count()) === 3, "importing the backup restores all 3 files");
+check((await page.locator("#nav-collections").getByText("Work").count()) > 0, "imported backup restored the collection");
 
 // --- Reload persists data (IndexedDB) ---
 await page.reload({ waitUntil: "networkidle" });
