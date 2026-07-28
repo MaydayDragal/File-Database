@@ -142,6 +142,32 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-weight: 600;
 }
 .btn-install:hover { background: var(--brand-strong); }
+.btn-add {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--brand); color: #fff; border: 0; border-radius: 9px;
+  padding: 6px 13px; font-size: 13px; font-weight: 600;
+}
+.btn-add:hover { background: var(--brand-strong); }
+.btn-add svg { display: block; }
+
+/* ---------- global drop zone (one front door for files) ---------- */
+.shell-drop {
+  position: fixed; inset: 0; z-index: 55;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(2px);
+}
+.shell-drop[hidden] { display: none; }
+.shell-drop__card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 34px 46px; border-radius: 16px;
+  border: 2px dashed var(--brand);
+  background: var(--bg-elev); color: var(--text);
+  box-shadow: var(--shadow); pointer-events: none;
+}
+.shell-drop__card svg { color: var(--brand); }
+.shell-drop__title { font-size: 17px; font-weight: 700; }
+.shell-drop__hint { font-size: 13px; color: var(--text-dim); }
 
 /* ---------- stage / app frames ---------- */
 .stage { flex: 1; min-height: 0; display: flex; }
@@ -175,4 +201,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .shelltab { padding: 0 10px; }
   .shelltab__label { display: none; }
   .shelltab__icon { font-size: 18px; }
+  .btn-add { padding: 6px 9px; }
+  .btn-add__label { display: none; }
 }

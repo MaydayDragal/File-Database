@@ -54,12 +54,23 @@ Platform Shell
 │   ├── Lazy iframes — an app loads on first visit, then stays warm (instant switching)
 │   ├── One panel visible at a time (ARIA tab pattern: arrow keys, Home/End, roving tabindex)
 │   └── Last-used app remembered (localStorage "fd-app") and restored on launch
+├── Unified file intake (ONE front door for the whole platform)
+│   ├── "＋ Add files" button + one hidden <input> + a full-window drop zone, all in the top bar
+│   ├── Auto-routing (silent, no prompt): a PDF whose NAME carries a Mercedes
+│   │   document number (LI_DOCNUM, same pattern the LI app uses) → LI Documents;
+│   │   every other file → Files (the Vault)
+│   ├── Delivery: shell loads bridge.js and VaultBridge.send()s each file to its
+│   │   target's outbox (meta.fromShell); ensures the target iframe is loaded so it ingests now
+│   ├── Drops over an app's iframe are caught inside that app and forwarded up as
+│   │   {shell-add-files} — so intake is unified no matter which tab is showing
+│   ├── Single-target batch → that app is surfaced; mixed batch stays put; toast summarizes the split
+│   └── The apps' own add buttons (Vault "Add files", LI "Import PDFs") are HIDDEN when embedded
 ├── Tab badges (live counts)
 │   ├── Files count      ← peeks IndexedDB "file-vault" / store "files"
 │   ├── LI docs count    ← peeks IndexedDB "LIDocsDB" / store "docs"
 │   ├── Tools count      ← peeks IndexedDB "tool-inventory" / store "tools"
 │   ├── Read-only peek with upgrade-abort guard — can NEVER create/corrupt an app's DB
-│   └── Refreshes on: app switch · window focus · tab visible · {li-changed} message
+│   └── Refreshes on: app switch · window focus · tab visible · {li-changed} message · after an add
 ├── Theme (single source of truth for all four apps)
 │   ├── ◐ button cycles System → Light → Dark
 │   ├── Persists: localStorage "fv-theme" (set for light/dark, REMOVED for system)
@@ -76,6 +87,8 @@ Platform Shell
 │   ├── {shell-nav, app, tab?}        → activate app (tab forwarded to toolbox)
 │   ├── {vault-nav, to:"files"}       → activate vault (legacy contract, still honored)
 │   ├── {li-changed}                  → refresh tab badges
+│   ├── {shell-add-files, files}      → route files through the unified intake (forwarded iframe drop/paste)
+│   ├── {shell-open-picker}           → open the platform file picker (from an app's empty-state)
 │   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
 ├── PWA (the installable "one app")
 │   ├── manifest id "/" — pre-platform installs upgrade in place
@@ -89,7 +102,8 @@ Platform Shell
 ```
 
 **Tied into:** all four apps (iframes, theme broadcast, badges), three app IndexedDBs
-(read-only), `bridge.js` only as a cached asset (the shell never sends/receives files).
+(read-only), and `bridge.js` — which the shell now loads to *send* unified-intake files
+to the Vault/LI outboxes (it still never *receives*; each app drains its own).
 
 ---
 

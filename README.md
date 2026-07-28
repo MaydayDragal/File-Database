@@ -39,6 +39,11 @@ The repo root is a slim **platform shell**: one top bar with an app tab for
 each of the four apps, which run side by side in lazy‑loaded, same‑origin
 iframes. The shell owns everything the apps share:
 
+- **One "Add files" button** — a single uploader in the top bar (and a
+  full‑window drop zone) files everything for you: drop or pick any mix, and
+  each item lands where it belongs — Mercedes **LI PDFs** go to LI Documents,
+  everything else to Files. No more hunting for the right app's upload spot
+  first; it works the same on every tab, so the platform behaves as one app.
 - **Tabs & badges** — Files / LI Documents / Tool Inventory / Toolbox, with
   live counts of your files, documents and tools on the tabs.
 - **One theme** — the ◐ toggle cycles System → Light → Dark and applies to the

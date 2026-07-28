@@ -77,10 +77,11 @@ check(await page.locator("#tab-li.is-active").count() === 1, "LI tab active afte
 vis = await panelsVisible();
 check(vis.length === 1 && vis[0] === "view-li", "LI panel is the only visible panel");
 const li = page.frameLocator("#frame-li");
-await li.locator("#importBtn").waitFor({ timeout: 8000 });
+await li.locator("header.topbar").waitFor({ timeout: 8000 });
 check(true, "LI iframe booted on first activation");
 check(await li.locator("header.topbar h1").isHidden(), "LI h1 hidden when embedded");
 check(await li.locator("#backToVault").isHidden(), "LI back link hidden when embedded");
+check(await li.locator("#importBtn").isHidden(), "LI's own Import button hidden when embedded (shell owns 'Add files')");
 // The LI app auto-opens its import prompt when empty; dismiss it like a user.
 if (await li.locator("#importOverlay.show").count()) {
   await li.locator("#importOverlay .x[data-close]").click();
@@ -165,7 +166,7 @@ check(((await frameSrc("#frame-vault")) || "").includes("action=add"), "?action=
 // --- Legacy child → shell navigation message ---
 await page.click("#tab-li");
 const liDeep = page.frameLocator("#frame-li");
-await liDeep.locator("#importBtn").waitFor({ timeout: 8000 });
+await liDeep.locator("header.topbar").waitFor({ timeout: 8000 });
 if (await liDeep.locator("#importOverlay.show").count()) {
   await liDeep.locator("#importOverlay .x[data-close]").click();
 }

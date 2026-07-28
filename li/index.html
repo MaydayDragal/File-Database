@@ -48,6 +48,7 @@
   }
   html.embedded header.topbar h1,
   html.embedded #backToVault,
+  html.embedded #importBtn,
   html.embedded #installBtn,
   html.embedded #menuSepInstall { display:none !important; }
   * { box-sizing:border-box; }
@@ -2079,12 +2080,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (!window.VaultBridge) return;
     var embedded = false;
     try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
-    // Import PDFs handed over from File Vault.
+    // Import PDFs handed over from File Vault or the platform's unified "Add
+    // files". The bridge delivers one file per nudge, but importFiles() refuses
+    // to run concurrently — so buffer a burst and flush it as ONE batch (its
+    // worker pool handles many PDFs at once), and never start while one runs.
+    var incoming = [], flushT = null;
+    function flushIncoming() {
+      flushT = null;
+      if (!incoming.length) return;
+      if (importing) { flushT = setTimeout(flushIncoming, 150); return; }
+      importFiles(incoming.splice(0));
+    }
     window.VaultBridge.receive("li", function (item) {
       try {
         var f = new File([item.blob], item.name || "document.pdf", { type: item.type || "application/pdf" });
-        importFiles([f]);
-      } catch (e) { importFiles([item.blob]); }
+        incoming.push(f);
+      } catch (e) { if (item.blob) incoming.push(item.blob); }
+      clearTimeout(flushT);
+      flushT = setTimeout(flushIncoming, 80);
     });
     // "Add to File Vault" from the document view.
     var sv = $("dSendVault");
@@ -2109,6 +2122,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       e.preventDefault();
       try { window.parent.postMessage({ type: "vault-nav", to: "files" }, "*"); } catch (x) {}
     });
+    // Embedded, files intake is unified: a file dropped over the LI panel is
+    // handed to the shell's one router (which files it here or in the Vault),
+    // instead of the browser navigating the iframe to the dropped PDF.
+    if (embedded) {
+      ["dragover", "drop"].forEach(function (ev) {
+        window.addEventListener(ev, function (e) {
+          if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") === -1) return;
+          e.preventDefault();
+          if (ev === "drop" && e.dataTransfer.files && e.dataTransfer.files.length) {
+            var files = Array.prototype.slice.call(e.dataTransfer.files);
+            try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); }
+            catch (x) { importFiles(files); }
+          }
+        });
+      });
+    }
   })();
 })();
 

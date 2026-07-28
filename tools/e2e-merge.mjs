@@ -58,8 +58,8 @@ await page.click("#tab-li");
 await page.waitForTimeout(300);
 check(await page.locator("#view-li:not([hidden])").count() === 1, "clicking it reveals the embedded LI view");
 const li = page.frameLocator("#frame-li");
-await li.locator("#importBtn").waitFor({ timeout: 8000 });
-check(await li.locator("#importBtn").isVisible(), "embedded LI app loaded (Import button visible)");
+await li.locator("header.topbar").waitFor({ timeout: 8000 });
+check(await li.locator("#importBtn").isHidden(), "embedded LI app loaded; its own Import button hidden (shell owns 'Add files')");
 // The LI app auto-opens its import prompt when empty; dismiss it like a user.
 if (await li.locator("#importOverlay.show").count()) {
   await li.locator("#importOverlay .x[data-close]").click();

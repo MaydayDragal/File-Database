@@ -60,6 +60,54 @@
     toast("Theme: " + themeMode);
   }
 
+  // ---------- unified file intake (one front door, auto-filed) ----------
+  // A file is an "LI document" if it's a PDF whose name carries a Mercedes
+  // document number — the SAME pattern the LI app uses to identify one
+  // (DOCNUM in li/index.html). Those go to LI Documents; everything else to
+  // Files. Detection is silent: no prompt, no per-drop choice.
+  var LI_DOCNUM = /\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i;
+  function isPdf(f) { return /pdf/i.test(f.type || "") || /\.pdf$/i.test(f.name || ""); }
+  function looksLikeLI(f) { return isPdf(f) && LI_DOCNUM.test(f.name || ""); }
+
+  // Load an app's iframe without switching to it, so a routed file's receiver
+  // is live and ingests immediately (badges then catch up).
+  function ensureLoaded(name) {
+    var a = APPS[name];
+    if (a && !a.loaded) { a.loaded = true; $(a.frame).src = a.src; }
+  }
+
+  function routeFiles(list) {
+    var files = Array.prototype.slice.call(list || []).filter(Boolean);
+    if (!files.length) return;
+    if (!window.VaultBridge) { toast("Couldn't add files — transfer bus unavailable."); return; }
+    var toLI = [], toVault = [];
+    files.forEach(function (f) { (looksLikeLI(f) ? toLI : toVault).push(f); });
+
+    function deliver(target, arr) {
+      if (!arr.length) return;
+      ensureLoaded(target);
+      arr.forEach(function (f) {
+        window.VaultBridge.send(target, { name: f.name, type: f.type, blob: f, meta: { fromShell: true } })
+          .catch(function () { toast('Couldn’t add “' + f.name + '”.'); });
+      });
+    }
+    deliver("li", toLI);
+    deliver("vault", toVault);
+
+    var parts = [];
+    if (toVault.length) parts.push(toVault.length + " to Files");
+    if (toLI.length) parts.push(toLI.length + " to LI Documents");
+    toast("Added " + files.length + (files.length === 1 ? " file" : " files") + " — " + parts.join(" · ") + ".");
+
+    // If the whole batch belongs to one app, surface it so the user sees the
+    // result; a mixed batch stays put (switching would hide half of it).
+    var only = toLI.length && !toVault.length ? "li" : (toVault.length && !toLI.length ? "vault" : null);
+    if (only && only !== current) activate(only);
+
+    // New rows land after the receiver ingests (LI may OCR) — nudge the badges.
+    [500, 1500, 3500].forEach(function (d) { setTimeout(updateBadges, d); });
+  }
+
   // ---------- app switching ----------
   function parseHash() {
     var h = (location.hash || "").replace(/^#\/?/, "");
@@ -171,6 +219,24 @@
     });
     $("#theme-btn").addEventListener("click", cycleTheme);
 
+    // Unified "Add files": one button + one hidden input for the whole platform.
+    var fileInput = $("#shell-file-input");
+    $("#add-btn").addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function (e) { routeFiles(e.target.files); e.target.value = ""; });
+
+    // Full-window drop zone. Drops on the shell chrome land here; drops over an
+    // app's iframe are caught inside that app and forwarded up as shell-add-files.
+    var drop = $("#shell-drop"), dragDepth = 0;
+    function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") !== -1; }
+    window.addEventListener("dragenter", function (e) { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; drop.hidden = false; });
+    window.addEventListener("dragover", function (e) { if (hasFiles(e)) e.preventDefault(); });
+    window.addEventListener("dragleave", function () { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) drop.hidden = true; });
+    window.addEventListener("drop", function (e) {
+      if (!e.dataTransfer) return;
+      e.preventDefault(); dragDepth = 0; drop.hidden = true;
+      if (e.dataTransfer.files && e.dataTransfer.files.length) routeFiles(e.dataTransfer.files);
+    });
+
     // ARIA tabs keyboard pattern: arrows move + activate, Home/End jump.
     $("#tabs").addEventListener("keydown", function (e) {
       var order = Object.keys(APPS);
@@ -189,6 +255,10 @@
       if (d.type === "shell-nav" && APPS[d.app]) activate(d.app, { tab: d.tab || null });
       else if (d.type === "vault-nav" && d.to === "files") activate("vault");   // legacy contract
       else if (d.type === "li-changed") updateBadges();
+      // An embedded app forwards files dropped/pasted over it, so the platform
+      // files them through one router regardless of which tab is showing.
+      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files);
+      else if (d.type === "shell-open-picker") $("#shell-file-input").click();
     });
     window.addEventListener("focus", updateBadges);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) updateBadges(); });

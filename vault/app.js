@@ -874,7 +874,9 @@
     const thumb = await makeThumb(file, kind);
     const now = Date.now();
     const m = item.meta || {};
-    const collection = m.collection || LI_COLLECTION;
+    // Files handed over from the platform's unified "Add files" are generic —
+    // don't force them into the LI collection. Real LI hand-offs carry m.li.
+    const collection = m.collection || (m.li ? LI_COLLECTION : "");
     const tags = [];
     if (m.li) tags.push(m.li);
     if (m.fgroup) tags.push(m.fgroup);
@@ -899,7 +901,7 @@
     items.push(stripBlob(record));
     render();
     updateStorage();
-    toast('Added “' + name + '” to File Vault (' + collection + ').');
+    toast('Added “' + name + '” to File Vault' + (collection ? ' (' + collection + ')' : '') + '.');
   }
 
   // ---------- Storage meter ----------
@@ -1131,6 +1133,17 @@
   }
 
   // ---------- Drag & drop ----------
+  // Embedded in the platform, files intake is unified: drops/pastes are handed
+  // up to the shell's one router (which files LI docs to LI, the rest here).
+  // Standalone, they're added locally.
+  function intake(fileList) {
+    const files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    if (embedded) {
+      try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); return; } catch (e) {}
+    }
+    addFiles(files);
+  }
   let dragDepth = 0;
   function initDnD() {
     const overlay = $("#drop-overlay");
@@ -1143,14 +1156,14 @@
     window.addEventListener("drop", (e) => {
       if (!e.dataTransfer) return;
       e.preventDefault(); dragDepth = 0; overlay.hidden = true;
-      if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+      if (e.dataTransfer.files && e.dataTransfer.files.length) intake(e.dataTransfer.files);
     });
     // Paste files/images
     window.addEventListener("paste", (e) => {
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       const files = Array.from((e.clipboardData && e.clipboardData.files) || []);
-      if (files.length) { e.preventDefault(); addFiles(files); }
+      if (files.length) { e.preventDefault(); intake(files); }
     });
   }
 
@@ -1160,8 +1173,14 @@
 
   // ---------- Event wiring ----------
   function wire() {
+    // Embedded, the platform's top bar owns "Add files" (one front door), so
+    // hide the vault's own button; the empty-state prompt opens that picker.
+    if (embedded) $("#add-btn").hidden = true;
     $("#add-btn").onclick = () => $("#file-input").click();
-    $("#empty-add").onclick = () => $("#file-input").click();
+    $("#empty-add").onclick = () => {
+      if (embedded) { try { window.parent.postMessage({ type: "shell-open-picker" }, "*"); return; } catch (e) {} }
+      $("#file-input").click();
+    };
     $("#install-btn").onclick = triggerInstall;
     $("#theme-btn").onclick = cycleTheme;
     $("#file-input").onchange = (e) => { addFiles(e.target.files); e.target.value = ""; };
