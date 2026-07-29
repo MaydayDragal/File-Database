@@ -1,7 +1,7 @@
 /* File Database platform shell service worker — offline shell + toolbox.
    The vault, LI and inventory apps register their own service workers for
    their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v3";
+const CACHE = "platform-shell-v4";
 // The shell can't start without these…
 const CORE = [
   "./",

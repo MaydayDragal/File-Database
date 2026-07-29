@@ -46,6 +46,14 @@ jobs:
         working-directory: desktop
         run: npm install --no-audit --no-fund
 
+      - name: Storage + viewer self-test (Windows Electron)
+        working-directory: desktop
+        # Evidence-gathering (never blocks the build): PDF viewer enabled,
+        # bundled catalog fetchable, and a 256 KB IndexedDB blob round-trips
+        # bit-identical on Windows.
+        continue-on-error: true
+        run: npx --no-install electron . --selftest
+
       - name: Build portable Windows app
         working-directory: desktop
         # Native rebrand on Windows (icon + version info); no wine needed.

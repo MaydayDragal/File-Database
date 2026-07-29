@@ -266,6 +266,31 @@
   }
 
   // ---------- Import ----------
+  // A dropped/picked File is a LAZY handle to its source — if that source is a
+  // OneDrive/network placeholder, a locked file, or an app's temp export, a
+  // later read (when IndexedDB serializes it) can silently store garbage.
+  // Read the bytes eagerly at add time so a bad source fails loudly instead.
+  const MATERIALIZE_MAX = 256 * 1024 * 1024;
+  async function materializeFile(file) {
+    if (file.size > MATERIALIZE_MAX) return file; // keep the handle (memory)
+    const buf = await file.arrayBuffer();
+    if (file.size && !buf.byteLength) throw new Error("empty read");
+    return new Blob([buf], { type: file.type || "application/octet-stream" });
+  }
+  // After writing, read the stored copy back and compare size + leading bytes
+  // with the source — storage corruption becomes an immediate error, not a
+  // "Failed to load" surprise weeks later.
+  async function verifyStored(record) {
+    try {
+      const back = await DB.get(record.id);
+      if (!back || !back.blob || back.blob.size !== record.blob.size) return false;
+      const a = new Uint8Array(await record.blob.slice(0, 8).arrayBuffer());
+      const b = new Uint8Array(await back.blob.slice(0, 8).arrayBuffer());
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    } catch (e) { return false; }
+  }
   async function addFiles(fileList) {
     const files = Array.from(fileList).filter(Boolean);
     if (!files.length) return;
@@ -274,6 +299,12 @@
     const newRecs = [];
     toast(`Adding ${files.length} file${files.length > 1 ? "s" : ""}…`);
     for (const file of files) {
+      let bytes;
+      try { bytes = await materializeFile(file); }
+      catch (e) {
+        toast('Couldn’t read “' + file.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.');
+        continue;
+      }
       const kind = classify(file);
       const thumb = await makeThumb(file, kind);
       const now = Date.now();
@@ -282,8 +313,8 @@
         name: file.name || "Untitled",
         type: file.type || "application/octet-stream",
         kind,
-        size: file.size,
-        blob: file,
+        size: bytes.size,
+        blob: bytes,
         thumb,
         tags: [],
         collection,
@@ -295,6 +326,11 @@
       record.searchText = DB.buildSearchText(record);
       try {
         await DB.put(record);
+        if (!(await verifyStored(record))) {
+          try { await DB.remove(record.id); } catch (e2) {}
+          toast("“" + file.name + "” didn't store correctly and was removed — try adding it again.");
+          continue;
+        }
         items.push(stripBlob(record));
         newRecs.push(record);
         added++;
@@ -1094,6 +1130,11 @@
     };
     record.searchText = DB.buildSearchText(record);
     await DB.put(record);
+    if (!(await verifyStored(record))) {
+      try { await DB.remove(record.id); } catch (e2) {}
+      toast("“" + name + "” didn't store correctly and was removed — try adding it again.");
+      return;
+    }
     items.push(stripBlob(record));
     render();
     updateStorage();
@@ -1571,6 +1612,10 @@
   async function syncImport(files, collection) {
     let added = 0;
     for (const file of files) {
+      // Same eager-read + verify as addFiles: a cloud-placeholder or locked
+      // source must fail here, not silently store garbage.
+      let bytes;
+      try { bytes = await materializeFile(file); } catch (e) { continue; }
       const kind = classify(file);
       let thumb = null; try { thumb = await makeThumb(file, kind); } catch (e) {}
       const now = Date.now();
@@ -1578,14 +1623,18 @@
         id: uid(),
         name: file.name || "Untitled",
         type: file.type || "application/octet-stream",
-        kind, size: file.size, blob: file, thumb,
+        kind, size: bytes.size, blob: bytes, thumb,
         tags: [], collection, note: "", starred: false,
         createdAt: now, updatedAt: now,
         srcMtime: file.lastModified || 0, srcSync: true,
       };
       record.searchText = DB.buildSearchText(record);
-      try { await DB.put(record); items.push(stripBlob(record)); added++; }
-      catch (e) { console.error(e); }
+      try {
+        await DB.put(record);
+        if (!(await verifyStored(record))) { try { await DB.remove(record.id); } catch (e2) {} continue; }
+        items.push(stripBlob(record));
+        added++;
+      } catch (e) { console.error(e); }
     }
     if (added) {
       if (!extraCollections.includes(collection)) { extraCollections.push(collection); DB.setMeta("collections", extraCollections); }

@@ -84,6 +84,24 @@ async function runSelfTest() {
     const catalog = await wc.executeJavaScript(
       "fetch('../data/FileInventory.tidb').then((r)=>r.ok? r.blob().then((b)=>b.size):-r.status).catch(()=>-1)");
     const pdfViewer = await wc.executeJavaScript("navigator.pdfViewerEnabled === true");
+    // Large-blob IndexedDB round-trip: a 256 KB File (spanning all byte
+    // values) must come back bit-identical — proves user-file storage
+    // integrity on THIS OS (Chromium externalizes big blobs to disk files,
+    // a different path than small inlined blobs).
+    const blobRT = await wc.executeJavaScript(`(async function(){
+      try {
+        var n = 256*1024, u = new Uint8Array(n);
+        for (var i=0;i<n;i++) u[i] = i % 251;
+        var f = new File([u], "rt.bin", { type: "application/octet-stream" });
+        var db = await new Promise(function(res,rej){ var r=indexedDB.open("rt-db",1); r.onupgradeneeded=function(){ r.result.createObjectStore("s",{keyPath:"id"}); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; });
+        await new Promise(function(res,rej){ var t=db.transaction("s","readwrite"); t.objectStore("s").put({id:"x",blob:f}); t.oncomplete=res; t.onerror=function(){ rej(t.error); }; });
+        var rec = await new Promise(function(res,rej){ var g=db.transaction("s").objectStore("s").get("x"); g.onsuccess=function(){ res(g.result); }; g.onerror=function(){ rej(g.error); }; });
+        var back = new Uint8Array(await rec.blob.arrayBuffer());
+        if (back.length !== n) return "SIZE:" + back.length;
+        for (var j=0;j<n;j++) if (back[j] !== (j % 251)) return "BYTE@" + j;
+        return "ok";
+      } catch (e) { return "ERR:" + String(e && e.message || e); }
+    })()`);
     const before = await wc.executeJavaScript(`new Promise((res)=>{
       const q=indexedDB.open('persist-check',1);
       q.onupgradeneeded=()=>{ if(!q.result.objectStoreNames.contains('s')) q.result.createObjectStore('s'); };
@@ -93,7 +111,7 @@ async function runSelfTest() {
       q.onerror=()=>res('OPEN-ERR');
     })`);
     const filesOnDisk = fs.existsSync(DATA_DIR) ? fs.readdirSync(DATA_DIR).length : 0;
-    console.log("SELFTEST " + JSON.stringify({ rows, catalog, pdfViewer, before, dataDir: DATA_DIR, filesOnDisk }));
+    console.log("SELFTEST " + JSON.stringify({ rows, catalog, pdfViewer, blobRT, before, dataDir: DATA_DIR, filesOnDisk }));
   } catch (e) {
     console.log("SELFTEST " + JSON.stringify({ error: String(e && e.message || e) }));
   }

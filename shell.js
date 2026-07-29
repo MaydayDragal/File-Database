@@ -100,6 +100,20 @@
       toast("Opening " + s.msg.file.name + " in " + s.label + "…");
     });
 
+    // Read each file's bytes NOW, at the moment of adding. A dropped File is a
+    // lazy handle to its source — if that source is a OneDrive/network
+    // placeholder, a locked file, or an app's temp export, a LATER read (when
+    // the databases serialize it) can silently return garbage. Reading eagerly
+    // surfaces the failure immediately instead of storing a corrupt copy.
+    var MATERIALIZE_MAX = 256 * 1024 * 1024; // beyond this, keep the handle (memory)
+    function materialize(f) {
+      if (f.size > MATERIALIZE_MAX) return Promise.resolve(f);
+      return f.arrayBuffer().then(function (buf) {
+        if (f.size && !buf.byteLength) throw new Error("empty read");
+        return new File([buf], f.name, { type: f.type });
+      });
+    }
+
     function deliver(target, arr) {
       if (!arr.length) return;
       ensureLoaded(target);
@@ -110,8 +124,9 @@
         var meta = { fromShell: true };
         if (target === "vault" && vehiclePin) meta.vin = vehiclePin.vin;
         if (target === "vault" && opts.collection) meta.collection = opts.collection;
-        window.VaultBridge.send(target, { name: f.name, type: f.type, blob: f, meta: meta })
-          .catch(function () { toast('Couldn’t add “' + f.name + '”.'); });
+        materialize(f)
+          .then(function (safe) { return window.VaultBridge.send(target, { name: f.name, type: f.type, blob: safe, meta: meta }); })
+          .catch(function () { toast('Couldn’t read “' + f.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'); });
       });
     }
     deliver("li", toLI);
