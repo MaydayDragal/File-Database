@@ -856,7 +856,13 @@
       const wrap = document.createElement("div"); wrap.style.textAlign = "center";
       wrap.append(g, document.createElement("br"), a); box.append(wrap);
     } else if (rec.kind === "pdf") {
-      const frame = document.createElement("iframe"); frame.src = url; frame.title = rec.name; box.append(frame);
+      // Rendered with the vendored pdf.js, NOT the browser's native viewer:
+      // identical result in every environment (the desktop app's built-in
+      // viewer refuses some real-world PDFs, e.g. XENTRY/SCCO exports that
+      // pdf.js parses fine), no blob URL to keep alive, and a clear message
+      // when a file truly can't be read. Not awaited — the drawer opens
+      // immediately and pages appear as they render.
+      renderPdfPreview(rec, box, meta);
     } else if (rec.kind === "text" && rec.size <= TEXT_PREVIEW_MAX) {
       try {
         const txt = await rec.blob.text();
@@ -871,8 +877,62 @@
     box.append(g);
   }
 
+  const PDF_PREVIEW_PAGES = 12;
+  async function renderPdfPreview(rec, box, meta) {
+    const token = _previewToken; // invalidated when the preview changes/closes
+    const wrap = document.createElement("div");
+    wrap.className = "pdf-pages";
+    const status = document.createElement("div");
+    status.className = "pdf-pages__status";
+    status.textContent = "Rendering preview…";
+    wrap.append(status);
+    box.append(wrap);
+    let doc = null;
+    try {
+      const lib = await ensurePdfjs();
+      const buf = await rec.blob.arrayBuffer();
+      doc = await lib.getDocument({ data: buf, disableAutoFetch: true, disableStream: true }).promise;
+      if (token !== _previewToken) return;
+      const pages = Math.min(doc.numPages, PDF_PREVIEW_PAGES);
+      const w = box.clientWidth;
+      const width = Math.max(320, Math.min(900, w ? w - 24 : 660));
+      for (let i = 1; i <= pages; i++) {
+        if (token !== _previewToken) return;
+        const page = await doc.getPage(i);
+        const unit = page.getViewport({ scale: 1 });
+        const scale = Math.min(2, width / unit.width || 1);
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.ceil(vp.width));
+        canvas.height = Math.max(1, Math.ceil(vp.height));
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); // PDFs are transparent
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        if (token !== _previewToken) return;
+        wrap.insertBefore(canvas, status);
+      }
+      if (doc.numPages > pages) status.textContent = "Showing the first " + pages + " of " + doc.numPages + " pages — “Open” shows the whole document.";
+      else status.remove();
+    } catch (e) {
+      if (token !== _previewToken) return;
+      box.innerHTML = "";
+      fallbackGlyph(box, meta);
+      const msg = document.createElement("div");
+      msg.className = "preview-note";
+      msg.textContent = "Couldn't read this PDF — the file may be damaged or use an unsupported format. Use Download to open it in another viewer.";
+      box.append(msg);
+    } finally {
+      if (doc) { try { doc.destroy(); } catch (e) {} }
+    }
+  }
+
   const previewUrls = new Set();
-  function releasePreviewUrls() { previewUrls.forEach((u) => URL.revokeObjectURL(u)); previewUrls.clear(); }
+  let _previewToken = 0;
+  function releasePreviewUrls() {
+    _previewToken++; // abort any in-flight pdf.js page rendering
+    previewUrls.forEach((u) => URL.revokeObjectURL(u));
+    previewUrls.clear();
+  }
 
   function closeDetail() {
     const d = $("#detail");

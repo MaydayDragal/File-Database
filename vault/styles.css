@@ -356,6 +356,10 @@ html.embedded #install-btn { display: none !important; }
 .detail__preview img, .detail__preview video, .detail__preview audio { max-width: 100%; max-height: 40vh; border-radius: 8px; }
 .detail__preview iframe, .detail__preview embed { width: 100%; height: 42vh; border: none; border-radius: 8px; background: #fff; }
 .detail__preview pre { width: 100%; margin: 0; padding: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; color: var(--text); overflow: auto; }
+.detail__preview .pdf-pages { width: 100%; max-height: 42vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; background: var(--bg-sunken); border-radius: 8px; }
+.detail__preview .pdf-pages canvas { max-width: 100%; height: auto; background: #fff; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+.detail__preview .pdf-pages__status { font-size: 12px; color: var(--text-dim); padding: 4px 0 8px; text-align: center; }
+.detail__preview .preview-note { font-size: 12.5px; color: var(--text-dim); text-align: center; padding: 8px 14px 2px; line-height: 1.5; }
 .detail__preview .glyph-big { font-size: 72px; }
 .detail__meta { padding: 14px 16px; overflow-y: auto; flex: 1; }
 .kv { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--border); }

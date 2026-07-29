@@ -286,20 +286,22 @@ await page.click("#tab-vault");
 await page.waitForTimeout(300);
 await page.setInputFiles("#shell-file-input", path.join(FIX, "scco WDD2130461A123456.pdf"));
 await vault.locator(".card", { hasText: "scco" }).first().click({ timeout: 8000 });
-await vault.locator("#d-preview iframe").waitFor({ timeout: 8000 });
-// Force list re-renders while the viewer streams — auto VIN detect after an
-// add, a search keystroke, a sync import all do this in real use.
+// PDFs render via the vendored pdf.js (canvas pages) — same result in every
+// environment, immune to the native viewer's quirks and to URL revocation.
+await vault.locator("#d-preview .pdf-pages canvas").first().waitFor({ timeout: 15000 });
+// Force list re-renders while previewing — auto VIN detect after an add, a
+// search keystroke, a sync import all do this in real use.
 await vault.locator("#search-input").fill("s");
 await page.waitForTimeout(400);
 await vault.locator("#search-input").fill("");
 await page.waitForTimeout(4000); // also lets the auto VIN detect render land
-const previewState = await page.frames().find((f) => f.url().includes("/vault/")).evaluate(async () => {
-  const f = document.querySelector("#d-preview iframe");
-  if (!f) return "no-iframe";
-  try { const r = await fetch(f.src); const b = await r.blob(); return b.size > 100 ? "ok" : "empty"; }
-  catch (e) { return "revoked"; }
+const previewState = await page.frames().find((f) => f.url().includes("/vault/")).evaluate(() => {
+  const canvases = document.querySelectorAll("#d-preview .pdf-pages canvas");
+  if (!canvases.length) return "no-canvas";
+  const c = canvases[0];
+  return c.width > 50 && c.height > 50 ? "ok" : "empty";
 });
-check(previewState === "ok", `PDF preview URL still serves the document after list re-renders (${previewState})`);
+check(previewState === "ok", `pdf.js preview still rendered after list re-renders (${previewState})`);
 
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-integration.png") });
 
