@@ -1,8 +1,0 @@
-node_modules/
-dist/
-app/
-data/
-data-dev/
-icon.ico
-icon.png
-package-lock.json
