@@ -81,7 +81,8 @@
       <span class="kind" id="kindLabel"></span>
       <span class="muted" id="countLabel"></span>
       <span class="spacer"></span>
-      <button class="btn" id="zipBtn">⬇ Download all as ZIP</button>
+      <button class="btn" id="folderBtn" hidden title="Writes every file straight into a folder you pick — no ZIP, no big download">📂 Save all to a folder…</button>
+      <button class="btn btn-ghost" id="zipBtn">⬇ Download all as ZIP</button>
       <button class="btn btn-ghost" id="resetBtn">Open another file</button>
     </div>
     <div class="progress" id="progress"></div>
@@ -457,6 +458,44 @@
     entries = [];
     $("#result").hidden = true;
     setProgress("");
+  });
+
+  // ---------- direct-to-folder export (File System Access API) ----------
+  // The most robust path on locked-down machines: every file is written
+  // straight into a folder the user picks and each write is verified — no
+  // archive format, no single giant download to get truncated.
+  if ("showDirectoryPicker" in window) $("#folderBtn").hidden = false;
+  $("#folderBtn").addEventListener("click", async function () {
+    var dir;
+    try { dir = await window.showDirectoryPicker({ mode: "readwrite" }); }
+    catch (e) { return; } // cancelled
+    var btn = $("#folderBtn");
+    btn.disabled = true;
+    var ok = 0, failed = [];
+    try {
+      for (var i = 0; i < entries.length; i++) {
+        var en = entries[i];
+        setProgress("Saving " + (i + 1) + " / " + entries.length + " — " + en.path);
+        try {
+          var parts = en.path.split("/");
+          var d = dir;
+          for (var j = 0; j < parts.length - 1; j++) d = await d.getDirectoryHandle(parts[j], { create: true });
+          var fh = await d.getFileHandle(parts[parts.length - 1], { create: true });
+          var w = await fh.createWritable();
+          await w.write(en.blob);
+          await w.close();
+          var back = await fh.getFile();           // verify what actually landed
+          if (back.size !== en.blob.size) throw new Error("wrote " + back.size + " of " + en.blob.size + " bytes");
+          ok++;
+        } catch (err) {
+          failed.push(en.path + " (" + (err && err.message || err) + ")");
+        }
+      }
+      setProgress("Saved " + ok + " of " + entries.length + " files to the folder — every file verified on disk." +
+        (failed.length ? " ⚠ Failed: " + failed.slice(0, 3).join("; ") + (failed.length > 3 ? " +" + (failed.length - 3) + " more" : "") : ""), !!failed.length);
+    } finally {
+      btn.disabled = false;
+    }
   });
 })();
 </script>
