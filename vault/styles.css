@@ -241,8 +241,9 @@ kbd {
   font-size: 13px; line-height: 1; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
-/* Bottom-left so it never covers the file-type badge (top-left) or star (top-right). */
-.card__select { position: absolute; bottom: 8px; left: 8px; z-index: 2; opacity: 0; transition: opacity .12s; }
+/* Top-left, shown only on hover or while a selection is active; the type
+   badge lives top-right and the star bottom-right, so nothing overlaps. */
+.card__select { position: absolute; top: 8px; left: 8px; z-index: 2; opacity: 0; transition: opacity .12s; }
 .card:hover .card__select, .card__select.on, .results.selecting .card__select { opacity: 1; }
 .card__select.on, .row__select.on { background: var(--brand); border-color: var(--brand); }
 .card.is-selected, .row.is-selected { outline: 2px solid var(--brand); outline-offset: -2px; }
@@ -288,12 +289,12 @@ kbd {
 .card__thumb img, .card__thumb video { width: 100%; height: 100%; object-fit: cover; }
 .card__glyph { font-size: 40px; }
 .card__badge {
-  position: absolute; left: 8px; top: 8px;
+  position: absolute; right: 8px; top: 8px;
   font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   padding: 3px 7px; border-radius: 6px; color: #fff; background: rgba(15,23,42,.72); backdrop-filter: blur(4px);
 }
 .card__star {
-  position: absolute; right: 6px; top: 6px; width: 30px; height: 30px;
+  position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px;
   border: none; border-radius: 8px; background: rgba(15,23,42,.55); color: #fff; font-size: 15px;
   display: grid; place-items: center; opacity: 0; transition: opacity .15s;
 }
