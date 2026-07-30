@@ -56,6 +56,7 @@
   .name { word-break: break-all; }
   .progress { margin: 14px 0; font-size: 13px; color: var(--text-dim); min-height: 18px; }
   .error { color: var(--danger); font-weight: 600; }
+  .zero { color: var(--danger); font-size: 11px; font-weight: 700; white-space: nowrap; }
   .foot { margin-top: 34px; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
   #tablewrap { overflow-x: auto; }
   /* Embedded in the platform shell: the tab already names the page. */
@@ -322,13 +323,17 @@
     var total = 0;
     var tb = $("#rows");
     tb.innerHTML = "";
+    var zeroCount = 0;
     entries.forEach(function (en, i) {
       total += en.blob.size;
+      var zero = en.blob.size === 0;
+      if (zero) zeroCount++;
       var tr = document.createElement("tr");
-      tr.innerHTML = '<td class="name">' + esc(en.path) + '</td><td>' + esc(en.type || "—") + '</td><td class="num">' + fmtBytes(en.blob.size) + '</td>' +
+      tr.innerHTML = '<td class="name">' + esc(en.path) + (zero ? ' <span class="zero" title="This entry was stored EMPTY in the backup — its source file never read correctly when it was added. It cannot be recovered from this backup.">⚠ empty</span>' : '') + '</td><td>' + esc(en.type || "—") + '</td><td class="num">' + fmtBytes(en.blob.size) + '</td>' +
         '<td><button class="dl" data-i="' + i + '">⬇ Download</button></td>';
       tb.append(tr);
     });
+    if (zeroCount) setProgress("⚠ " + zeroCount + " entr" + (zeroCount === 1 ? "y was" : "ies were") + " stored EMPTY (0 bytes) in this backup — those files were damaged when they were originally added and can't be recovered from here.", true);
     $("#countLabel").textContent = entries.length + " file" + (entries.length === 1 ? "" : "s") + " · " + fmtBytes(total);
     $("#zipBtn").disabled = !entries.length || total > 0xFFFF0000;
     if (total > 0xFFFF0000) setProgress("Over 4 GB — use the per-file download links (the ZIP format tops out at 4 GB).");
