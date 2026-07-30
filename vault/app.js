@@ -29,6 +29,11 @@
   let items = [];               // array of meta records
   const objectUrls = new Set(); // track for revocation
 
+  // ---- Multi-select (bulk actions) ----
+  const selection = new Set();  // selected record ids (survives filter changes)
+  let lastRenderIds = [];       // current view order, for Shift+click ranges
+  let lastClickedId = null;
+
   const state = {
     filter: "all",              // all | starred | recent | kind:xxx | collection:xxx
     tag: null,
@@ -512,7 +517,151 @@
     $("#list-head").hidden = state.view !== "list";
     updateTitle(list.length);
     renderActiveFilters();
+    lastRenderIds = list.map((it) => it.id);
+    for (const id of Array.from(selection)) if (!items.some((it) => it.id === id)) selection.delete(id); // prune deleted
+    results.classList.toggle("selecting", selection.size > 0);
+    renderBulkBar();
     scheduleThumbBackfill(); // fill in any missing PDF previews in the background
+  }
+
+  // ---------- multi-select ----------
+  function toggleSelect(id, shiftRange) {
+    if (shiftRange && lastClickedId && lastClickedId !== id) {
+      const a = lastRenderIds.indexOf(lastClickedId), b = lastRenderIds.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) selection.add(lastRenderIds[i]);
+        lastClickedId = id;
+        render();
+        return;
+      }
+    }
+    if (selection.has(id)) selection.delete(id); else selection.add(id);
+    lastClickedId = id;
+    render();
+  }
+  function clearSelection() { selection.clear(); lastClickedId = null; render(); }
+  function selectAllVisible() { lastRenderIds.forEach((id) => selection.add(id)); render(); }
+  // Card/row click: with a selection active (or Ctrl/Cmd held), clicks manage
+  // the selection; otherwise they open the detail drawer as always.
+  function cardClick(e, id) {
+    if (selection.size || e.ctrlKey || e.metaKey || e.shiftKey) toggleSelect(id, e.shiftKey);
+    else openDetail(id);
+  }
+  function selectButton(cls, id) {
+    const sel = document.createElement("button");
+    sel.type = "button";
+    sel.className = cls + (selection.has(id) ? " on" : "");
+    sel.textContent = selection.has(id) ? "✓" : "";
+    sel.title = "Select (Shift+click selects a range)";
+    sel.onclick = (e) => { e.stopPropagation(); toggleSelect(id, e.shiftKey); };
+    return sel;
+  }
+
+  // ---------- bulk actions ----------
+  function renderBulkBar() {
+    const bar = $("#bulkbar");
+    if (!bar) return;
+    bar.hidden = selection.size === 0;
+    if (bar.hidden) return;
+    $("#bulk-count").textContent = selection.size + " selected";
+    const sel = items.filter((it) => selection.has(it.id));
+    const allStarred = sel.length > 0 && sel.every((it) => it.starred);
+    $("#bulk-star").textContent = allStarred ? "☆ Unstar" : "★ Star";
+    const pdfs = sel.filter((it) => it.kind === "pdf").length;
+    $("#bulk-send-li").disabled = !window.VaultBridge || pdfs === 0;
+    $("#bulk-send-li").textContent = "🗄️ To LI" + (pdfs && pdfs !== sel.length ? " (" + pdfs + ")" : "");
+    const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
+    $("#bulk-send-toolbox").disabled = !window.VaultBridge || tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it));
+  }
+  // Apply a mutation to every selected record: read → change → reindex → write.
+  async function bulkMutate(fn, done) {
+    const ids = Array.from(selection);
+    let n = 0;
+    for (const id of ids) {
+      const rec = await DB.get(id);
+      if (!rec) continue;
+      if (fn(rec) === false) continue;
+      rec.updatedAt = Date.now();
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      const i = items.findIndex((x) => x.id === id);
+      if (i !== -1) items[i] = stripBlob(rec);
+      n++;
+    }
+    render();
+    if (done) toast(done(n));
+  }
+  function wireBulkBar() {
+    $("#bulk-clear").onclick = clearSelection;
+    $("#bulk-all").onclick = selectAllVisible;
+    $("#bulk-collection").onclick = () => {
+      const name = prompt(`Move ${selection.size} file(s) to collection (leave empty to remove from any collection):`);
+      if (name === null) return;
+      const clean = name.trim();
+      if (clean && !extraCollections.includes(clean)) { extraCollections.push(clean); DB.setMeta("collections", extraCollections); }
+      bulkMutate((r) => { r.collection = clean; }, (n) => clean ? `Moved ${n} file(s) to “${clean}”.` : `Removed ${n} file(s) from their collections.`);
+    };
+    $("#bulk-tags").onclick = () => {
+      const raw = prompt(`Add tags to ${selection.size} file(s) (comma separated):`);
+      if (!raw || !raw.trim()) return;
+      const add = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      bulkMutate((r) => { r.tags = Array.from(new Set((r.tags || []).concat(add))); }, (n) => `Tagged ${n} file(s).`);
+    };
+    $("#bulk-vin").onclick = () => {
+      const raw = prompt(`VIN to tag onto ${selection.size} file(s):`);
+      if (!raw || !raw.trim()) return;
+      const vin = raw.trim().toUpperCase().replace(/\s+/g, "");
+      bulkMutate((r) => {
+        r.vins = Array.from(new Set([vin].concat(r.vins || [])));
+        r.vinScan = Date.now();
+      }, (n) => `Tagged ${n} file(s) with ${vin} — see 🚗 By VIN.`);
+    };
+    $("#bulk-star").onclick = () => {
+      const sel = items.filter((it) => selection.has(it.id));
+      const target = !(sel.length && sel.every((it) => it.starred));
+      bulkMutate((r) => { r.starred = target; }, (n) => (target ? "Starred " : "Unstarred ") + n + " file(s).");
+    };
+    $("#bulk-delete").onclick = async () => {
+      if (!confirm(`Delete ${selection.size} file(s) from the vault? This can't be undone.`)) return;
+      const ids = Array.from(selection);
+      for (const id of ids) {
+        try { await DB.remove(id); } catch (e) {}
+        const i = items.findIndex((x) => x.id === id);
+        if (i !== -1) items.splice(i, 1);
+      }
+      selection.clear();
+      render();
+      updateStorage();
+      toast(`Deleted ${ids.length} file(s).`);
+    };
+    $("#bulk-send-li").onclick = async () => {
+      if (!window.VaultBridge) return;
+      const ids = items.filter((it) => selection.has(it.id) && it.kind === "pdf").map((it) => it.id);
+      if (!ids.length) { toast("No PDFs in the selection."); return; }
+      let sent = 0;
+      for (const id of ids) {
+        const rec = await DB.get(id);
+        if (!rec || !rec.blob) continue;
+        try { await window.VaultBridge.send("li", { name: rec.name, type: rec.type, blob: rec.blob, meta: {} }); sent++; } catch (e) {}
+      }
+      toast(`Sent ${sent} PDF(s) to LI Documents — it reads and files them automatically.`);
+      if (embedded && sent) { try { window.parent.postMessage({ type: "shell-nav", app: "li" }, "*"); } catch (e) {} }
+    };
+    $("#bulk-send-toolbox").onclick = async () => {
+      if (!window.VaultBridge) return;
+      const sel = items.filter((it) => selection.has(it.id));
+      const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
+      if (tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it))) { toast("Pick files of one kind — a mixed selection can't target a single tool."); return; }
+      const tab = tabs.values().next().value;
+      let sent = 0;
+      for (const it of sel) {
+        const rec = await DB.get(it.id);
+        if (!rec || !rec.blob) continue;
+        try { await window.VaultBridge.send("toolbox", { name: rec.name, type: rec.type, blob: rec.blob, meta: { tab } }); sent++; } catch (e) {}
+      }
+      toast(`Sent ${sent} file(s) to the Toolbox.`);
+      if (embedded && sent) { try { window.parent.postMessage({ type: "shell-nav", app: "toolbox", tab }, "*"); } catch (e) {} }
+    };
   }
 
   function renderCard(it) {
@@ -549,6 +698,8 @@
     star.title = "Star";
     star.onclick = (e) => { e.stopPropagation(); toggleStar(it.id); };
     thumb.append(star);
+    thumb.append(selectButton("card__select", it.id));
+    card.classList.toggle("is-selected", selection.has(it.id));
 
     const body = document.createElement("div");
     body.className = "card__body";
@@ -583,7 +734,7 @@
     }
 
     card.append(thumb, body);
-    card.onclick = () => openDetail(it.id);
+    card.onclick = (e) => cardClick(e, it.id);
     card.onkeydown = (e) => { if (e.key === "Enter") openDetail(it.id); };
     return card;
   }
@@ -642,8 +793,9 @@
     size.className = "row__size";
     size.textContent = fmtBytes(it.size);
 
-    row.append(star, icon, name, type, coll, tags, size);
-    row.onclick = () => openDetail(it.id);
+    row.append(selectButton("row__select", it.id), star, icon, name, type, coll, tags, size);
+    row.classList.toggle("is-selected", selection.has(it.id));
+    row.onclick = (e) => cardClick(e, it.id);
     row.onkeydown = (e) => { if (e.key === "Enter") openDetail(it.id); };
     return row;
   }
@@ -1359,6 +1511,7 @@
 
   // ---------- Event wiring ----------
   function wire() {
+    wireBulkBar();
     // Embedded, the platform's top bar owns "Add files" (one front door), so
     // hide the vault's own button; the empty-state prompt opens that picker.
     if (embedded) $("#add-btn").hidden = true;
@@ -1441,9 +1594,11 @@
         if (!$("#about").hidden) return hide($("#about"));
         if (!$("#detail").hidden) return closeDetail();
         if (!moreMenu.hidden) return (moreMenu.hidden = true);
+        if (selection.size) return clearSelection();
       }
       const typing = document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
       if (typing) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); selectAllVisible(); return; }
       if (e.key === "/") { e.preventDefault(); $("#search-input").focus(); }
       else if (e.key.toLowerCase() === "a") {
         // Embedded, "add" goes through the platform's one front door (routing

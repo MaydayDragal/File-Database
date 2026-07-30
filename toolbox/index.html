@@ -4457,18 +4457,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (/\.zip$/.test(n) || t === "application/zip") return "zip";
       return "media";
     };
+    // The bridge delivers one file per nudge, but a bulk send from the vault
+    // is a BURST — buffer briefly and inject each tool's files as ONE batch,
+    // so multi-file tools (PDF merge, media queue) see the whole selection
+    // instead of each file overwriting the last.
+    var pendingIn = [], flushInT = null;
+    function flushIncoming() {
+      flushInT = null;
+      var batch = pendingIn.splice(0);
+      if (!batch.length) return;
+      var groups = {};
+      batch.forEach(function (x) { (groups[x.tab] = groups[x.tab] || []).push(x.f); });
+      Object.keys(groups).forEach(function (tab, i) {
+        var input = document.getElementById(INPUTS[tab]);
+        if (!input) return;
+        if (i === 0 && window.__openTab) window.__openTab(tab);
+        var dt = new DataTransfer();
+        groups[tab].forEach(function (f) { dt.items.add(f); });
+        input.files = dt.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
     window.VaultBridge.receive("toolbox", function (item) {
       if (!item || !item.blob) return;
       var f = new File([item.blob], item.name || "file", { type: item.type || item.blob.type || "" });
       var tab = (item.meta && item.meta.tab) || pickTab(f);
       if (!INPUTS[tab]) tab = pickTab(f);
-      if (window.__openTab) window.__openTab(tab);
-      var input = document.getElementById(INPUTS[tab]);
-      if (!input) return;
-      var dt = new DataTransfer();
-      dt.items.add(f);
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      pendingIn.push({ f: f, tab: tab });
+      clearTimeout(flushInT);
+      flushInT = setTimeout(flushIncoming, 150);
     });
   }
 })();

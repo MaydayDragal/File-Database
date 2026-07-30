@@ -163,6 +163,22 @@
       </div>
       <div id="results" class="results grid" aria-live="polite"></div>
 
+      <!-- Bulk actions: appears while files are selected (checkbox / Ctrl+click /
+           Shift+click range / Ctrl+A). -->
+      <div id="bulkbar" class="bulkbar" hidden>
+        <span id="bulk-count" class="bulkbar__count"></span>
+        <button id="bulk-all" class="btn btn--ghost" title="Select every file in the current view (Ctrl+A)">Select all</button>
+        <span class="bulkbar__sep"></span>
+        <button id="bulk-collection" class="btn btn--ghost" title="Move the selected files to a collection">📂 Collection…</button>
+        <button id="bulk-tags" class="btn btn--ghost" title="Add tags to the selected files">🏷 Tags…</button>
+        <button id="bulk-vin" class="btn btn--ghost" title="Tag the selected files with a vehicle's VIN — they join its 🚗 By VIN group">🚗 VIN…</button>
+        <button id="bulk-star" class="btn btn--ghost">★ Star</button>
+        <button id="bulk-send-li" class="btn btn--ghost" title="Send the selected PDFs to LI Documents">🗄️ To LI</button>
+        <button id="bulk-send-toolbox" class="btn btn--ghost" title="Send the selection to the matching Toolbox tool (files must be one kind)">🧰 To Toolbox</button>
+        <button id="bulk-delete" class="btn btn--ghost bulkbar__danger">🗑 Delete…</button>
+        <button id="bulk-clear" class="btn btn--ghost" title="Clear the selection (Esc)">✕</button>
+      </div>
+
       <div id="empty" class="empty" hidden>
         <div class="empty__art">🗂️</div>
         <h2 id="empty-title">Your vault is empty</h2>

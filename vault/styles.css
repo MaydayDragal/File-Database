@@ -232,6 +232,33 @@ kbd {
 }
 .chip button { border: none; background: none; color: inherit; font-size: 14px; line-height: 1; }
 .related-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- multi-select + bulk actions ---------- */
+.card__select, .row__select {
+  width: 22px; height: 22px; flex: none;
+  border-radius: 50%; border: 2px solid var(--border-strong);
+  background: var(--bg-elev); color: #fff;
+  font-size: 13px; line-height: 1; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.card__select { position: absolute; top: 8px; left: 8px; z-index: 2; opacity: 0; transition: opacity .12s; }
+.card:hover .card__select, .card__select.on, .results.selecting .card__select { opacity: 1; }
+.card__select.on, .row__select.on { background: var(--brand); border-color: var(--brand); }
+.card.is-selected, .row.is-selected { outline: 2px solid var(--brand); outline-offset: -2px; }
+.card.is-selected { background: color-mix(in srgb, var(--brand) 8%, var(--bg-elev)); }
+.row.is-selected { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.bulkbar {
+  position: sticky; bottom: 14px; z-index: 30;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin: 14px auto 0; padding: 9px 12px; width: fit-content; max-width: 100%;
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  border-radius: 14px; box-shadow: var(--shadow);
+}
+.bulkbar[hidden] { display: none; }
+.bulkbar__count { font-weight: 800; font-size: 13px; padding: 0 4px; white-space: nowrap; }
+.bulkbar__sep { width: 1px; align-self: stretch; background: var(--border); }
+.bulkbar .btn { padding: 6px 10px; font-size: 12.5px; }
+.bulkbar__danger { color: var(--danger); }
 .chip--link { border: 1px solid transparent; cursor: pointer; }
 .chip--link:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 20%, transparent); }
 .group-head__links { display: inline-flex; gap: 6px; margin-left: 6px; }

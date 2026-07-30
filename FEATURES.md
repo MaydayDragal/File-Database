@@ -179,6 +179,13 @@ File Vault
 │   │       └── Encrypted/broken PDFs keep the glyph icon (marked, never retried)
 │   └── Detail drawer preview: image / video / audio player / PDF (native viewer iframe)
 │       / inline text ≤512 KB / glyph fallback
+├── Multi-select + bulk actions
+│   ├── Select: hover checkbox · Ctrl/Cmd+click · Shift+click range · Ctrl+A all visible ·
+│   │   Esc clears; with a selection active, plain clicks toggle instead of opening detail
+│   ├── Bulk bar (floating): Collection… · Tags… · VIN… (files join the 🚗 By VIN group) ·
+│   │   Star/Unstar · Send PDFs to LI · Send to Toolbox · Delete…
+│   └── Bulk Toolbox send requires one kind; the toolbox buffers the bridge burst and
+│       injects ALL files into the tool as one batch (PDF merge gets every PDF at once)
 ├── Organizing
 │   ├── Collections (create via menu or ＋; auto-created by sync & bridge imports)
 │   ├── Tags (any number per file; tag cloud in sidebar; click = filter)
