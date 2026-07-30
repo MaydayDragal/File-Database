@@ -32,6 +32,9 @@
       <button class="shelltab" id="tab-toolbox" role="tab" data-app="toolbox" aria-selected="false" aria-controls="view-toolbox" tabindex="-1">
         <span class="shelltab__icon">🧰</span><span class="shelltab__label">Toolbox</span>
       </button>
+      <button class="shelltab" id="tab-viewer" role="tab" data-app="viewer" aria-selected="false" aria-controls="view-viewer" tabindex="-1" title="Open a .fvault / .lidb / .tidb backup and download its contents as normal files">
+        <span class="shelltab__icon">🔓</span><span class="shelltab__label">Extract</span>
+      </button>
     </nav>
     <div class="shellbar__actions">
       <div class="vehicle-chip" id="vehicle-chip" hidden>
@@ -66,6 +69,9 @@
     <section class="app-panel" id="view-toolbox" role="tabpanel" aria-labelledby="tab-toolbox" hidden aria-label="Toolbox">
       <iframe id="frame-toolbox" class="app-frame" title="Toolbox" referrerpolicy="no-referrer"></iframe>
     </section>
+    <section class="app-panel" id="view-viewer" role="tabpanel" aria-labelledby="tab-viewer" hidden aria-label="Database File Viewer">
+      <iframe id="frame-viewer" class="app-frame" title="Database File Viewer" referrerpolicy="no-referrer"></iframe>
+    </section>
   </main>
 
   <!-- One front door for files: dropped/added here and filed automatically. -->
@@ -84,7 +90,7 @@
     <div class="quickopen__panel" role="dialog" aria-label="Quick open">
       <input id="qo-input" placeholder="Paste a VIN, LI number or tool number — or type to search…" autocomplete="off" spellcheck="false" />
       <div id="qo-results" class="quickopen__results"></div>
-      <div class="quickopen__hint">Enter opens the first result · Esc closes · Alt+1–4 switches apps</div>
+      <div class="quickopen__hint">Enter opens the first result · Esc closes · Alt+1–5 switches apps</div>
     </div>
   </div>
 

@@ -210,11 +210,12 @@ So, in the **Files** app:
 
 The LI Documents and Tool Inventory apps have their own backup/export menus.
 
-**Your data is never locked in.** `viewer.html` (Files ⋮ → *Extract a backup
-file…*, or open it directly) is a standalone, offline **Database File Viewer**:
-drop any `.fvault`, `.lidb` or `.tidb` backup on it and download the contents
-as **normal files** — one ZIP or file-by-file — with no app and no internet.
-Keep a copy of `viewer.html` next to your backups and they're always readable.
+**Your data is never locked in.** The platform's **🔓 Extract** tab is a
+built-in **Database File Viewer**: drop any `.fvault`, `.lidb` or `.tidb`
+backup on it and download the contents as **normal files** — one ZIP or
+file-by-file. It's also a standalone page (`viewer.html`) that works with no
+app and no internet — keep a copy next to your backups and they're always
+readable anywhere.
 Tool Inventory ships empty and loads its catalog from a portable database file:
 **☰ Menu → Open database…** to load a `.tidb` (every tool plus its part photos in
 one file), and **Save database (.tidb)** to back it up or move it to another

@@ -14,6 +14,7 @@
     li:        { view: "#view-li",        frame: "#frame-li",        tab: "#tab-li",        src: "li/index.html",        title: "LI Documents",   loaded: false, pending: [] },
     inventory: { view: "#view-inventory", frame: "#frame-inventory", tab: "#tab-inventory", src: "inventory/index.html", title: "Tool Inventory", loaded: false, pending: [] },
     toolbox:   { view: "#view-toolbox",   frame: "#frame-toolbox",   tab: "#tab-toolbox",   src: "toolbox/index.html",   title: "Toolbox",        loaded: false, pending: [] },
+    viewer:    { view: "#view-viewer",    frame: "#frame-viewer",    tab: "#tab-viewer",    src: "viewer.html",          title: "Extract",        loaded: false, pending: [] },
   };
   var DEFAULT_APP = "vault";
   var current = null;
@@ -453,13 +454,13 @@
       if (e.dataTransfer.files && e.dataTransfer.files.length) routeFiles(e.dataTransfer.files);
     });
 
-    // Alt+1–4 switches apps from anywhere in the shell chrome (apps forward
+    // Alt+1–5 switches apps from anywhere in the shell chrome (apps forward
     // the same combo up from inside their iframes as {shell-switch});
     // Ctrl/Cmd+K opens quick-open (forwarded as {shell-quickopen}).
     window.addEventListener("keydown", function (e) {
-      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
-        e.preventDefault();
-        activate(Object.keys(APPS)[+e.key - 1]);
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
+        var order = Object.keys(APPS);
+        if (+e.key <= order.length) { e.preventDefault(); activate(order[+e.key - 1]); }
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         qoOpen();
@@ -510,8 +511,8 @@
         if (d.app !== current) toast(APPS[d.app].title + ": " + d.msg);
         updateBadges();
       }
-      // Keyboard forwarded from inside an iframe (Alt+1–4 app switching).
-      else if (d.type === "shell-switch" && d.n >= 1 && d.n <= 4) {
+      // Keyboard forwarded from inside an iframe (Alt+N app switching).
+      else if (d.type === "shell-switch" && d.n >= 1 && d.n <= Object.keys(APPS).length) {
         activate(Object.keys(APPS)[d.n - 1]);
       }
       else if (d.type === "shell-quickopen") qoOpen();

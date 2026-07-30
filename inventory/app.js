@@ -554,7 +554,7 @@
     });
 
     document.addEventListener("keydown", function (e) {
-      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
         return;

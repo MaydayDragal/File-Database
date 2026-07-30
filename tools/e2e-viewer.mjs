@@ -149,6 +149,24 @@ await page.setInputFiles("#pick", path.join(FIX, "junk.bin"));
 await page.waitForTimeout(400);
 check((await page.locator("#progress").textContent()).includes("Not a recognized"), "junk input gets a clear error, not a crash");
 
+// ---------- embedded in the platform shell (the Extract tab) ----------
+await page.goto(base + "#viewer", { waitUntil: "networkidle" });
+await page.waitForTimeout(600);
+check(await page.locator("#tab-viewer.is-active").count() === 1, "#viewer deep link activates the shell's Extract tab");
+const emb = page.frameLocator("#frame-viewer");
+await emb.locator("#drop").waitFor({ timeout: 10000 });
+check(await emb.locator("h1").isHidden(), "embedded viewer hides its own heading (the tab names it)");
+await emb.locator("#pick").setInputFiles(path.join(FIX, "viewer.fvault"));
+await page.waitForTimeout(500);
+check((await emb.locator("#rows tr").count()) === 2, "extraction works inside the embedded tab");
+// Alt+5 pressed inside another iframe reaches the Extract tab
+await page.click("#tab-vault");
+await page.waitForTimeout(500);
+const vaultFrame = page.frames().find((f) => f.url().includes("/vault/"));
+if (vaultFrame) await vaultFrame.locator("body").press("Alt+5").catch(() => {});
+await page.waitForTimeout(400);
+check(await page.locator("#tab-viewer.is-active").count() === 1, "Alt+5 from inside an app switches to the Extract tab");
+
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");
 

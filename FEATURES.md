@@ -50,7 +50,7 @@ The only component that knows all four apps exist. Owns everything shared.
 ```
 Platform Shell
 ├── App switching
-│   ├── Four tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox
+│   ├── Five tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · 🔓 Extract
 │   ├── Lazy iframes — an app loads on first visit, then stays warm (instant switching)
 │   ├── One panel visible at a time (ARIA tab pattern: arrow keys, Home/End, roving tabindex)
 │   └── Last-used app remembered (localStorage "fd-app") and restored on launch
@@ -106,7 +106,8 @@ Platform Shell
 │   └── Anything else → "Search Files / LI Documents / Tool Inventory" rows with the query carried over
 ├── One-click "Back up everything" (top-bar ⬇ button)
 │   └── Commands each data app to run its own existing export — .fvault + .lidb + .tidb, staggered
-├── Database File Viewer (/viewer.html — the escape hatch; Files ⋮ → "Extract a backup file…")
+├── Database File Viewer — the shell's 🔓 Extract tab (also standalone at /viewer.html;
+│   Files ⋮ → "Extract a backup file…" jumps to it; deep link #viewer)
 │   ├── Standalone, offline, ZERO dependencies (own ZIP reader/writer + format parsers inline)
 │   ├── Opens .fvault (binary v2 + legacy JSON), .lidb (ZIP+manifest; stored or deflated
 │   │   entries via DecompressionStream), .tidb — lists contents with sizes
@@ -120,7 +121,7 @@ Platform Shell
 │   │   ONLY when that app's tab is in the background (foreground apps toast themselves)
 │   └── Badge counts pulse when a background app's row count changes
 ├── Keyboard layer (forwarded from inside every iframe)
-│   ├── Alt+1–4 switches apps · Ctrl/Cmd+K opens quick-open · "/" focuses search in every app
+│   ├── Alt+1–5 switches apps · Ctrl/Cmd+K opens quick-open · "/" focuses search in every app
 │   └── Escape closes quick-open / app overlays
 ├── Message hub (window "message" listener)
 │   ├── {shell-nav, app, tab?, payload?} → activate app; payload (a ready-made app message,

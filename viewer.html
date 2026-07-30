@@ -6,6 +6,7 @@
 <meta name="description" content="Open a File Database backup (.fvault / .lidb / .tidb) and download its contents as normal files." />
 <title>Database File Viewer — File Database</title>
 <script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
 <style>
   /* Same design tokens as the platform, so this reads as part of the product —
      but the page is fully self-contained: it must work even if the apps don't. */
@@ -57,6 +58,9 @@
   .error { color: var(--danger); font-weight: 600; }
   .foot { margin-top: 34px; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
   #tablewrap { overflow-x: auto; }
+  /* Embedded in the platform shell: the tab already names the page. */
+  html.embedded h1, html.embedded .foot { display: none; }
+  html.embedded .wrap { padding-top: 18px; }
 </style>
 </head>
 <body>
@@ -100,6 +104,26 @@
   var $ = function (s) { return document.querySelector(s); };
   var entries = [];   // { path, blob, type }
   var sourceName = "";
+  var embedded = document.documentElement.classList.contains("embedded");
+
+  // Platform integration (when hosted as the shell's Extract tab): follow the
+  // shared theme and forward the platform's keyboard shortcuts up.
+  window.addEventListener("message", function (ev) {
+    var d = ev && ev.data;
+    if (!d || d.type !== "platform-theme") return;
+    if (d.mode === "light" || d.mode === "dark") document.documentElement.setAttribute("data-theme", d.mode);
+    else document.documentElement.removeAttribute("data-theme");
+  });
+  document.addEventListener("keydown", function (e) {
+    if (!embedded) return;
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+      e.preventDefault();
+      try { window.parent.postMessage({ type: "shell-quickopen" }, "*"); } catch (x) {}
+    }
+  });
 
   function fmtBytes(n) {
     if (n == null) return "—";
@@ -384,9 +408,26 @@
   // ---------- wiring ----------
   var drop = $("#drop");
   drop.addEventListener("click", function () { $("#pick").click(); });
-  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); }); });
-  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); }); });
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add("drag"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag"); }); });
   drop.addEventListener("drop", function (e) { if (e.dataTransfer.files[0]) open(e.dataTransfer.files[0]); });
+  // Drops anywhere else on the page: a database file opens here; while
+  // embedded, anything else is handed to the platform's unified intake
+  // instead of the browser navigating away.
+  ["dragover", "drop"].forEach(function (ev) {
+    window.addEventListener(ev, function (e) {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+      if (ev !== "drop" || !e.dataTransfer.files || !e.dataTransfer.files[0]) return;
+      var f = e.dataTransfer.files[0];
+      if (/\.(fvault|lidb|tidb|json|zip)$/i.test(f.name)) { open(f); return; }
+      if (embedded) {
+        var files = Array.prototype.slice.call(e.dataTransfer.files);
+        try { window.parent.postMessage({ type: "shell-add-files", files: files }, "*"); return; } catch (x) {}
+      }
+      setProgress("Not a File Database backup — drop a .fvault, .lidb or .tidb file.", true);
+    });
+  });
   $("#pick").addEventListener("change", function (e) { if (e.target.files[0]) open(e.target.files[0]); e.target.value = ""; });
   $("#rows").addEventListener("click", function (e) {
     var b = e.target.closest(".dl");

@@ -2116,7 +2116,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // app switching up to the shell when embedded.
   document.addEventListener("keydown", function (e) {
     var emb = false; try { emb = window.parent && window.parent !== window; } catch (x) { emb = true; }
-    if (emb && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+    if (emb && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
       e.preventDefault();
       try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
       return;

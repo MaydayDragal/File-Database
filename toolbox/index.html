@@ -4482,7 +4482,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
   if (!embedded) return;
   document.addEventListener("keydown", function (e) {
-    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
       e.preventDefault();
       try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
     } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {

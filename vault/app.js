@@ -1427,7 +1427,7 @@
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
       // Alt+1–4 / Ctrl+K: platform-wide shortcuts — forward up to the shell.
-      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "4") {
+      if (embedded && e.altKey && !e.ctrlKey && !e.metaKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         try { window.parent.postMessage({ type: "shell-switch", n: +e.key }, "*"); } catch (x) {}
         return;
@@ -1462,7 +1462,11 @@
   function handleMenu(action, e) {
     if (action === "export") exportVault();
     else if (action === "import") $("#import-input").click();
-    else if (action === "extract") window.open("../viewer.html");
+    else if (action === "extract") {
+      // Inside the platform, the viewer is the shell's Extract tab.
+      if (embedded) { try { window.parent.postMessage({ type: "shell-nav", app: "viewer" }, "*"); } catch (x) {} }
+      else window.open("../viewer.html");
+    }
     else if (action === "new-collection") newCollection();
     else if (action === "scan-vins") scanVins(!!(e && e.shiftKey));
     else if (action === "sync-folder") runFolderSync(false);
