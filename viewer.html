@@ -137,6 +137,15 @@
   // Windows-safe file name (also strips path separators).
   function safeName(s, fallback) {
     s = String(s || "").replace(/[<>:"\/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").trim();
+    // Clamp the length: Windows paths max out at 260 chars TOTAL, and real
+    // LI titles alone can exceed that ("file or directory could not be
+    // found"). The identifier lives at the START of our names (LI number,
+    // tool number), so trimming the tail keeps names unique and meaningful.
+    if (s.length > 140) {
+      var cm = s.match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/);
+      var cext = cm[2] || "";
+      s = cm[1].slice(0, 140 - cext.length).replace(/[. ]+$/, "") + cext;
+    }
     return s || fallback || "file";
   }
   // Resolve duplicate names by suffixing " (2)", " (3)", … before the extension.

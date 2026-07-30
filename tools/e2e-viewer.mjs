@@ -54,14 +54,18 @@ function buildTidb() {
 
 // ---------- fixture: .lidb (STORE zip via python, like the LI app's JSZip STORE) ----------
 function buildLidb() {
+  const longTitle = "Transmission in limp-home mode, fault message in IC Gear Change to R Not Possible ! MODEL 177, 118, 247 with ENGINE M260 and TRANSMISSION 724.0 (except model designations 118.351, 118.651, 177.051, 177.151, 177.951)";
   const script = `
 import json, zipfile, sys
 p = sys.argv[1]
 man = {"v": 1, "docs": [{"id": "LI54.10-P-070001_2", "li": "LI54.10-P-070001", "ver": "2",
-        "title": "Brake procedure", "filename": "orig.pdf", "fname": "doc1.pdf"}]}
+        "title": "Brake procedure", "filename": "orig.pdf", "fname": "doc1.pdf"},
+       {"id": "LI27.60-P-071321_4", "li": "LI27.60-P-071321", "ver": "4",
+        "title": ${JSON.stringify(longTitle)}, "filename": "orig2.pdf", "fname": "doc2.pdf"}]}
 with zipfile.ZipFile(p, "w", zipfile.ZIP_STORED) as z:
     z.writestr("manifest.json", json.dumps(man))
     z.writestr("files/doc1.pdf", "%PDF-1.4 fake LI doc")
+    z.writestr("files/doc2.pdf", "%PDF-1.4 long title doc")
 `;
   execFileSync("python3", ["-c", script, path.join(FIX, "viewer.lidb")]);
 }
@@ -136,6 +140,11 @@ await page.waitForTimeout(500);
 check((await page.locator("#kindLabel").textContent()).includes("LI Documents"), "recognizes a .lidb backup");
 const liRow = await page.locator("#rows").textContent();
 check(liRow.includes("LI Documents/LI54.10-P-070001_2 - Brake procedure.pdf"), `LI PDF gets a readable name (${liRow.trim().slice(0, 70)})`);
+// A real-length LI title must be clamped under Windows' 260-char path limit
+// (the identifier prefix stays; the tail is trimmed; extension survives).
+const longPaths = await page.evaluate(() => Array.from(document.querySelectorAll("#rows .name")).map((td) => td.textContent));
+const clamped = longPaths.find((p) => p.includes("LI27.60-P-071321_4"));
+check(!!clamped && clamped.length <= 155 && clamped.trim().endsWith(".pdf"), `overlong LI title clamped to a safe path length (${clamped ? clamped.length : "missing"} chars)`);
 // per-file download path
 const [single] = await Promise.all([page.waitForEvent("download"), page.locator("#rows .dl").first().click()]);
 const liPdf = path.join(FIX, "li-out.pdf");
