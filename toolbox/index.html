@@ -617,7 +617,7 @@
       <div class="big">Drop an image or video here, or click to browse</div>
       <div class="sub">JPEG · PNG · WebP · GIF · MP4 · WebM · MOV — processed locally</div>
     </div>
-    <input type="file" id="m-fileInput" accept="image/*,video/*" />
+    <input type="file" id="m-fileInput" accept="image/*,video/*" multiple />
     <div class="filemeta" id="m-filemeta">
       <span class="dot">●</span>
       <div class="grow">
@@ -625,6 +625,15 @@
         <div class="stats" id="m-fileStats"></div>
       </div>
       <button class="btn btn-ghost" id="m-clearFile">Remove</button>
+    </div>
+    <div class="filemeta" id="m-queueBar">
+      <span class="dot">⏳</span>
+      <div class="grow">
+        <div class="name" id="m-queueInfo"></div>
+        <div class="stats">Files wait here — convert the current one, then load the next.</div>
+      </div>
+      <button class="btn btn-primary" id="m-queueNext">Next file ▸</button>
+      <button class="btn btn-ghost" id="m-queueClear">Clear</button>
     </div>
   </div>
 
@@ -2104,6 +2113,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   var els = {
     drop: $("m-drop"), fileInput: $("m-fileInput"), filemeta: $("m-filemeta"),
     fileName: $("m-fileName"), fileStats: $("m-fileStats"), clearFile: $("m-clearFile"),
+    queueBar: $("m-queueBar"), queueInfo: $("m-queueInfo"), queueNext: $("m-queueNext"), queueClear: $("m-queueClear"),
     settingsCard: $("m-settingsCard"), imgControls: $("m-imgControls"), vidControls: $("m-vidControls"),
     runCard: $("m-runCard"), runBtn: $("m-runBtn"),
     progWrap: $("m-progWrap"), progBar: $("m-progBar"), progLabel: $("m-progLabel"), err: $("m-err"),
@@ -2126,6 +2136,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   var state = {
     file: null, kind: null, // "image" | "video"
+    queue: [], // files waiting behind the current one (bulk sends, multi-pick)
     imgFmt: "image/jpeg", imgMode: "size", imgRotate: 0,
     vidMode: "size", vidRotate: 0, vidPreset: "medium",
     outUrl: null
@@ -2156,6 +2167,32 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   // ---------- file selection ----------
+  function isMedia(file) {
+    return /^image\//.test(file.type) || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name) ||
+      /^video\//.test(file.type) || /\.(mp4|webm|mov|m4v|ogv|avi|mkv)$/i.test(file.name);
+  }
+  function renderQueue() {
+    var n = state.queue.length;
+    els.queueBar.classList.toggle("show", n > 0);
+    if (n > 0) els.queueInfo.textContent = "Next: " + state.queue[0].name + " · " + n + " more file" + (n === 1 ? "" : "s") + " waiting";
+  }
+  // Load the first file now, keep the rest in a visible queue.
+  function setBatch(fileList) {
+    var files = Array.prototype.filter.call(fileList || [], isMedia);
+    if (!files.length) { showError("Please choose an image or a video file."); return; }
+    setFile(files[0]);
+    state.queue = files.slice(1);
+    renderQueue();
+  }
+  // Bridge deliveries append: a straggler from a bulk vault send must join the
+  // queue, not replace the file that's already loaded.
+  window.__mediaAddFiles = function (fileList) {
+    var files = Array.prototype.filter.call(fileList || [], isMedia);
+    if (!files.length) return;
+    if (!state.file) { setBatch(files); return; }
+    state.queue = state.queue.concat(files);
+    renderQueue();
+  };
   function setFile(file) {
     if (!file) return;
     var isImg = /^image\//.test(file.type) || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
@@ -2197,6 +2234,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
   }
   function clearFile() {
+    // With files waiting, "Remove" advances to the next one.
+    if (state.queue.length) { setFile(state.queue.shift()); renderQueue(); return; }
     state.file = null; state.kind = null; els.fileInput.value = "";
     els.filemeta.classList.remove("show");
     els.settingsCard.style.display = "none";
@@ -2205,15 +2244,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   els.drop.addEventListener("click", function () { els.fileInput.click(); });
-  els.fileInput.addEventListener("change", function (e) { if (e.target.files[0]) setFile(e.target.files[0]); });
+  els.fileInput.addEventListener("change", function (e) { if (e.target.files.length) setBatch(e.target.files); });
   els.clearFile.addEventListener("click", clearFile);
+  els.queueNext.addEventListener("click", function () { if (state.queue.length) { setFile(state.queue.shift()); renderQueue(); } });
+  els.queueClear.addEventListener("click", function () { state.queue = []; renderQueue(); });
   ["dragenter", "dragover"].forEach(function (ev) {
     els.drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); els.drop.classList.add("drag"); });
   });
   ["dragleave", "drop"].forEach(function (ev) {
     els.drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); els.drop.classList.remove("drag"); });
   });
-  els.drop.addEventListener("drop", function (e) { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  els.drop.addEventListener("drop", function (e) { if (e.dataTransfer.files.length) setBatch(e.dataTransfer.files); });
 
   // ---------- image control wiring ----------
   els.imgRes.addEventListener("change", function () {
@@ -4469,9 +4510,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       var groups = {};
       batch.forEach(function (x) { (groups[x.tab] = groups[x.tab] || []).push(x.f); });
       Object.keys(groups).forEach(function (tab, i) {
+        if (i === 0 && window.__openTab) window.__openTab(tab);
+        // The media tool queues extra files itself — append through its hook
+        // so a straggler flush can't replace an already-loaded file.
+        if (tab === "media" && window.__mediaAddFiles) { window.__mediaAddFiles(groups[tab]); return; }
         var input = document.getElementById(INPUTS[tab]);
         if (!input) return;
-        if (i === 0 && window.__openTab) window.__openTab(tab);
         var dt = new DataTransfer();
         groups[tab].forEach(function (f) { dt.items.add(f); });
         input.files = dt.files;
@@ -4485,7 +4529,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (!INPUTS[tab]) tab = pickTab(f);
       pendingIn.push({ f: f, tab: tab });
       clearTimeout(flushInT);
-      flushInT = setTimeout(flushIncoming, 150);
+      // Big photos read out of the vault's IndexedDB can arrive far apart —
+      // a short window would split one bulk send into several flushes.
+      flushInT = setTimeout(flushIncoming, 500);
     });
   }
 })();

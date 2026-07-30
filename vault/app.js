@@ -662,6 +662,78 @@
       toast(`Sent ${sent} file(s) to the Toolbox.`);
       if (embedded && sent) { try { window.parent.postMessage({ type: "shell-nav", app: "toolbox", tab }, "*"); } catch (e) {} }
     };
+    $("#bulk-download").onclick = bulkDownload;
+  }
+
+  // A stored name made safe for Windows: forbidden characters replaced,
+  // control characters stripped, and clamped so the full destination path
+  // stays under the OS limit.
+  function exportName(n, fallback) {
+    let s = String(n || "").split("").filter((ch) => ch.charCodeAt(0) >= 32).join("");
+    s = s.replace(/[<>:"/\\|?*]/g, "_").replace(/^[. ]+|[. ]+$/g, "");
+    if (s.length > 140) {
+      const m = s.match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/);
+      const ext = m[2] || "";
+      s = m[1].slice(0, 140 - ext.length).replace(/[. ]+$/, "") + ext;
+    }
+    return s || fallback || "file";
+  }
+  // Save the selection into a folder the user picks, verifying every file on
+  // disk after writing (this machine has corrupted large downloads before).
+  // Falls back to one browser download per file where the folder API is missing.
+  async function bulkDownload() {
+    const ids = Array.from(selection);
+    if (!ids.length) return;
+    if (window.showDirectoryPicker) {
+      let dir;
+      try { dir = await window.showDirectoryPicker({ id: "vault-bulk-save", mode: "readwrite" }); }
+      catch (e) { return; } // cancelled
+      let ok = 0;
+      const failed = [];
+      const used = new Set();
+      for (const id of ids) {
+        const rec = await DB.get(id);
+        if (!rec) continue;
+        let name = exportName(rec.name, "file-" + id);
+        try {
+          if (!rec.blob) throw new Error("no data stored");
+          if (used.has(name.toLowerCase())) {
+            const m = name.match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/);
+            let k = 2;
+            while (used.has(((m[1] + " (" + k + ")" + (m[2] || "")).toLowerCase()))) k++;
+            name = m[1] + " (" + k + ")" + (m[2] || "");
+          }
+          used.add(name.toLowerCase());
+          const fh = await dir.getFileHandle(name, { create: true });
+          const w = await fh.createWritable();
+          await w.write(rec.blob);
+          await w.close();
+          const back = await fh.getFile();
+          if (back.size !== rec.blob.size) throw new Error("size mismatch after writing");
+          ok++;
+        } catch (e) {
+          failed.push(name + " (" + ((e && e.message) || e) + ")");
+        }
+      }
+      toast(failed.length
+        ? `Saved ${ok} of ${ids.length} file(s) — failed: ${failed.slice(0, 3).join("; ")}${failed.length > 3 ? " +" + (failed.length - 3) + " more" : ""}`
+        : `Saved ${ok} file(s) to the folder — every file verified on disk.`);
+    } else {
+      // No folder picker: hand each file to the browser's downloader.
+      let ok = 0;
+      for (const id of ids) {
+        const rec = await DB.get(id);
+        if (!rec || !rec.blob) continue;
+        const url = URL.createObjectURL(rec.blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = exportName(rec.name, "file-" + id);
+        document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        ok++;
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      toast(`Downloaded ${ok} file(s).`);
+    }
   }
 
   function renderCard(it) {

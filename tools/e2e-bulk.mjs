@@ -116,6 +116,36 @@ check(meta.tagged === 4, "bulk tags applied");
 check(meta.starred === 4, "bulk star applied");
 check(await waitFor(async () => (await page.locator("#bulk-star").textContent()) === "☆ Unstar"), "star button flips to Unstar when all selected are starred");
 
+// ---------- bulk download into a picked folder (verified writes) ----------
+await page.keyboard.press("Control+a");
+await page.evaluate(() => {
+  window.__saved = {};
+  window.showDirectoryPicker = async () => ({
+    getFileHandle: async (name) => ({
+      createWritable: async () => {
+        const parts = [];
+        return { write: async (b) => { parts.push(b); }, close: async () => { window.__saved[name] = new Blob(parts); } };
+      },
+      getFile: async () => window.__saved[name] || new Blob([]),
+    }),
+  });
+});
+await page.click("#bulk-download");
+const saved = await waitFor(async () => {
+  const s = await page.evaluate(async () => {
+    const out = {};
+    for (const [n, b] of Object.entries(window.__saved || {})) out[n] = await b.text();
+    return out;
+  });
+  return Object.keys(s).length === 4 ? s : false;
+}, 10000) && await page.evaluate(async () => {
+  const out = {};
+  for (const [n, b] of Object.entries(window.__saved || {})) out[n] = await b.text();
+  return out;
+});
+check(saved && Object.keys(saved).length === 4, "bulk download wrote all 4 selected files to the folder");
+check(saved && names.every((n, i) => saved[n] === "bulk test file " + i), "every downloaded file's bytes match the stored file");
+
 // ---------- bulk delete (subset) ----------
 await page.keyboard.press("Escape");
 await page.locator(".card").nth(0).hover();
@@ -147,16 +177,26 @@ await vault.locator("#bulk-send-toolbox").click();
 await page.waitForTimeout(1500);
 check(await page.locator("#tab-toolbox.is-active").count() === 1, "bulk send switches to the Toolbox");
 const toolboxFrame = page.frames().find((f) => f.url().includes("/toolbox/"));
-const batch = await waitFor(async () => {
-  const n = await toolboxFrame.evaluate(() => {
-    const media = document.querySelectorAll("input[type=file]");
-    let best = 0;
-    media.forEach((i) => { if (i.files && i.files.length > best) best = i.files.length; });
-    return best;
-  });
-  return n === 2;
+// The media tool must actually CONSUME both: first file loaded, second queued.
+const loaded = await waitFor(async () => {
+  const s = await toolboxFrame.evaluate(() => ({
+    name: document.getElementById("m-fileName").textContent,
+    queueShown: document.getElementById("m-queueBar").classList.contains("show"),
+    queueInfo: document.getElementById("m-queueInfo").textContent,
+  }));
+  return /bulk-[12]\.png/.test(s.name) && s.queueShown && /1 more file waiting/.test(s.queueInfo);
 }, 10000);
-check(batch, "the Toolbox tool received BOTH files as one batch (not last-one-wins)");
+check(loaded, "media tool loaded the first picture and queued the second");
+const firstName = await toolboxFrame.evaluate(() => document.getElementById("m-fileName").textContent);
+await toolboxFrame.evaluate(() => document.getElementById("m-queueNext").click());
+const advanced = await waitFor(async () => {
+  const s = await toolboxFrame.evaluate(() => ({
+    name: document.getElementById("m-fileName").textContent,
+    queueShown: document.getElementById("m-queueBar").classList.contains("show"),
+  }));
+  return s.name !== firstName && /bulk-[12]\.png/.test(s.name) && !s.queueShown;
+}, 5000);
+check(advanced, "Next ▸ advances to the second picture and the queue empties");
 
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");
