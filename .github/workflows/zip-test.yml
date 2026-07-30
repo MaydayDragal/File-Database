@@ -1,0 +1,52 @@
+name: Validate viewer ZIP on Windows
+
+# Evidence-gathering: builds a ZIP with viewer.html's exact writer logic and
+# validates it on real Windows with BOTH .NET (Expand-Archive) and Explorer's
+# own zip handler (Shell.Application COM — what double-click uses).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/pwa-file-database-hqbppy]
+    paths:
+      - "tools/make-test-zip.mjs"
+      - ".github/workflows/zip-test.yml"
+
+jobs:
+  zip-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build test ZIP with the viewer's writer
+        run: node tools/make-test-zip.mjs test-out.zip
+
+      - name: Validate with .NET (Expand-Archive)
+        shell: pwsh
+        run: |
+          Expand-Archive -Path test-out.zip -DestinationPath extracted -Force
+          Get-ChildItem -Recurse extracted | ForEach-Object { $_.FullName }
+          $pdf = Get-Content "extracted/Jobs/report.pdf" -Raw
+          if ($pdf -notlike "*fake report*") { throw ".NET extraction produced wrong bytes" }
+          Write-Host "EXPAND-ARCHIVE OK"
+
+      - name: Validate with Explorer's zip handler (Shell.Application)
+        shell: pwsh
+        run: |
+          $zipPath = (Resolve-Path test-out.zip).Path
+          $shell = New-Object -ComObject Shell.Application
+          $ns = $shell.NameSpace($zipPath)
+          if ($null -eq $ns) { throw "Explorer (zipfldr) says INVALID: NameSpace returned null" }
+          $items = @($ns.Items())
+          Write-Host "zipfldr sees $($items.Count) top-level items:"
+          $items | ForEach-Object { Write-Host " -" $_.Name "(folder:" $_.IsFolder ")" }
+          if ($items.Count -lt 1) { throw "Explorer (zipfldr) sees no items" }
+          New-Item -ItemType Directory -Path shellout | Out-Null
+          $dest = $shell.NameSpace((Resolve-Path shellout).Path)
+          $dest.CopyHere($ns.Items(), 16)
+          Start-Sleep -Seconds 5
+          Get-ChildItem -Recurse shellout | ForEach-Object { $_.FullName }
+          if (-not (Test-Path "shellout/notes.txt")) { throw "Explorer CopyHere did not extract notes.txt" }
+          Write-Host "ZIPFLDR OK"

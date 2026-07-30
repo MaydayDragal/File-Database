@@ -440,9 +440,13 @@
     btn.disabled = true;
     try {
       var zip = await buildZip();
+      // Self-check: re-read the archive we just built with our own ZIP
+      // reader — a malformed archive must never reach the download.
+      var checked = await readZipEntries(zip);
+      if (checked.length !== entries.length) throw new Error("self-check failed (" + checked.length + "/" + entries.length + " entries)");
       var base = sourceName.replace(/\.[A-Za-z0-9]+$/, "") || "backup";
       dl(zip, base + " (extracted).zip");
-      setProgress("Done — " + entries.length + " files packed (" + fmtBytes(zip.size) + ").");
+      setProgress("Done — " + entries.length + " files packed, exactly " + zip.size.toLocaleString() + " bytes. If a ZIP tool calls the download invalid, check the file on disk is that exact size (a smaller file = the download was cut short).");
     } catch (err) {
       setProgress("Couldn't build the ZIP: " + (err && err.message || err), true);
     } finally {
