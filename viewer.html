@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Open a File Database backup (.fvault / .lidb / .tidb) and download its contents as normal files." />
+<title>Database File Viewer — File Database</title>
+<script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<style>
+  /* Same design tokens as the platform, so this reads as part of the product —
+     but the page is fully self-contained: it must work even if the apps don't. */
+  :root {
+    --brand: #5b8cff; --brand-strong: #4a7bf0;
+    --bg: #f4f6fb; --bg-elev: #ffffff; --bg-sunken: #eef1f8;
+    --text: #1b2333; --text-dim: #647089;
+    --border: #e2e6ef; --border-strong: #ccd2e0;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.08);
+    --danger: #dc2626; --radius: 12px;
+  }
+  :root[data-theme="dark"] { --bg:#0f1420; --bg-elev:#171d2b; --bg-sunken:#1e2637; --text:#e6ebf5; --text-dim:#98a3b8; --border:#2a3346; --border-strong:#3a465e; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); --danger:#ff6b6b; color-scheme:dark; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#0f1420; --bg-elev:#171d2b; --bg-sunken:#1e2637; --text:#e6ebf5; --text-dim:#98a3b8; --border:#2a3346; --border-strong:#3a465e; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); --danger:#ff6b6b; color-scheme:dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 18px 80px; }
+  h1 { font-size: 22px; margin: 0 0 6px; display:flex; align-items:center; gap:10px; }
+  .sub { color: var(--text-dim); font-size: 13.5px; margin: 0 0 22px; line-height:1.5; }
+  .sub a { color: var(--brand); }
+  .drop {
+    border: 2px dashed var(--border-strong); border-radius: var(--radius);
+    background: var(--bg-elev); padding: 44px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop.drag, .drop:hover { border-color: var(--brand); background: var(--bg-sunken); }
+  .drop .big { font-size: 17px; font-weight: 700; }
+  .drop .hint { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+  .summary { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 22px 0 12px; }
+  .summary .kind { font-weight: 800; font-size: 15px; }
+  .summary .muted { color: var(--text-dim); font-size: 13px; }
+  .spacer { flex:1; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border:0; border-radius: 9px; padding: 9px 16px; font-weight: 700; font-size: 13.5px; background: var(--brand); color:#fff; }
+  .btn:hover { background: var(--brand-strong); }
+  .btn[disabled] { opacity:.5; cursor: default; }
+  .btn-ghost { background: var(--bg-elev); color: var(--text); border:1px solid var(--border-strong); }
+  .btn-ghost:hover { background: var(--bg-sunken); }
+  table { width:100%; border-collapse: collapse; background: var(--bg-elev); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  th, td { text-align:left; padding: 9px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-size: 11.5px; text-transform: uppercase; letter-spacing:.05em; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td .dl { border:0; background:none; color: var(--brand); font-weight:700; font-size:12.5px; padding:2px 6px; border-radius:6px; }
+  td .dl:hover { background: var(--bg-sunken); }
+  .name { word-break: break-all; }
+  .progress { margin: 14px 0; font-size: 13px; color: var(--text-dim); min-height: 18px; }
+  .error { color: var(--danger); font-weight: 600; }
+  .foot { margin-top: 34px; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+  #tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔓 Database File Viewer</h1>
+  <p class="sub">Open a File Database backup and get your files back out as <b>normal files</b> —
+  no app needed, works offline. Supports <b>.fvault</b> (Files), <b>.lidb</b> (LI Documents)
+  and <b>.tidb</b> (Tool Inventory). Nothing is uploaded; everything happens on this computer.</p>
+
+  <div class="drop" id="drop">
+    <div class="big">Drop a .fvault / .lidb / .tidb file here</div>
+    <div class="hint">or click to choose one</div>
+  </div>
+  <input type="file" id="pick" accept=".fvault,.lidb,.tidb,.json,.zip" hidden />
+
+  <div id="result" hidden>
+    <div class="summary">
+      <span class="kind" id="kindLabel"></span>
+      <span class="muted" id="countLabel"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="zipBtn">⬇ Download all as ZIP</button>
+      <button class="btn btn-ghost" id="resetBtn">Open another file</button>
+    </div>
+    <div class="progress" id="progress"></div>
+    <div id="tablewrap"><table>
+      <thead><tr><th>File</th><th>Type</th><th class="num">Size</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </div>
+
+  <p class="foot">This page is part of <b>File Database</b> but depends on nothing else — keep a copy
+  of <code>viewer.html</code> next to your backups and your data is always recoverable.
+  Large backups: the ZIP is assembled from the source file on disk, so even multi-GB
+  vaults extract without filling memory (4 GB per ZIP is the format's limit — beyond
+  that, use the per-file download links).</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var entries = [];   // { path, blob, type }
+  var sourceName = "";
+
+  function fmtBytes(n) {
+    if (n == null) return "—";
+    var u = ["B", "KB", "MB", "GB"], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + " " + u[i];
+  }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  // Windows-safe file name (also strips path separators).
+  function safeName(s, fallback) {
+    s = String(s || "").replace(/[<>:"\/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").trim();
+    return s || fallback || "file";
+  }
+  // Resolve duplicate names by suffixing " (2)", " (3)", … before the extension.
+  function dedupe(used, path) {
+    if (!used[path]) { used[path] = 1; return path; }
+    var m = path.match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/);
+    var stem = m[1], ext = m[2] || "", n = 2, p;
+    do { p = stem + " (" + n + ")" + ext; n++; } while (used[p]);
+    used[p] = 1;
+    return p;
+  }
+  function setProgress(msg, isError) {
+    var p = $("#progress");
+    p.textContent = msg || "";
+    p.classList.toggle("error", !!isError);
+  }
+
+  // ---------- format detection ----------
+  function open(file) {
+    sourceName = file.name || "backup";
+    entries = [];
+    setProgress("Reading…");
+    file.slice(0, 4).arrayBuffer().then(function (buf) {
+      var b = new Uint8Array(buf);
+      var magic = String.fromCharCode.apply(null, b);
+      if (magic === "FVLT") return openFvault(file);
+      if (magic === "TIDB") return openTidb(file);
+      if (b[0] === 0x50 && b[1] === 0x4b) return openZip(file);      // "PK" — .lidb
+      if (b[0] === 0x7b || b[0] === 0xef) return openJson(file);     // "{" or BOM — legacy JSON backup
+      throw new Error("Not a recognized File Database backup (.fvault / .lidb / .tidb).");
+    }).then(function () {
+      show();
+    }).catch(function (e) {
+      $("#result").hidden = true;
+      setProgress(String(e && e.message || e), true);
+      $("#progress").hidden = false;
+    });
+  }
+
+  // ---------- .fvault (binary v2): "FVLT" + u32 version + u32 metaLen + meta JSON + blob/thumb bytes ----------
+  function openFvault(file) {
+    return file.slice(0, 12).arrayBuffer().then(function (buf) {
+      var dv = new DataView(buf);
+      var metaLen = dv.getUint32(8, true);
+      return file.slice(12, 12 + metaLen).text().then(function (txt) {
+        var meta = JSON.parse(txt);
+        if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
+        var off = 12 + metaLen, used = {};
+        meta.files.forEach(function (f) {
+          var bl = f.blobLen || 0, tl = f.thumbLen || 0;
+          // Blob.slice references the on-disk region — nothing is copied here.
+          var blob = file.slice(off, off + bl, f.blobType || f.type || "application/octet-stream");
+          off += bl + tl; // skip the thumbnail (an internal preview, not user data)
+          var folder = f.collection ? safeName(f.collection) + "/" : "";
+          entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: blob, type: f.type || "" });
+        });
+        $("#kindLabel").textContent = "📁 File Vault backup";
+      });
+    });
+  }
+
+  // ---------- legacy .fvault (JSON with base64 blobs) ----------
+  function openJson(file) {
+    return file.text().then(function (txt) {
+      var meta = JSON.parse(txt);
+      if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
+      var used = {};
+      meta.files.forEach(function (f) {
+        if (!f.blob) return;
+        var bin = atob(f.blob), u = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        var folder = f.collection ? safeName(f.collection) + "/" : "";
+        entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: new Blob([u], { type: f.blobType || f.type || "application/octet-stream" }), type: f.type || "" });
+      });
+      $("#kindLabel").textContent = "📁 File Vault backup (legacy)";
+    });
+  }
+
+  // ---------- .tidb: "TIDB" + u32 version + u32 metaLen + meta JSON + photo bytes ----------
+  function openTidb(file) {
+    return file.slice(0, 12).arrayBuffer().then(function (buf) {
+      var dv = new DataView(buf);
+      var metaLen = dv.getUint32(8, true);
+      return file.slice(12, 12 + metaLen).text().then(function (txt) {
+        var meta = JSON.parse(txt);
+        if (!meta || meta.format !== "tool-inventory-db" || !Array.isArray(meta.tools)) throw new Error("Not a Tool Inventory database.");
+        // The tool data itself, as a normal spreadsheet + full JSON.
+        var head = ["ID", "No.", "Qty", "Tool Number", "Svc Grp", "Ct", "Description", "Location", "Year", "Dlr Net($)", "Note", "Comment", "Photo"];
+        var q = function (s) { s = String(s == null ? "" : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        var lines = [head.join(",")];
+        meta.tools.forEach(function (t) {
+          lines.push([t.id, t.no, t.qty, t.toolNo, t.svcGrp, t.ct, t.desc, t.location, t.year, (t.price == null ? "" : t.price), t.note, t.comment, t.photo].map(q).join(","));
+        });
+        entries.push({ path: "tools.csv", blob: new Blob([lines.join("\n")], { type: "text/csv" }), type: "text/csv" });
+        entries.push({ path: "tools.json", blob: new Blob([JSON.stringify(meta.tools, null, 1)], { type: "application/json" }), type: "application/json" });
+        var off = 12 + metaLen, used = { "tools.csv": 1, "tools.json": 1 };
+        (meta.photos || []).forEach(function (p) {
+          entries.push({ path: dedupe(used, "photos/" + safeName(p.id, "photo") + ".png"), blob: file.slice(off, off + p.len, "image/png"), type: "image/png" });
+          off += p.len;
+        });
+        $("#kindLabel").textContent = "🔧 Tool Inventory database";
+      });
+    });
+  }
+
+  // ---------- .lidb: a ZIP (stored or deflated) with manifest.json + files/… ----------
+  function readZipEntries(file) {
+    // Find the End Of Central Directory record in the last 64 KB + 22 bytes.
+    var tailLen = Math.min(file.size, 65558);
+    return file.slice(file.size - tailLen).arrayBuffer().then(function (tail) {
+      var t = new Uint8Array(tail), eocd = -1;
+      for (var i = t.length - 22; i >= 0; i--) {
+        if (t[i] === 0x50 && t[i + 1] === 0x4b && t[i + 2] === 0x05 && t[i + 3] === 0x06) { eocd = i; break; }
+      }
+      if (eocd < 0) throw new Error("Damaged ZIP (no directory found).");
+      var dv = new DataView(tail, eocd);
+      var count = dv.getUint16(10, true);
+      var cdSize = dv.getUint32(12, true);
+      var cdOff = dv.getUint32(16, true);
+      return file.slice(cdOff, cdOff + cdSize).arrayBuffer().then(function (cd) {
+        var c = new DataView(cd), u8 = new Uint8Array(cd), pos = 0, list = [];
+        var td = new TextDecoder();
+        for (var n = 0; n < count; n++) {
+          if (c.getUint32(pos, true) !== 0x02014b50) break;
+          var method = c.getUint16(pos + 10, true);
+          var compSize = c.getUint32(pos + 20, true);
+          var nameLen = c.getUint16(pos + 28, true);
+          var extraLen = c.getUint16(pos + 30, true);
+          var cmtLen = c.getUint16(pos + 32, true);
+          var lho = c.getUint32(pos + 42, true);
+          var name = td.decode(u8.subarray(pos + 46, pos + 46 + nameLen));
+          list.push({ name: name, method: method, compSize: compSize, lho: lho });
+          pos += 46 + nameLen + extraLen + cmtLen;
+        }
+        // Resolve each entry's data offset via its local header (variable-size).
+        return Promise.all(list.map(function (en) {
+          return file.slice(en.lho, en.lho + 30).arrayBuffer().then(function (lh) {
+            var l = new DataView(lh);
+            var dataOff = en.lho + 30 + l.getUint16(26, true) + l.getUint16(28, true);
+            en.data = file.slice(dataOff, dataOff + en.compSize);
+            return en;
+          });
+        }));
+      });
+    });
+  }
+  function inflateEntry(en, type) {
+    if (en.method === 0) return Promise.resolve(en.data.slice(0, en.data.size, type));
+    if (en.method === 8 && typeof DecompressionStream !== "undefined") {
+      var ds = new DecompressionStream("deflate-raw");
+      return new Response(en.data.stream().pipeThrough(ds)).blob().then(function (b) { return b.slice(0, b.size, type); });
+    }
+    return Promise.reject(new Error("Unsupported compression in ZIP."));
+  }
+  function openZip(file) {
+    return readZipEntries(file).then(function (list) {
+      var manifest = null;
+      for (var i = 0; i < list.length; i++) if (list[i].name === "manifest.json") manifest = list[i];
+      if (!manifest) throw new Error("This ZIP isn't an LI Documents backup (no manifest.json).");
+      return inflateEntry(manifest, "application/json").then(function (b) { return b.text(); }).then(function (txt) {
+        var man = JSON.parse(txt);
+        var byFname = {};
+        (man.docs || []).forEach(function (d) { if (d.fname) byFname["files/" + d.fname] = d; });
+        var used = {};
+        var pdfs = list.filter(function (en) { return en.name.indexOf("files/") === 0; });
+        return Promise.all(pdfs.map(function (en) { return inflateEntry(en, "application/pdf"); })).then(function (blobs) {
+          pdfs.forEach(function (en, i) {
+            var d = byFname[en.name] || {};
+            // A readable name: "LI54.10-P-070001_3 - Title.pdf", falling back
+            // to the document's original filename, then the archive name.
+            var nice = d.li ? (d.li + (d.ver ? "_" + d.ver : "") + (d.title ? " - " + d.title : "") + ".pdf") : (d.filename || en.name.slice(6));
+            entries.push({ path: dedupe(used, "LI Documents/" + safeName(nice, "document.pdf")), blob: blobs[i], type: "application/pdf" });
+          });
+          $("#kindLabel").textContent = "🗄️ LI Documents backup";
+        });
+      });
+    });
+  }
+
+  // ---------- render ----------
+  function show() {
+    setProgress("");
+    $("#result").hidden = false;
+    var total = 0;
+    var tb = $("#rows");
+    tb.innerHTML = "";
+    entries.forEach(function (en, i) {
+      total += en.blob.size;
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td class="name">' + esc(en.path) + '</td><td>' + esc(en.type || "—") + '</td><td class="num">' + fmtBytes(en.blob.size) + '</td>' +
+        '<td><button class="dl" data-i="' + i + '">⬇ Download</button></td>';
+      tb.append(tr);
+    });
+    $("#countLabel").textContent = entries.length + " file" + (entries.length === 1 ? "" : "s") + " · " + fmtBytes(total);
+    $("#zipBtn").disabled = !entries.length || total > 0xFFFF0000;
+    if (total > 0xFFFF0000) setProgress("Over 4 GB — use the per-file download links (the ZIP format tops out at 4 GB).");
+  }
+  function dl(blob, name) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+  }
+
+  // ---------- ZIP writer (STORE — the contents are already-compressed formats) ----------
+  var CRC_TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(u8, crc) {
+    crc = (crc == null ? 0xffffffff : crc) >>> 0;
+    for (var i = 0; i < u8.length; i++) crc = CRC_TABLE[(crc ^ u8[i]) & 0xff] ^ (crc >>> 8);
+    return crc >>> 0;
+  }
+  async function buildZip() {
+    var enc = new TextEncoder();
+    var parts = [], central = [], offset = 0;
+    var now = new Date();
+    var dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xffff;
+    var dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xffff;
+    for (var i = 0; i < entries.length; i++) {
+      var en = entries[i];
+      setProgress("Packing " + (i + 1) + " / " + entries.length + " — " + en.path);
+      // One file at a time in memory: CRC needs the bytes once; the blob
+      // reference (not a copy) then goes into the output parts.
+      var buf = new Uint8Array(await en.blob.arrayBuffer());
+      var crc = (crc32(buf) ^ 0xffffffff) >>> 0;
+      var nameBytes = enc.encode(en.path);
+      var lh = new ArrayBuffer(30); var v = new DataView(lh);
+      v.setUint32(0, 0x04034b50, true);
+      v.setUint16(4, 20, true);          // version needed
+      v.setUint16(6, 0x0800, true);      // UTF-8 names
+      v.setUint16(8, 0, true);           // method: store
+      v.setUint16(10, dosTime, true); v.setUint16(12, dosDate, true);
+      v.setUint32(14, crc, true);
+      v.setUint32(18, buf.length, true); v.setUint32(22, buf.length, true);
+      v.setUint16(26, nameBytes.length, true); v.setUint16(28, 0, true);
+      parts.push(lh, nameBytes, en.blob);
+      central.push({ name: nameBytes, crc: crc, size: buf.length, offset: offset });
+      offset += 30 + nameBytes.length + buf.length;
+      buf = null;
+    }
+    var cdStart = offset, cdSize = 0;
+    central.forEach(function (c) {
+      var ch = new ArrayBuffer(46); var v = new DataView(ch);
+      v.setUint32(0, 0x02014b50, true);
+      v.setUint16(4, 20, true); v.setUint16(6, 20, true);
+      v.setUint16(8, 0x0800, true); v.setUint16(10, 0, true);
+      v.setUint16(12, dosTime, true); v.setUint16(14, dosDate, true);
+      v.setUint32(16, c.crc, true);
+      v.setUint32(20, c.size, true); v.setUint32(24, c.size, true);
+      v.setUint16(28, c.name.length, true);
+      v.setUint32(42, c.offset, true);
+      parts.push(ch, c.name);
+      cdSize += 46 + c.name.length;
+    });
+    var eocd = new ArrayBuffer(22); var e = new DataView(eocd);
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(8, central.length, true); e.setUint16(10, central.length, true);
+    e.setUint32(12, cdSize, true); e.setUint32(16, cdStart, true);
+    parts.push(eocd);
+    return new Blob(parts, { type: "application/zip" });
+  }
+
+  // ---------- wiring ----------
+  var drop = $("#drop");
+  drop.addEventListener("click", function () { $("#pick").click(); });
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); }); });
+  drop.addEventListener("drop", function (e) { if (e.dataTransfer.files[0]) open(e.dataTransfer.files[0]); });
+  $("#pick").addEventListener("change", function (e) { if (e.target.files[0]) open(e.target.files[0]); e.target.value = ""; });
+  $("#rows").addEventListener("click", function (e) {
+    var b = e.target.closest(".dl");
+    if (!b) return;
+    var en = entries[+b.dataset.i];
+    if (en) dl(en.blob, en.path.split("/").pop());
+  });
+  $("#zipBtn").addEventListener("click", async function () {
+    var btn = $("#zipBtn");
+    btn.disabled = true;
+    try {
+      var zip = await buildZip();
+      var base = sourceName.replace(/\.[A-Za-z0-9]+$/, "") || "backup";
+      dl(zip, base + " (extracted).zip");
+      setProgress("Done — " + entries.length + " files packed (" + fmtBytes(zip.size) + ").");
+    } catch (err) {
+      setProgress("Couldn't build the ZIP: " + (err && err.message || err), true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  $("#resetBtn").addEventListener("click", function () {
+    entries = [];
+    $("#result").hidden = true;
+    setProgress("");
+  });
+})();
+</script>
+</body>
+</html>

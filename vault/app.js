@@ -1462,6 +1462,7 @@
   function handleMenu(action, e) {
     if (action === "export") exportVault();
     else if (action === "import") $("#import-input").click();
+    else if (action === "extract") window.open("../viewer.html");
     else if (action === "new-collection") newCollection();
     else if (action === "scan-vins") scanVins(!!(e && e.shiftKey));
     else if (action === "sync-folder") runFolderSync(false);

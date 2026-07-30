@@ -106,6 +106,15 @@ Platform Shell
 │   └── Anything else → "Search Files / LI Documents / Tool Inventory" rows with the query carried over
 ├── One-click "Back up everything" (top-bar ⬇ button)
 │   └── Commands each data app to run its own existing export — .fvault + .lidb + .tidb, staggered
+├── Database File Viewer (/viewer.html — the escape hatch; Files ⋮ → "Extract a backup file…")
+│   ├── Standalone, offline, ZERO dependencies (own ZIP reader/writer + format parsers inline)
+│   ├── Opens .fvault (binary v2 + legacy JSON), .lidb (ZIP+manifest; stored or deflated
+│   │   entries via DecompressionStream), .tidb — lists contents with sizes
+│   ├── "Download all as ZIP" (STORE + CRC32, UTF-8 names, memory-safe: one file at a time;
+│   │   4 GB ZIP limit guarded) or per-file downloads
+│   ├── fvault → collection folders; lidb → readable "LI…_ver - Title.pdf" names from the
+│   │   manifest; tidb → tools.csv + tools.json + photos/*.png
+│   └── Precached by the shell SW + shipped in the USB build — data is never locked in
 ├── Toast relay + badge pulse (the platform feels like ONE app)
 │   ├── Apps forward their toasts up as {shell-toast, app, msg}; the shell shows them app-prefixed
 │   │   ONLY when that app's tab is in the background (foreground apps toast themselves)
