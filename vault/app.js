@@ -569,7 +569,7 @@
     $("#bulk-star").textContent = allStarred ? "☆ Unstar" : "★ Star";
     const pdfs = sel.filter((it) => it.kind === "pdf").length;
     $("#bulk-send-li").disabled = !window.VaultBridge || pdfs === 0;
-    $("#bulk-send-li").textContent = "🗄️ To LI" + (pdfs && pdfs !== sel.length ? " (" + pdfs + ")" : "");
+    $("#bulk-send-li").textContent = "🗄️ Send to LI" + (pdfs && pdfs !== sel.length ? " (" + pdfs + ")" : "");
     const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
     $("#bulk-send-toolbox").disabled = !window.VaultBridge || tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it));
   }

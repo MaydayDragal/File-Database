@@ -241,7 +241,8 @@ kbd {
   font-size: 13px; line-height: 1; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.card__select { position: absolute; top: 8px; left: 8px; z-index: 2; opacity: 0; transition: opacity .12s; }
+/* Bottom-left so it never covers the file-type badge (top-left) or star (top-right). */
+.card__select { position: absolute; bottom: 8px; left: 8px; z-index: 2; opacity: 0; transition: opacity .12s; }
 .card:hover .card__select, .card__select.on, .results.selecting .card__select { opacity: 1; }
 .card__select.on, .row__select.on { background: var(--brand); border-color: var(--brand); }
 .card.is-selected, .row.is-selected { outline: 2px solid var(--brand); outline-offset: -2px; }
