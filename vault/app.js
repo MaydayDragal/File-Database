@@ -2310,5 +2310,13 @@
     }
   }
 
+  // Spell-check every text field, including ones created after load —
+  // flipping the flag at focus time covers them all without touching each
+  // creation site.
+  document.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && (t.type === "text" || t.type === "search"))) t.spellcheck = true;
+  });
+
   document.addEventListener("DOMContentLoaded", boot);
 })();

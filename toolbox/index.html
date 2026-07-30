@@ -853,7 +853,7 @@
         <a class="btn btn-download" id="o-downloadBtn" href="#">⬇ Download .txt</a>
       </div>
     </div>
-    <textarea id="o-text" class="o-textarea" spellcheck="false" placeholder="Recognized text will appear here…"></textarea>
+    <textarea id="o-text" class="o-textarea" spellcheck="true" placeholder="Recognized text will appear here…"></textarea>
   </div>
 
   <div class="foot">
@@ -1100,7 +1100,7 @@
   <!-- Editor -->
   <div class="card t-panel active" id="tp-editor">
     <h2>Editor, Counter &amp; Find/Replace</h2>
-    <textarea id="t-input" class="t-area" spellcheck="false" placeholder="Paste or type text here…"></textarea>
+    <textarea id="t-input" class="t-area" spellcheck="true" placeholder="Paste or type text here…"></textarea>
     <div class="t-stats" id="t-stats"></div>
 
     <div class="t-btns">
@@ -1148,8 +1148,8 @@
   <div class="card t-panel" id="tp-diff">
     <h2>Compare two texts</h2>
     <div class="t-diffgrid">
-      <textarea id="t-diff-a" class="t-area" spellcheck="false" placeholder="Original…"></textarea>
-      <textarea id="t-diff-b" class="t-area" spellcheck="false" placeholder="Changed…"></textarea>
+      <textarea id="t-diff-a" class="t-area" spellcheck="true" placeholder="Original…"></textarea>
+      <textarea id="t-diff-b" class="t-area" spellcheck="true" placeholder="Changed…"></textarea>
     </div>
     <div class="t-fropts" style="margin-top:12px">
       <label class="chk"><input type="checkbox" id="t-diff-ci" /> Ignore case</label>
@@ -4339,7 +4339,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function field(label, val, cb) {
     var wrap = document.createElement("div"); wrap.className = "e-field";
     var l = document.createElement("label"); l.textContent = label;
-    var inp = document.createElement("input"); inp.type = "text"; inp.value = val || ""; inp.spellcheck = false;
+    var inp = document.createElement("input"); inp.type = "text"; inp.value = val || ""; inp.spellcheck = true;
     inp.addEventListener("input", function () { cb(inp.value); });
     wrap.appendChild(l); wrap.appendChild(inp); return wrap;
   }
@@ -4508,6 +4508,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
   });
 })();
+</script>
+<script>
+// Spell-check every text field, including ones created after load — flipping
+// the flag at focus time covers them all without touching each creation site.
+document.addEventListener("focusin", function (e) {
+  var t = e.target;
+  if (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && (t.type === "text" || t.type === "search"))) t.spellcheck = true;
+});
 </script>
 </body>
 </html>

@@ -37,7 +37,7 @@
 
     <div class="search">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input id="search-input" type="search" placeholder="Search names, tags, notes…" autocomplete="off" spellcheck="false" />
+      <input id="search-input" type="search" placeholder="Search names, tags, notes…" autocomplete="off" spellcheck="true" />
       <kbd class="search__hint">/</kbd>
     </div>
 
@@ -224,14 +224,14 @@
         <label class="field">
           <span class="field__label">VIN <small>(comma separated if several)</small></span>
           <span class="field__row">
-            <input id="d-vin" placeholder="e.g. WDD2050091R123456" spellcheck="false" autocapitalize="characters" />
+            <input id="d-vin" placeholder="e.g. WDD2050091R123456" spellcheck="true" autocapitalize="characters" />
             <button id="d-scan-vin" class="btn btn--ghost" type="button" title="Read this file (OCR for images and scanned PDFs) and detect its VIN">Detect</button>
           </span>
         </label>
 
         <label class="field" id="d-fin-field" hidden>
           <span class="field__label">FIN <small>(Mercedes datacard / Baumuster number — kept separate from the VIN)</small></span>
-          <input id="d-fin" placeholder="e.g. W1K2140471A068698" spellcheck="false" autocapitalize="characters" />
+          <input id="d-fin" placeholder="e.g. W1K2140471A068698" spellcheck="true" autocapitalize="characters" />
         </label>
 
         <label class="field">

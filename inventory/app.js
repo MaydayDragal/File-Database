@@ -605,4 +605,12 @@
     $("#empty").style.display = "block";
     $("#empty").innerHTML = "Couldn't open the inventory.<br><span class='muted'>" + esc(e && e.message) + "</span>";
   });
+
+  // Spell-check every text field, including ones created after load —
+  // flipping the flag at focus time covers them all without touching each
+  // creation site.
+  document.addEventListener("focusin", function (e) {
+    var t = e.target;
+    if (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && (t.type === "text" || t.type === "search"))) t.spellcheck = true;
+  });
 })();

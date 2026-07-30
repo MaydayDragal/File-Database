@@ -2258,5 +2258,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 })();
 
 </script>
+<script>
+// Spell-check every text field, including ones created after load — flipping
+// the flag at focus time covers them all without touching each creation site.
+document.addEventListener("focusin", function (e) {
+  var t = e.target;
+  if (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && (t.type === "text" || t.type === "search"))) t.spellcheck = true;
+});
+</script>
 </body>
 </html>
