@@ -22,8 +22,14 @@ const files = [
   { path: "Jobs/report.pdf", data: Buffer.from("%PDF-1.4 fake report") },
   { path: "notes.txt", data: Buffer.from("hello vault") },
   { path: "LI Documents/LI54.10-P-070001_2 - Brake procedure.pdf", data: Buffer.from("%PDF-1.4 fake LI doc") },
+  // Realistic LI-title characters: umlauts, ß, en-dash — non-ASCII exercises
+  // the UTF-8 name flag path that the ASCII fixtures never touched.
+  { path: "LI Documents/LI82.10-P-054321_1 - Prüfen–Größenänderung électrique.pdf", data: Buffer.from("%PDF-1.4 fake umlaut doc") },
   { path: "photos/000589011000.png", data: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64") },
 ];
+// Plus bulk: many entries + a ~1 MB member, closer to a real LI backup's shape.
+for (let i = 0; i < 60; i++) files.push({ path: `LI Documents/LI${String(10 + i)}.10-P-0${100000 + i}_1 - Doc ${i}.pdf`, data: Buffer.from(`%PDF-1.4 doc ${i} `.repeat(50)) });
+files.push({ path: "big/blob.bin", data: Buffer.alloc(1024 * 1024, 7) });
 
 const enc = new TextEncoder();
 const parts = [], central = [];
