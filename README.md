@@ -1,10 +1,10 @@
-# 🗂️ File Database — one page, four apps, all in your browser
+# 🗂️ File Database — one page, six apps, all in your browser
 
 > 📖 Looking for the full technical map? **[FEATURES.md](FEATURES.md)** is the
 > complete feature tree and application topology — every feature, every
 > cross‑app tie‑in, storage, service workers, message contracts and test coverage.
 
-**File Database** is a Progressive Web App (PWA) platform that bundles four
+**File Database** is a Progressive Web App (PWA) platform that bundles six
 local‑first apps behind a single page:
 
 - **📁 File Vault** — a private, searchable database for **documents, videos,
@@ -12,6 +12,10 @@ local‑first apps behind a single page:
 - **🗄️ LI Documents** — a database for Mercedes‑Benz LI PDFs.
 - **🔧 Tool Inventory** — a searchable catalog of dealer special tools.
 - **🧰 Toolbox** — ten file & workshop utilities (compress, split, convert, OCR…).
+- **✍️ Story Studio** — a Markdown editor for stories & technical writeups, with
+  live preview and the Toolbox's text tools (case, sort, find/replace) built in.
+- **🔓 Extract** — open a `.fvault` / `.lidb` / `.tidb` backup and save its
+  contents back out as ordinary files.
 
 It was built specifically for a **locked‑down work computer where you don't
 have admin rights**: there is nothing to install, no server to run, and no
@@ -33,10 +37,10 @@ that one computer.
 
 ---
 
-## One platform, four apps
+## One platform, six apps
 
 The repo root is a slim **platform shell**: one top bar with an app tab for
-each of the four apps, which run side by side in lazy‑loaded, same‑origin
+each of the six apps, which run side by side in lazy‑loaded, same‑origin
 iframes. The shell owns everything the apps share:
 
 - **One "Add files" button** — a single uploader in the top bar (and a
@@ -68,7 +72,7 @@ iframes. The shell owns everything the apps share:
   - **⬇ Back up everything** — one button saves all three databases
     (`.fvault`, `.lidb`, `.tidb`); drop any of those files back on the window
     to restore/open it in the right app.
-  - **Alt+1–4** switches apps from anywhere; `/` focuses search in every app.
+  - **Alt+1–6** switches apps from anywhere; `/` focuses search in every app.
 - **One theme** — the ◐ toggle cycles System → Light → Dark and applies to the
   shell **and every app at once** (remembered, applied before first paint).
 - **Deep links** — `#vault`, `#li`, `#inventory`, `#toolbox` and even
@@ -132,7 +136,7 @@ The Files app (File Vault) is the heart of the platform:
 - **Folder sync (auto‑import)** — link a folder once (⋮ → **Sync a folder**, Edge/Chrome) and File Vault imports any new or changed files from it, filed under a collection named after the folder. Turn on **Auto‑sync** to re‑scan every 5 minutes while the app is open (and whenever you switch back to it) — drop a file in the folder and it appears in the vault on its own. Files are matched by name + size + modified‑time so nothing imports twice. The **LI Documents** app has the same thing for PDFs (⋮ → **Sync folder** / **Auto‑sync**). *Tip: point it at a dedicated folder such as `Downloads\LI‑inbox` rather than all of Downloads.* Background scanning only runs while the app is open — browsers don't allow a web app to watch a folder while it's fully closed.
 - **Installable** — click **Install app** to add it to your Start menu / dock and launch it in its own window.
 - **Offline‑first** and **keyboard‑friendly** (`/` search, `a` add, `g`/`l` grid/list, `Esc` close).
-- **Light & dark themes** — the ◐ toggle in the platform top bar cycles System → Light → Dark across all four apps (your choice is remembered and applied before the page paints, so no flash).
+- **Light & dark themes** — the ◐ toggle in the platform top bar cycles System → Light → Dark across all six apps (your choice is remembered and applied before the page paints, so no flash).
 
 ---
 
@@ -238,7 +242,7 @@ IndexedDB.
 ## Project layout
 
 ```
-index.html            Platform shell (app tabs, one page for all four apps)
+index.html            Platform shell (app tabs, one page for all six apps)
 shell.js              Shell logic (tabs, lazy iframes, theme, badges, deep links)
 shell.css             Shell styling (light + dark)
 sw.js                 Platform service worker (shell cache)
@@ -251,6 +255,8 @@ inventory/            🔧 Tool Inventory app (empty; loads a portable .tidb fil
 inventory-data/       Source data (tools.json + img/) used to build the .tidb — not shipped in the app
 tools/build-inventory-db.mjs  Builds FileInventory.tidb (tools + photos) from inventory-data/
 toolbox/              🧰 Toolbox — ten file & workshop tools in a single page
+story/                ✍️ Story Studio — Markdown writeup editor (single self-contained page)
+viewer.html           🔓 Extract — open a .fvault/.lidb/.tidb backup and save its files out
 tools/gen_icons.py    Regenerates the root icons (no dependencies)
 tools/e2e.mjs         End-to-end test — File Vault, standalone at /vault/
 tools/e2e-merge.mjs   Integration test — cross-app handoffs through the shell

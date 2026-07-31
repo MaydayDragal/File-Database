@@ -167,13 +167,14 @@ check(await emb.locator("h1").isHidden(), "embedded viewer hides its own heading
 await emb.locator("#pick").setInputFiles(path.join(FIX, "viewer.fvault"));
 await page.waitForTimeout(500);
 check((await emb.locator("#rows tr").count()) === 2, "extraction works inside the embedded tab");
-// Alt+5 pressed inside another iframe reaches the Extract tab
+// Alt+6 pressed inside another iframe reaches the Extract tab (tab order:
+// vault·li·inventory·toolbox·story·viewer — Extract is the 6th).
 await page.click("#tab-vault");
 await page.waitForTimeout(500);
 const vaultFrame = page.frames().find((f) => f.url().includes("/vault/"));
-if (vaultFrame) await vaultFrame.locator("body").press("Alt+5").catch(() => {});
+if (vaultFrame) await vaultFrame.locator("body").press("Alt+6").catch(() => {});
 await page.waitForTimeout(400);
-check(await page.locator("#tab-viewer.is-active").count() === 1, "Alt+5 from inside an app switches to the Extract tab");
+check(await page.locator("#tab-viewer.is-active").count() === 1, "Alt+6 from inside an app switches to the Extract tab");
 
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");

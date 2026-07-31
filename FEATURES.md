@@ -8,7 +8,7 @@
 ## 0. Bird's-eye view
 
 **File Database** is a static, no-build, offline-first PWA platform. The repo root is a
-slim **shell** that hosts four independent apps in lazy, same-origin iframes. Apps never
+slim **shell** that hosts six independent apps in lazy, same-origin iframes. Apps never
 talk to each other directly — everything cross-app goes through two thin channels:
 
 - **`bridge.js` (VaultBridge)** — file handoffs (IndexedDB mailbox + BroadcastChannel nudge).
@@ -26,6 +26,7 @@ flowchart TB
     Shell -->|iframe| L["/li/ · LI Documents"]
     Shell -->|iframe| I["/inventory/ · Tool Inventory"]
     Shell -->|iframe| T["/toolbox/ · Toolbox (10 tools)"]
+    Shell -->|iframe| S["/story/ · Story Studio"]
 
     B[("bridge.js<br/>IndexedDB 'vault-bridge' + BroadcastChannel")]
     V <-->|"send/receive files"| B
@@ -35,7 +36,7 @@ flowchart TB
     V -.->|"shell-nav"| Shell
     L -.->|"vault-nav, li-changed"| Shell
     T -.->|"toolbox-open ⟵"| Shell
-    Shell -.->|"platform-theme → all frames"| V & L & I & T
+    Shell -.->|"platform-theme → all frames"| V & L & I & T & S
 
     FS[["Linked folders<br/>(File System Access)"]] -->|"sync / auto-sync"| V
     FS -->|"sync / auto-sync"| L
@@ -48,12 +49,12 @@ the shell is a convenience layer, not a dependency.
 
 ## 1. Platform Shell — `/` (`index.html`, `shell.js`, `shell.css`, `sw.js`, `manifest.webmanifest`)
 
-The only component that knows all four apps exist. Owns everything shared.
+The only component that knows all six apps exist. Owns everything shared.
 
 ```
 Platform Shell
 ├── App switching
-│   ├── Five tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · 🔓 Extract
+│   ├── Six tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · ✍️ Story Studio · 🔓 Extract
 │   ├── Lazy iframes — an app loads on first visit, then stays warm (instant switching)
 │   ├── One panel visible at a time (ARIA tab pattern: arrow keys, Home/End, roving tabindex)
 │   └── Last-used app remembered (localStorage "fd-app") and restored on launch
@@ -79,7 +80,7 @@ Platform Shell
 │   ├── Tools count      ← peeks IndexedDB "tool-inventory" / store "tools"
 │   ├── Read-only peek with upgrade-abort guard — can NEVER create/corrupt an app's DB
 │   └── Refreshes on: app switch · window focus · tab visible · {li-changed} message · after an add
-├── Theme (single source of truth for all four apps)
+├── Theme (single source of truth for every app)
 │   ├── ◐ button cycles System → Light → Dark
 │   ├── Persists: localStorage "fv-theme" (set for light/dark, REMOVED for system)
 │   ├── Applies: data-theme attribute on <html> + theme-color meta swap
@@ -151,7 +152,7 @@ Platform Shell
     └── Activate: prunes own old caches + legacy pre-platform "file-vault-*" root caches
 ```
 
-**Tied into:** all four apps (iframes, theme broadcast, badges), three app IndexedDBs
+**Tied into:** all apps (iframes, theme broadcast; badges for the three data apps), three app IndexedDBs
 (read-only), and `bridge.js` — which the shell now loads to *send* unified-intake files
 to the Vault/LI outboxes (it still never *receives*; each app drains its own).
 
@@ -444,6 +445,44 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 
 ---
 
+## 5b. Story Studio — `/story/` (single self-contained `index.html`)
+
+A Markdown editor for stories and technical writeups, with the Toolbox's text
+tools built directly in (per the request: the tools are merged INTO the story
+tab, not sent across apps).
+
+```
+Story Studio
+├── Stories (IndexedDB "story-studio" → store "stories" {id,title,body,createdAt,updatedAt})
+│   ├── Sidebar list (title · word count · updated), newest-first; ＋ New; click to open
+│   ├── Autosave (debounced ~400ms) with a "Saving…/Saved" note; Ctrl+S forces a save
+│   └── Delete (from the Export menu, confirmed)
+├── Editor
+│   ├── Markdown <textarea> + LIVE PREVIEW (self-contained, XSS-safe renderer:
+│   │   headings, bold/italic, inline code, fenced code, lists, blockquote, hr, links)
+│   ├── View modes: Edit · Split · Preview (remembered in localStorage "story-view")
+│   ├── Format toolbar: H1/H2/H3 · Bold(Ctrl+B) · Italic(Ctrl+I) · code · lists ·
+│   │   quote · rule · link · code block (wrap selection / prefix lines)
+│   ├── Tab inserts two spaces; stats bar: words · characters · lines · reading time
+│   └── Spell-check on every text field (focusin flips spellcheck=true)
+├── 🧰 Text tools (drawer) — merged from the Toolbox Text tool; operate on the
+│   │   SELECTION if any, else the whole story
+│   ├── Change case: UPPER/lower/Title/Sentence/camel/snake/kebab/CONSTANT/invert
+│   ├── Lines: sort A→Z / Z→A · remove duplicates · reverse · shuffle · trim ·
+│   │   drop blank · collapse spaces
+│   └── Find & replace: literal or regex, ignore-case, count, replace-all
+├── Export: ⬇ .md · ⬇ .txt · 📋 Copy all · 🖨️ Print/PDF (prints the rendered story)
+└── Platform integration
+    ├── Deep link #story; embedded theme (platform-theme); Alt+1–9 & Ctrl+K forwarded
+    ├── shell-nav {id} opens a specific story
+    └── No own SW/manifest — the SHELL's service worker precaches this page
+```
+
+**Tied into:** shell (tab, theme, keyboard, deep-link). Self-contained storage;
+no bridge/network. Standalone at `/story/`.
+
+---
+
 ## 6. Shared infrastructure
 
 ### 6.1 `bridge.js` — VaultBridge (the file bus)
@@ -488,7 +527,7 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 | `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
 | `/inventory/` | `inventory/sw.js` | `tool-inventory-v7` | App shell only (no bundled data); data loads from a portable `.tidb` file |
 
-### 6.5 Theme system (one choice, five consumers)
+### 6.5 Theme system (one choice, six consumers)
 
 ```
 ◐ toggle (shell when embedded; vault standalone)

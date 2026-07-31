@@ -14,6 +14,7 @@
     li:        { view: "#view-li",        frame: "#frame-li",        tab: "#tab-li",        src: "li/index.html",        title: "LI Documents",   loaded: false, pending: [] },
     inventory: { view: "#view-inventory", frame: "#frame-inventory", tab: "#tab-inventory", src: "inventory/index.html", title: "Tool Inventory", loaded: false, pending: [] },
     toolbox:   { view: "#view-toolbox",   frame: "#frame-toolbox",   tab: "#tab-toolbox",   src: "toolbox/index.html",   title: "Toolbox",        loaded: false, pending: [] },
+    story:     { view: "#view-story",     frame: "#frame-story",     tab: "#tab-story",     src: "story/index.html",     title: "Story Studio",   loaded: false, pending: [] },
     viewer:    { view: "#view-viewer",    frame: "#frame-viewer",    tab: "#tab-viewer",    src: "viewer.html",          title: "Extract",        loaded: false, pending: [] },
   };
   var DEFAULT_APP = "vault";
