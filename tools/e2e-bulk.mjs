@@ -197,6 +197,42 @@ const advanced = await waitFor(async () => {
 }, 5000);
 check(advanced, "Next ▸ advances to the second picture and the queue empties");
 
+// ---------- CSV/ZIP bulk sends are blocked (single-file tools) ----------
+// Add two CSVs and two ZIPs; selecting either pair must NOT enable the bulk
+// Toolbox button (those tools take one file at a time), while images/PDFs do.
+await page.click("#tab-vault");
+await waitFor(async () => (await vault.locator(".card").count()) >= 4);
+fs.writeFileSync(path.join(FIX, "rows-1.csv"), "a,b\n1,2\n");
+fs.writeFileSync(path.join(FIX, "rows-2.csv"), "a,b\n3,4\n");
+// minimal empty ZIP (End Of Central Directory record only)
+const emptyZip = Buffer.from("504b0506000000000000000000000000000000000000", "hex");
+fs.writeFileSync(path.join(FIX, "pack-1.zip"), emptyZip);
+fs.writeFileSync(path.join(FIX, "pack-2.zip"), emptyZip);
+await page.setInputFiles("#shell-file-input", [path.join(FIX, "rows-1.csv"), path.join(FIX, "rows-2.csv"), path.join(FIX, "pack-1.zip"), path.join(FIX, "pack-2.zip")]);
+await waitFor(async () => (await vault.locator(".card").count()) === 8);
+const byExt = async (ext) => {
+  const names = await vault.locator(".card .card__name").allTextContents();
+  const idx = []; names.forEach((n, i) => { if (n.toLowerCase().endsWith(ext)) idx.push(i); });
+  return idx;
+};
+const selectCards = async (idx) => {
+  await vault.locator("#bulk-clear").click().catch(() => {});
+  await vault.locator(".card").nth(idx[0]).hover();
+  for (const i of idx) await vault.locator(".card__select").nth(i).click();
+};
+// two CSVs → blocked
+await selectCards(await byExt(".csv"));
+check(await waitFor(async () => (await vault.locator("#bulk-count").textContent()) === "2 selected"), "two CSV files selected");
+check(await vault.locator("#bulk-send-toolbox").isDisabled(), "bulk Send to Toolbox is disabled for two CSVs");
+// two ZIPs → blocked
+await selectCards(await byExt(".zip"));
+check(await waitFor(async () => (await vault.locator("#bulk-count").textContent()) === "2 selected"), "two ZIP files selected");
+check(await vault.locator("#bulk-send-toolbox").isDisabled(), "bulk Send to Toolbox is disabled for two ZIPs");
+// two images → still enabled (control)
+await selectCards(await byExt(".png"));
+check(await waitFor(async () => !(await vault.locator("#bulk-send-toolbox").isDisabled())), "bulk Send to Toolbox stays enabled for two images");
+await vault.locator("#bulk-clear").click().catch(() => {});
+
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");
 

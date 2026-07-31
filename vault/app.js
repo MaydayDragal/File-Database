@@ -575,7 +575,13 @@
     $("#bulk-send-li").disabled = !window.VaultBridge || pdfs === 0;
     $("#bulk-send-li").textContent = "🗄️ Send to LI" + (pdfs && pdfs !== sel.length ? " (" + pdfs + ")" : "");
     const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
-    $("#bulk-send-toolbox").disabled = !window.VaultBridge || tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it));
+    const oneTab = tabs.size === 1 && !sel.some((it) => !toolboxTabFor(it));
+    const tab = oneTab ? tabs.values().next().value : null;
+    const tbBtn = $("#bulk-send-toolbox");
+    tbBtn.disabled = !window.VaultBridge || !oneTab || !supportsToolboxBulk(tab);
+    tbBtn.title = oneTab && !supportsToolboxBulk(tab)
+      ? "The " + tab.toUpperCase() + " tool takes one file at a time — open files individually to use it. Bulk sends work for images, video and PDFs."
+      : "Send the selection to the matching Toolbox tool (files must be one kind — images, video or PDFs)";
   }
   // Apply a mutation to every selected record: read → change → reindex → write.
   async function bulkMutate(fn, done) {
@@ -657,6 +663,7 @@
       const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
       if (tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it))) { toast("Pick files of one kind — a mixed selection can't target a single tool."); return; }
       const tab = tabs.values().next().value;
+      if (!supportsToolboxBulk(tab)) { toast("The " + tab.toUpperCase() + " tool accepts one file at a time. Open files individually to use it."); return; }
       let sent = 0;
       for (const it of sel) {
         const rec = await DB.get(it.id);
@@ -1244,6 +1251,12 @@
     if (name.endsWith(".zip")) return "zip";
     return null;
   }
+  // Only the media and PDF Toolbox tools accept a multi-file batch; the CSV
+  // viewer and ZIP tool are strictly single-file, so a bulk send to them would
+  // silently drop all but one file. Bulk is gated to these tabs; individual
+  // sends from the detail drawer still work for every mapped type.
+  const TOOLBOX_BULK_TABS = new Set(["media", "pdf"]);
+  function supportsToolboxBulk(tab) { return TOOLBOX_BULK_TABS.has(tab); }
   async function sendCurrentToToolbox() {
     if (!window.VaultBridge) { toast("The Toolbox bridge isn't available."); return; }
     const rec = await DB.get(state.currentId);
