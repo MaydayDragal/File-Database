@@ -1785,10 +1785,12 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     return pdfWorkers.slice(0, Math.max(1, Math.min(n, pdfWorkers.length)));
   }
 
+  // Returns a promise that settles when this import batch has committed and the
+  // view refreshed — the bridge relies on it to acknowledge delivered files.
   function importFiles(fileList) {
     var arr = Array.prototype.slice.call(fileList).filter(function (f) { return /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); });
-    if (!arr.length) { toast("No PDF files found."); return; }
-    if (importing) { toast("An import is already running — wait for it to finish."); return; }
+    if (!arr.length) { toast("No PDF files found."); return Promise.resolve(); }
+    if (importing) { toast("An import is already running — wait for it to finish."); return Promise.reject(new Error("import busy")); }
     importing = true;
     $("impProg").style.display = "block";
     var added = 0, updated = 0, failed = 0, quota = false, cursor = 0, done = 0, aborted = false;
@@ -1843,12 +1845,12 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
       return nextInLane();
     }
 
-    Promise.all(pool.map(lane)).then(function () { return commitChain; }).then(function () {
+    return Promise.all(pool.map(lane)).then(function () { return commitChain; }).then(function () {
       tessFreeAll(); // free any memory-heavy OCR workers used for scanned files
       if (aborted) failed += arr.length - done; // files skipped after storage filled up
       importing = false;
       $("impProg").style.display = "none"; $("importOverlay").classList.remove("show");
-      refresh().then(function () {
+      return refresh().then(function () {
         var msg = "Imported " + added + " new, updated " + updated + ".";
         if (failed) msg += " ⚠ " + failed + " file(s) failed" + (quota ? " — browser storage is full" : "") + ".";
         toast(msg); scheduleAutosave();
@@ -1857,7 +1859,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
       // Never leave the app wedged with importing=true on an unexpected error.
       tessFreeAll(); importing = false;
       $("impProg").style.display = "none";
-      refresh().then(function () { toast("Import stopped — " + ((err && err.message) || "unexpected error") + "."); });
+      return refresh().then(function () { toast("Import stopped — " + ((err && err.message) || "unexpected error") + "."); throw err; });
     });
   }
 
@@ -2197,20 +2199,30 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     // files". The bridge delivers one file per nudge, but importFiles() refuses
     // to run concurrently — so buffer a burst and flush it as ONE batch (its
     // worker pool handles many PDFs at once), and never start while one runs.
+    // Each buffered file carries its bridge resolver/rejector; the whole batch's
+    // resolvers settle together once importFiles() commits, so the bridge only
+    // acknowledges (deletes) items after they're actually stored.
     var incoming = [], flushT = null;
     function flushIncoming() {
       flushT = null;
       if (!incoming.length) return;
       if (importing) { flushT = setTimeout(flushIncoming, 150); return; }
-      importFiles(incoming.splice(0));
+      var batch = incoming.splice(0);
+      importFiles(batch.map(function (x) { return x.f; })).then(function () {
+        batch.forEach(function (x) { x.resolve(); });
+      }, function (err) {
+        batch.forEach(function (x) { x.reject(err); });
+      });
     }
     window.VaultBridge.receive("li", function (item) {
-      try {
-        var f = new File([item.blob], item.name || "document.pdf", { type: item.type || "application/pdf" });
-        incoming.push(f);
-      } catch (e) { if (item.blob) incoming.push(item.blob); }
-      clearTimeout(flushT);
-      flushT = setTimeout(flushIncoming, 80);
+      return new Promise(function (resolve, reject) {
+        var f;
+        try { f = new File([item.blob], item.name || "document.pdf", { type: item.type || "application/pdf" }); }
+        catch (e) { f = item.blob; }
+        incoming.push({ f: f, resolve: resolve, reject: reject });
+        clearTimeout(flushT);
+        flushT = setTimeout(flushIncoming, 80);
+      });
     });
     // "Add to File Vault" from the document view.
     var sv = $("dSendVault");

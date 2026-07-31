@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>bridge harness</title>
+<script>
+// Short claim lease for tests (?lease=ms). Must be set before bridge.js runs.
+(function () {
+  var m = /[?&]lease=(\d+)/.exec(location.search);
+  if (m) window.__BRIDGE_LEASE_MS = parseInt(m[1], 10);
+})();
+</script>
+<script src="../../bridge.js"></script>
+</head>
+<body>
+<h1>bridge harness</h1>
+<script>
+(function () {
+  // Handler behavior, controlled live by the test via page.evaluate.
+  window.__cfg = { delay: 0, failTimes: 0, hang: false };
+  window.__processed = [];   // names this page's handler acknowledged
+  var fails = {};            // name -> times failed so far
+
+  var TARGET = "t";
+  var params = new URLSearchParams(location.search);
+
+  if (params.get("recv") === "1") {
+    window.VaultBridge.receive(TARGET, function (item) {
+      return new Promise(function (resolve, reject) {
+        if (window.__cfg.hang) return; // never settles — simulates a dead handler
+        setTimeout(function () {
+          var key = item.name;
+          if (window.__cfg.failTimes && (fails[key] || 0) < window.__cfg.failTimes) {
+            fails[key] = (fails[key] || 0) + 1;
+            reject(new Error("intentional failure"));
+            return;
+          }
+          window.__processed.push(key);
+          resolve();
+        }, window.__cfg.delay || 0);
+      });
+    });
+  }
+
+  window.__send = function (name) {
+    return window.VaultBridge.send(TARGET, { name: name, type: "text/plain", blob: new Blob(["x-" + name]), meta: {} });
+  };
+  window.__drain = function () { return window.VaultBridge.drain(TARGET); };
+  // Raw outbox contents (id, status, name, attempts) for assertions.
+  window.__peek = function () {
+    return new Promise(function (res) {
+      var r = indexedDB.open("vault-bridge");
+      r.onsuccess = function () {
+        var db = r.result;
+        if (!db.objectStoreNames.contains("outbox")) { db.close(); return res([]); }
+        var g = db.transaction("outbox", "readonly").objectStore("outbox").getAll();
+        g.onsuccess = function () { db.close(); res(g.result.map(function (x) { return { id: x.id, status: x.status, name: x.name, attempts: x.attempts }; })); };
+        g.onerror = function () { db.close(); res([]); };
+      };
+      r.onerror = function () { res([]); };
+    });
+  };
+  window.__clear = function () {
+    return new Promise(function (res) {
+      var r = indexedDB.open("vault-bridge");
+      r.onsuccess = function () {
+        var db = r.result;
+        if (!db.objectStoreNames.contains("outbox")) { db.close(); return res(); }
+        var t = db.transaction("outbox", "readwrite");
+        t.objectStore("outbox").clear();
+        t.oncomplete = function () { db.close(); res(); };
+        t.onerror = function () { db.close(); res(); };
+      };
+      r.onerror = function () { res(); };
+    });
+  };
+})();
+</script>
+</body>
+</html>
