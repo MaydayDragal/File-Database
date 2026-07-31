@@ -9,11 +9,10 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
+import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const EXE = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml", ".pdf": "application/pdf", ".txt": "text/plain" };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split("?")[0]);
@@ -82,7 +81,7 @@ fs.writeFileSync(fRich, buildPdf([
   "Gate charge total and junction to case measurements",
 ].join("\n")));
 
-const browser = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
+const browser = await launchBrowser();
 const ctx = await browser.newContext({ viewport: { width: 1150, height: 820 } });
 const page = await ctx.newPage();
 const errors = [];

@@ -6,11 +6,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
+import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const EXE = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const FIX = path.join(ROOT, "tools", "_fixtures");
 fs.mkdirSync(FIX, { recursive: true });
 
@@ -87,7 +86,7 @@ await new Promise((r) => server.listen(0, r));
 const base = `http://localhost:${server.address().port}/`;
 console.log("serving", base);
 
-const browser = await chromium.launch({ executablePath: EXE, args: ["--no-sandbox"] });
+const browser = await launchBrowser();
 const page = await (await browser.newContext()).newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));

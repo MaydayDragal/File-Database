@@ -1,13 +1,12 @@
 // Builds the portable USB package and verifies it runs the way the launcher
 // drives it: Edge/Chrome against app/index.html over file://, with the browser
 // profile (and therefore the vault data) kept in the package's data/ folder.
-import { chromium } from "playwright-core";
+import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
 import { execFileSync } from "node:child_process";
 import path from "node:path"; import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXE = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 let fail = 0; const ok = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fail++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,7 +32,7 @@ const countVaultFiles = (page) => page.evaluate(() => new Promise((res) => {
 
 fs.rmSync(DATA, { recursive: true, force: true }); fs.mkdirSync(DATA, { recursive: true }); // clean stick
 
-let ctx = await chromium.launchPersistentContext(DATA, { executablePath: EXE, args, viewport: { width: 1280, height: 820 } });
+let ctx = await launchPersistent(DATA, { args, viewport: { width: 1280, height: 820 } });
 let page = ctx.pages()[0] || await ctx.newPage();
 const errs = []; page.on("pageerror", (e) => errs.push(String(e.message)));
 await page.goto(URL, { waitUntil: "domcontentloaded" });
@@ -60,7 +59,7 @@ for (let i = 0; i < 20 && !invOffer; i++) { invOffer = invF ? await invF.locator
 ok(invOffer === 1, "USB build offers the bundled tool catalog (one-click load)");
 await sleep(1200); await ctx.close();
 
-ctx = await chromium.launchPersistentContext(DATA, { executablePath: EXE, args });
+ctx = await launchPersistent(DATA, { args });
 page = ctx.pages()[0] || await ctx.newPage();
 await page.goto(URL, { waitUntil: "domcontentloaded" });
 let persisted = -1; for (let i = 0; i < 30; i++) { persisted = await countVaultFiles(page); if (persisted >= 1) break; await sleep(200); }
