@@ -302,6 +302,35 @@ const previewState = await page.frames().find((f) => f.url().includes("/vault/")
 });
 check(previewState === "ok", `PDF preview URL still serves the document after list re-renders (${previewState})`);
 
+// ---------- 13. LI → Vault filename has exactly one .pdf suffix ----------
+// Regression: the LI "Add to File Vault" payload appended ".pdf" to rlName(),
+// which already ends in ".pdf", producing "…​.pdf.pdf" in the vault.
+await page.click("#tab-li");
+await page.waitForTimeout(500);
+fs.writeFileSync(path.join(FIX, "li-to-vault.pdf"), VALID_PDF);
+await li.locator("#fileInput").setInputFiles(path.join(FIX, "li-to-vault.pdf"));
+// Wait for the imported row, then open its detail.
+await li.locator("#rows tr[data-key]").first().waitFor({ timeout: 10000 });
+await li.locator("#rows tr[data-key]").first().click();
+await li.locator("#detailOverlay.show, #detailOverlay").first().waitFor({ timeout: 8000 });
+// Give it a real LI number + version so the generated name is meaningful.
+await li.locator("#dLi").fill("LI54.10-P-070001");
+await li.locator("#dVer").fill("1");
+await li.locator("#dTitleIn").fill("Test transfer");
+await li.locator("#dLi").dispatchEvent("input");
+const newName = (await li.locator("#dNewName").textContent()) || "";
+check(newName.endsWith(".pdf") && !newName.endsWith(".pdf.pdf"), `LI generated filename has one .pdf suffix (${newName})`);
+await li.locator("#dSendVault").click();
+const readVaultName = () => page.frames().find((f) => f.url().includes("/vault/")).evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("file-vault");
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res(null); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); const rec = g.result.find((x) => /LI54\.10-P-070001/.test(x.name)); res(rec ? rec.name : null); }; g.onerror = () => { db.close(); res(null); }; };
+  r.onerror = () => res(null);
+}));
+await waitFor(async () => !!(await readVaultName()), 15000);
+const vaultName = await readVaultName();
+check(!!vaultName && vaultName.endsWith(".pdf") && !vaultName.endsWith(".pdf.pdf"), `LI→Vault record has exactly one .pdf suffix (${vaultName})`);
+
 await page.screenshot({ path: path.join(ROOT, "tools", "shot-integration.png") });
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|invalid|structure|xref|tesseract|fetch/i.test(e));
