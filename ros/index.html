@@ -11,15 +11,15 @@
     --brand:#4f46e5; --brand-strong:#4338ca;
     --bg:#f6f7fb; --bg-elev:#ffffff; --bg-sunken:#eef0f6;
     --text:#1e2333; --text-dim:#6b7280; --border:#e2e5ee; --border-strong:#cfd4e2;
-    --danger:#dc2626; --shadow:0 6px 24px rgba(20,24,45,.10);
+    --danger:#dc2626; --warn:#b45309; --warn-bg:#fef3c7; --shadow:0 6px 24px rgba(20,24,45,.10);
   }
   @media (prefers-color-scheme: dark){ :root:not([data-theme]){
     --bg:#0f1117; --bg-elev:#171a23; --bg-sunken:#1e222d; --text:#e6e8ef; --text-dim:#9aa1b2;
-    --border:#272b38; --border-strong:#333949; --shadow:0 6px 24px rgba(0,0,0,.5);
+    --border:#272b38; --border-strong:#333949; --warn:#fbbf24; --warn-bg:#3a2e10; --shadow:0 6px 24px rgba(0,0,0,.5);
   }}
   :root[data-theme="dark"]{
     --bg:#0f1117; --bg-elev:#171a23; --bg-sunken:#1e222d; --text:#e6e8ef; --text-dim:#9aa1b2;
-    --border:#272b38; --border-strong:#333949; --shadow:0 6px 24px rgba(0,0,0,.5);
+    --border:#272b38; --border-strong:#333949; --warn:#fbbf24; --warn-bg:#3a2e10; --shadow:0 6px 24px rgba(0,0,0,.5);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -46,7 +46,7 @@
   .icon-btn{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--border);background:var(--bg-sunken);border-radius:8px;cursor:pointer;font-size:17px}
   .icon-btn:hover{border-color:var(--brand)}
   .main{min-width:0;min-height:0;overflow:auto}
-  .main__inner{max-width:840px;margin:0 auto;padding:22px}
+  .main__inner{max-width:860px;margin:0 auto;padding:22px}
   .empty-main{height:100%;display:grid;place-items:center;text-align:center;color:var(--text-dim);padding:24px}
   .empty-main h2{color:var(--text);margin:0 0 6px}
   .fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
@@ -57,11 +57,17 @@
   .field input:focus{outline:none;border-color:var(--brand)}
   #ro-no{font-weight:800;font-size:18px}
   .card{background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:18px}
-  .card h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+  .card h3{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);display:flex;align-items:center;gap:8px}
   .card h3 .grow{flex:1}
-  #notes{width:100%;min-height:230px;resize:vertical;border:1px solid var(--border);background:var(--bg);border-radius:10px;padding:14px;font-size:14.5px;line-height:1.6;outline:none}
-  #notes:focus{border-color:var(--brand)}
   .save-note{font-size:12px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0}
+  /* Story lines */
+  .line{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start;margin-bottom:10px}
+  .line__label{font-weight:800;font-size:14px;padding-top:10px;color:var(--brand)}
+  .line textarea{width:100%;min-height:64px;resize:vertical;border:1px solid var(--border);background:var(--bg);border-radius:10px;padding:10px 12px;font-size:14.5px;line-height:1.55;outline:none}
+  .line textarea:focus{border-color:var(--brand)}
+  .line__del{align-self:start;margin-top:6px}
+  .lines-empty{color:var(--text-dim);font-size:12.5px;padding:2px 2px 10px}
+  /* Files */
   .dropz{border:1.5px dashed var(--border-strong);border-radius:10px;padding:16px;text-align:center;color:var(--text-dim);font-size:13px;cursor:pointer;transition:border-color .12s,background .12s}
   .dropz:hover,.dropz.drag{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 7%,transparent)}
   .files{margin-top:12px;display:flex;flex-direction:column;gap:5px}
@@ -69,18 +75,40 @@
   .file:hover{border-color:var(--brand)}
   .file__glyph{font-size:20px;width:24px;text-align:center}
   .file__name{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .file__meta{font-size:12px;color:var(--text-dim);white-space:nowrap}
+  .file__meta{font-size:12px;color:var(--text-dim);white-space:nowrap;display:flex;gap:8px;align-items:center}
+  .vin-badge{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--bg-sunken);color:var(--text-dim)}
+  .vin-badge.match{background:color-mix(in srgb,var(--brand) 16%,transparent);color:var(--brand)}
   .files-empty{color:var(--text-dim);font-size:12.5px;padding:10px 2px}
-  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60;box-shadow:var(--shadow)}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;box-shadow:var(--shadow)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .banner{background:color-mix(in srgb,var(--brand) 8%,transparent);border:1px solid color-mix(in srgb,var(--brand) 30%,transparent);border-radius:10px;padding:10px 13px;font-size:13px;margin-bottom:16px;color:var(--text-dim)}
   .side-toggle{display:none}
+  /* Modal */
+  .scrim{position:fixed;inset:0;background:rgba(10,12,20,.5);display:none;z-index:60}
+  .scrim.show{display:block}
+  .modal{position:fixed;z-index:61;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;max-width:94vw;max-height:86vh;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow);display:none;flex-direction:column}
+  .modal.show{display:flex}
+  .modal__head{display:flex;align-items:center;gap:8px;padding:15px 16px;border-bottom:1px solid var(--border)}
+  .modal__head h2{margin:0;font-size:16px;flex:1}
+  .modal__body{overflow:auto;padding:14px 16px;flex:1}
+  .modal__foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border)}
+  .search{width:100%;border:1px solid var(--border);background:var(--bg);border-radius:9px;padding:9px 11px;margin-bottom:10px}
+  .pick{display:flex;align-items:center;gap:10px;padding:8px 9px;border:1px solid var(--border);border-radius:9px;margin-bottom:5px;cursor:pointer}
+  .pick:hover{border-color:var(--brand)}
+  .pick input{width:17px;height:17px}
+  .pick__name{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pick__meta{font-size:11.5px;color:var(--text-dim);white-space:nowrap;display:flex;gap:7px;align-items:center}
+  .pick-empty{color:var(--text-dim);font-size:12.5px;padding:14px;text-align:center}
+  .mm-note{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+  .mm-file{display:flex;gap:8px;justify-content:space-between;padding:6px 2px;font-size:13px;border-bottom:1px solid var(--border)}
+  .mm-file b{color:var(--warn)}
   @media (max-width:760px){
     .app{grid-template-columns:1fr}
     .side{position:fixed;z-index:30;width:270px;height:100%;transform:translateX(-100%);transition:transform .18s}
     .side.show{transform:none}
     .fields{grid-template-columns:1fr}
     .side-toggle{display:grid}
+    .line{grid-template-columns:52px 1fr auto}
   }
 </style>
 </head>
@@ -108,18 +136,21 @@
           <input id="ro-vehicle" placeholder="e.g. 2021 GLC 300" autocomplete="off" />
         </div>
         <div class="field wide">
-          <label for="ro-vin">VIN (optional — tags this RO's files to the vehicle)</label>
+          <label for="ro-vin">VIN (files added here auto-fill this VIN when they don't have one)</label>
           <input id="ro-vin" placeholder="e.g. W1N0G8DB0MV000000" autocomplete="off" spellcheck="false" autocapitalize="characters" />
         </div>
       </div>
 
       <div class="card">
-        <h3>📝 Notes <span class="grow"></span><span class="save-note" id="save-note"></span></h3>
-        <textarea id="notes" spellcheck="true" placeholder="Write the story of this repair order — complaint, cause, correction, parts, times, anything you want to remember…"></textarea>
+        <h3>📝 Stories / repairs <span class="grow"></span><span class="save-note" id="save-note"></span>
+          <button class="btn btn--sm" id="add-line-btn">＋ Add line</button>
+        </h3>
+        <div id="lines"></div>
       </div>
 
       <div class="card">
         <h3>📎 Files <span class="grow"></span>
+          <button class="btn btn--sm" id="import-btn" title="Import files that are already in the Vault">⬇ Import from Vault</button>
           <button class="btn btn--sm" id="open-vault-btn" title="Open these files in the File Vault">Open in Vault ↗</button>
           <button class="btn btn--sm btn--primary" id="add-btn">＋ Add files</button>
         </h3>
@@ -140,6 +171,36 @@
     </div>
   </main>
 </div>
+
+<!-- Import-from-Vault picker -->
+<div class="scrim" id="pick-scrim"></div>
+<div class="modal" id="pick-modal" role="dialog" aria-label="Import from Vault">
+  <div class="modal__head"><h2>Import files from the Vault</h2><button class="icon-btn" id="pick-close">✕</button></div>
+  <div class="modal__body">
+    <input class="search" id="pick-search" placeholder="Search files by name, VIN or collection…" autocomplete="off" />
+    <div id="pick-list"></div>
+  </div>
+  <div class="modal__foot">
+    <span id="pick-count" style="margin-right:auto;color:var(--text-dim);font-size:12.5px"></span>
+    <button class="btn btn--sm" id="pick-cancel">Cancel</button>
+    <button class="btn btn--sm btn--primary" id="pick-import">Import selected</button>
+  </div>
+</div>
+
+<!-- VIN mismatch prompt -->
+<div class="scrim" id="mm-scrim"></div>
+<div class="modal" id="mm-modal" role="dialog" aria-label="VIN mismatch">
+  <div class="modal__head"><h2>⚠ VIN doesn't match this RO</h2></div>
+  <div class="modal__body">
+    <div class="mm-note" id="mm-note"></div>
+    <div id="mm-list"></div>
+  </div>
+  <div class="modal__foot">
+    <button class="btn btn--sm" id="mm-ignore">Ignore these</button>
+    <button class="btn btn--sm btn--primary" id="mm-add">Add anyway</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -149,7 +210,7 @@
   var embedded = false; try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
 
   var toastT;
-  function toast(m) { var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2200); }
+  function toast(m) { var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600); }
 
   // ---------- RO storage ----------
   var DB_NAME = "repair-orders", STORE = "ros", _db = null;
@@ -168,21 +229,18 @@
   function roDel(id) { return open().then(function (db) { return reqP(db.transaction(STORE, "readwrite").objectStore(STORE).delete(id)); }); }
   function uid() { return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-  // ---------- Vault (read-only peek for this RO's files) ----------
-  function vaultFiles(collection) {
+  // ---------- Vault (read-only peek) ----------
+  function readVault() {
     return new Promise(function (res) {
       var r = indexedDB.open("file-vault");
-      // Never create/upgrade the vault DB from here — bail if it doesn't exist yet.
-      r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} };
+      r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} }; // never create/upgrade from here
       r.onsuccess = function () {
         var db = r.result;
         if (!db.objectStoreNames.contains("files")) { db.close(); return res([]); }
         var g = db.transaction("files", "readonly").objectStore("files").getAll();
         g.onsuccess = function () {
           db.close();
-          res(g.result.filter(function (x) { return x.collection === collection; })
-            .map(function (x) { return { id: x.id, name: x.name, type: x.type, kind: x.kind, size: x.size }; })
-            .sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); }));
+          res(g.result.map(function (x) { return { id: x.id, name: x.name, type: x.type, kind: x.kind, size: x.size, vins: x.vins || [], collection: x.collection || "" }; }));
         };
         g.onerror = function () { db.close(); res([]); };
       };
@@ -196,6 +254,7 @@
   function desiredCollection(rec) { var n = (rec.ro || "").trim(); return n ? ("RO " + n) : ("RO-" + rec.id.slice(0, 7)); }
   function fmtBytes(b) { if (!b) return "0 B"; var u = ["B", "KB", "MB", "GB"], i = Math.floor(Math.log(b) / Math.log(1024)); i = Math.min(i, u.length - 1); return (b / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + u[i]; }
   var GLYPH = { image: "🖼️", video: "🎬", audio: "🎵", pdf: "📕", document: "📄", spreadsheet: "📊", presentation: "📈", text: "📝", archive: "🗜️", other: "📎" };
+  function letter(i) { return i < 26 ? String.fromCharCode(65 + i) : "L" + (i + 1); }
 
   // ---------- rendering ----------
   function renderList() {
@@ -219,24 +278,43 @@
     $("#ro-no").value = current.ro || "";
     $("#ro-vehicle").value = current.vehicle || "";
     $("#ro-vin").value = current.vin || "";
-    $("#notes").value = current.notes || "";
     $("#save-note").textContent = "";
     $("#add-banner").hidden = embedded;
+    renderLines();
     refreshFiles();
+  }
+  function renderLines() {
+    var box = $("#lines"); box.innerHTML = "";
+    var lines = current.lines || [];
+    if (!lines.length) { box.innerHTML = '<div class="lines-empty">No lines yet. Click ＋ Add line to start the story (e.g. “Customer states car makes a noise”).</div>'; return; }
+    lines.forEach(function (ln, i) {
+      var row = document.createElement("div"); row.className = "line";
+      var lab = document.createElement("div"); lab.className = "line__label"; lab.textContent = "Line " + letter(i);
+      var ta = document.createElement("textarea"); ta.value = ln.text || ""; ta.spellcheck = true;
+      ta.placeholder = "What happened on line " + letter(i) + "… (complaint / cause / correction)";
+      ta.addEventListener("input", function () { ln.text = ta.value; scheduleSave(); });
+      var del = document.createElement("button"); del.className = "btn btn--sm btn--danger line__del"; del.textContent = "✕"; del.title = "Remove this line";
+      del.onclick = function () { current.lines.splice(i, 1); renderLines(); scheduleSave(); };
+      row.append(lab, ta, del);
+      box.append(row);
+    });
   }
   function refreshFiles() {
     if (!current) return;
-    var coll = current.collection;
-    vaultFiles(coll).then(function (list) {
-      if (!current || current.collection !== coll) return; // switched away
+    var coll = current.collection, roVin = current.vin;
+    readVault().then(function (all) {
+      if (!current || current.collection !== coll) return;
+      var list = all.filter(function (f) { return f.collection === coll; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
       var box = $("#files"); box.innerHTML = "";
-      if (!list.length) { box.innerHTML = '<div class="files-empty">No files yet. Add the RO paperwork, photos, scans…</div>'; return; }
+      if (!list.length) { box.innerHTML = '<div class="files-empty">No files yet. Add the RO paperwork, photos, scans… or import files already in the Vault.</div>'; return; }
       list.forEach(function (f) {
         var row = document.createElement("div"); row.className = "file";
         var g = document.createElement("span"); g.className = "file__glyph"; g.textContent = GLYPH[f.kind] || GLYPH.other;
         var n = document.createElement("span"); n.className = "file__name"; n.textContent = f.name; n.title = f.name;
-        var m = document.createElement("span"); m.className = "file__meta"; m.textContent = fmtBytes(f.size);
-        row.append(g, n, m);
+        var meta = document.createElement("span"); meta.className = "file__meta";
+        if (f.vins && f.vins.length) { var vb = document.createElement("span"); vb.className = "vin-badge" + (roVin && f.vins.indexOf(roVin) !== -1 ? " match" : ""); vb.textContent = "🚗 " + f.vins[0].slice(-6); vb.title = f.vins.join(", "); meta.append(vb); }
+        var sz = document.createElement("span"); sz.textContent = fmtBytes(f.size); meta.append(sz);
+        row.append(g, n, meta);
         row.onclick = openInVault;
         box.append(row);
       });
@@ -245,7 +323,7 @@
 
   // ---------- CRUD ----------
   function newRO() {
-    var rec = { id: uid(), ro: "", vehicle: "", vin: "", notes: "", createdAt: Date.now(), updatedAt: Date.now() };
+    var rec = { id: uid(), ro: "", vehicle: "", vin: "", lines: [{ id: uid(), text: "" }], createdAt: Date.now(), updatedAt: Date.now() };
     rec.collection = desiredCollection(rec);
     current = rec; ros.push(rec); roPut(rec);
     renderList(); paint(); $("#ro-no").focus();
@@ -258,15 +336,9 @@
     current.ro = $("#ro-no").value;
     current.vehicle = $("#ro-vehicle").value;
     current.vin = $("#ro-vin").value.trim().toUpperCase().replace(/\s+/g, "");
-    current.notes = $("#notes").value;
     current.updatedAt = Date.now();
     var newColl = desiredCollection(current);
-    if (newColl !== oldColl) {
-      current.collection = newColl;
-      // Keep the RO's files linked: rename their Vault collection in the
-      // background (no tab switch). Only matters once files exist.
-      relay({ type: "vault-rename-collection", from: oldColl, to: newColl });
-    }
+    if (newColl !== oldColl) { current.collection = newColl; relay({ type: "vault-rename-collection", from: oldColl, to: newColl }); }
     roPut(current).then(function () { $("#save-note").textContent = "Saved"; setTimeout(function () { if ($("#save-note").textContent === "Saved") $("#save-note").textContent = ""; }, 1400); renderList(); });
   }
   function deleteRO() {
@@ -280,18 +352,78 @@
     });
   }
 
-  // ---------- files (via the shell) ----------
+  // ---------- VIN reconcile shared by upload + import ----------
+  function classify(files, roVin) {
+    var noVin = [], match = [], mismatch = [];
+    files.forEach(function (f) {
+      var v = f.vins || [];
+      if (!v.length) noVin.push(f);
+      else if (roVin && v.indexOf(roVin) !== -1) match.push(f);
+      else if (roVin) mismatch.push(f);
+      else match.push(f); // no RO VIN set → nothing to reconcile
+    });
+    return { noVin: noVin, match: match, mismatch: mismatch };
+  }
+  // uploaded=true → files are already in the RO collection (eject to remove);
+  // uploaded=false (import) → files aren't in the collection yet (skip to omit).
+  function reconcile(files, uploaded) {
+    if (!files.length) { refreshFiles(); return Promise.resolve(); }
+    var roVin = current.vin;
+    var c = classify(files, roVin);
+    var keep = c.noVin.concat(c.match);
+    var stampVin = roVin ? c.noVin.map(function (f) { return f.id; }) : [];
+    var doApply = function (extraKeep, eject) {
+      var add = keep.concat(extraKeep || []).map(function (f) { return f.id; });
+      var remove = (eject || []).map(function (f) { return f.id; });
+      relay({ type: "vault-ro-apply", coll: current.collection, vin: roVin, add: add, stampVin: stampVin, remove: remove });
+      var msgs = [];
+      if (c.noVin.length && roVin) msgs.push("stamped VIN on " + c.noVin.length);
+      if (add.length) msgs.push(add.length + " added");
+      if (remove.length) msgs.push(remove.length + " ignored");
+      if (msgs.length) toast("Files updated — " + msgs.join(" · ") + ".");
+      [400, 1200, 2600].forEach(function (d) { setTimeout(refreshFiles, d); });
+    };
+    if (c.mismatch.length && roVin) {
+      return askMismatch(c.mismatch, roVin).then(function (decision) {
+        if (decision === "add") doApply(c.mismatch, []);
+        else doApply([], uploaded ? c.mismatch : []); // ignore: eject uploads, omit imports
+      });
+    }
+    doApply(c.mismatch, []); // no RO VIN, or nothing mismatched
+    return Promise.resolve();
+  }
+
+  // ---------- files: upload via the shell ----------
   function relay(payload) { if (!embedded) return; try { window.parent.postMessage({ type: "shell-relay", app: "vault", payload: payload }, "*"); } catch (e) {} }
   function addFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
     if (!files.length || !current) return;
     if (!embedded) { toast("Open Repair Orders in the File Database app to attach files."); return; }
-    // Ensure this RO has a stable collection saved before files reference it.
     if (!current.collection) { current.collection = desiredCollection(current); roPut(current); }
-    try { window.parent.postMessage({ type: "shell-add-files", files: files, collection: current.collection, vin: current.vin || "", stay: true }, "*"); } catch (e) {}
-    toast("Saving " + files.length + " file" + (files.length === 1 ? "" : "s") + " to this RO…");
-    // Files land in the Vault after the bridge delivers — poll for them.
-    [700, 1700, 3600].forEach(function (d) { setTimeout(refreshFiles, d); });
+    var coll = current.collection, wantNames = files.map(function (f) { return f.name; });
+    readVault().then(function (before) {
+      var beforeIds = {}; before.forEach(function (f) { if (f.collection === coll) beforeIds[f.id] = 1; });
+      // Save into the Vault under this RO (no forced VIN — reconcile decides).
+      try { window.parent.postMessage({ type: "shell-add-files", files: files, collection: coll, stay: true }, "*"); } catch (e) {}
+      toast("Saving " + files.length + " file" + (files.length === 1 ? "" : "s") + " to this RO…");
+      // Wait for the new files to land (and a beat for the Vault's no-OCR VIN
+      // read), then reconcile VINs.
+      var t0 = Date.now();
+      (function poll() {
+        readVault().then(function (now) {
+          var fresh = now.filter(function (f) { return f.collection === coll && !beforeIds[f.id]; });
+          var done = fresh.length >= files.length || Date.now() - t0 > 8000;
+          if (!done) { refreshFiles(); setTimeout(poll, 500); return; }
+          refreshFiles();
+          setTimeout(function () {
+            readVault().then(function (settled) {
+              var got = settled.filter(function (f) { return f.collection === coll && !beforeIds[f.id]; });
+              reconcile(got, true);
+            });
+          }, 900); // let the no-OCR VIN detect finish
+        });
+      })();
+    });
   }
   function openInVault() {
     if (!current) return;
@@ -299,23 +431,95 @@
     try { window.parent.postMessage({ type: "shell-nav", app: "vault", payload: { type: "vault-filter", filter: "collection:" + current.collection } }, "*"); } catch (e) {}
   }
 
+  // ---------- import from Vault (existing files) ----------
+  var pickState = { all: [], selected: {} };
+  function openPicker() {
+    if (!current) return;
+    if (!embedded) { toast("Open in the File Database app to import Vault files."); return; }
+    pickState.selected = {};
+    readVault().then(function (all) {
+      // Offer files NOT already in this RO.
+      pickState.all = all.filter(function (f) { return f.collection !== current.collection; });
+      $("#pick-search").value = "";
+      renderPickList("");
+      $("#pick-scrim").classList.add("show"); $("#pick-modal").classList.add("show");
+      $("#pick-search").focus();
+    });
+  }
+  function closePicker() { $("#pick-scrim").classList.remove("show"); $("#pick-modal").classList.remove("show"); }
+  function renderPickList(q) {
+    q = (q || "").toLowerCase();
+    var box = $("#pick-list"); box.innerHTML = "";
+    var list = pickState.all.filter(function (f) {
+      if (!q) return true;
+      return (f.name || "").toLowerCase().indexOf(q) !== -1 || (f.collection || "").toLowerCase().indexOf(q) !== -1 || (f.vins || []).join(" ").toLowerCase().indexOf(q) !== -1;
+    });
+    if (!list.length) { box.innerHTML = '<div class="pick-empty">No matching files in the Vault.</div>'; updatePickCount(); return; }
+    list.slice(0, 400).forEach(function (f) {
+      var row = document.createElement("label"); row.className = "pick";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!pickState.selected[f.id];
+      cb.onchange = function () { if (cb.checked) pickState.selected[f.id] = 1; else delete pickState.selected[f.id]; updatePickCount(); };
+      var g = document.createElement("span"); g.textContent = GLYPH[f.kind] || GLYPH.other;
+      var n = document.createElement("span"); n.className = "pick__name"; n.textContent = f.name; n.title = f.name;
+      var meta = document.createElement("span"); meta.className = "pick__meta";
+      if (f.collection) { var cbg = document.createElement("span"); cbg.className = "vin-badge"; cbg.textContent = f.collection; meta.append(cbg); }
+      if (f.vins && f.vins.length) { var vb = document.createElement("span"); vb.className = "vin-badge"; vb.textContent = "🚗 " + f.vins[0].slice(-6); vb.title = f.vins.join(", "); meta.append(vb); }
+      var sz = document.createElement("span"); sz.textContent = fmtBytes(f.size); meta.append(sz);
+      row.append(cb, g, n, meta);
+      box.append(row);
+    });
+    updatePickCount();
+  }
+  function updatePickCount() { var n = Object.keys(pickState.selected).length; $("#pick-count").textContent = n ? n + " selected" : ""; }
+  function doImport() {
+    var ids = Object.keys(pickState.selected);
+    if (!ids.length) { toast("Pick at least one file."); return; }
+    var idSet = {}; ids.forEach(function (i) { idSet[i] = 1; });
+    var files = pickState.all.filter(function (f) { return idSet[f.id]; });
+    closePicker();
+    reconcile(files, false);
+  }
+
+  // ---------- VIN mismatch modal ----------
+  function askMismatch(files, roVin) {
+    return new Promise(function (resolve) {
+      $("#mm-note").innerHTML = "This RO's VIN is <b>" + roVin + "</b>, but " + files.length + " file" + (files.length === 1 ? " has a" : "s have a") + " different VIN. Add them to this RO anyway, or ignore them?";
+      var box = $("#mm-list"); box.innerHTML = "";
+      files.forEach(function (f) {
+        var row = document.createElement("div"); row.className = "mm-file";
+        var n = document.createElement("span"); n.textContent = f.name; n.style.overflow = "hidden"; n.style.textOverflow = "ellipsis"; n.style.whiteSpace = "nowrap";
+        var v = document.createElement("b"); v.textContent = (f.vins || [])[0] || "?";
+        row.append(n, v); box.append(row);
+      });
+      $("#mm-scrim").classList.add("show"); $("#mm-modal").classList.add("show");
+      function done(dec) { $("#mm-scrim").classList.remove("show"); $("#mm-modal").classList.remove("show"); $("#mm-add").onclick = null; $("#mm-ignore").onclick = null; resolve(dec); }
+      $("#mm-add").onclick = function () { done("add"); };
+      $("#mm-ignore").onclick = function () { done("ignore"); };
+    });
+  }
+
   // ---------- wire ----------
   function wire() {
     $("#new-btn").onclick = newRO;
     $("#side-toggle").onclick = function () { $("#side").classList.toggle("show"); };
-    ["#ro-no", "#ro-vehicle", "#ro-vin", "#notes"].forEach(function (sel) { $(sel).addEventListener("input", scheduleSave); });
+    ["#ro-no", "#ro-vehicle", "#ro-vin"].forEach(function (sel) { $(sel).addEventListener("input", scheduleSave); });
+    $("#add-line-btn").onclick = function () { if (!current) return; (current.lines = current.lines || []).push({ id: uid(), text: "" }); renderLines(); scheduleSave(); var tas = document.querySelectorAll("#lines textarea"); if (tas.length) tas[tas.length - 1].focus(); };
     $("#delete-btn").onclick = deleteRO;
     $("#add-btn").onclick = function () { $("#file-input").click(); };
     $("#file-input").addEventListener("change", function (e) { addFiles(e.target.files); e.target.value = ""; });
     $("#open-vault-btn").onclick = openInVault;
+    $("#import-btn").onclick = openPicker;
+    $("#pick-close").onclick = closePicker; $("#pick-cancel").onclick = closePicker; $("#pick-scrim").onclick = closePicker;
+    $("#pick-import").onclick = doImport;
+    $("#pick-search").addEventListener("input", function () { renderPickList($("#pick-search").value); });
     var dz = $("#dropz");
     dz.onclick = function () { $("#file-input").click(); };
     ["dragenter", "dragover"].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); }); });
     ["dragleave", "drop"].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); }); });
     dz.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
-    document.addEventListener("focusin", function (e) { var t = e.target; if (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text")) t.spellcheck = t.id === "notes"; });
-    // refresh a file list that may have changed while we were away
+    document.addEventListener("focusin", function (e) { var t = e.target; if (t.tagName === "TEXTAREA") t.spellcheck = true; });
     window.addEventListener("focus", refreshFiles);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePicker(); } });
   }
 
   // ---------- platform embedding ----------
@@ -336,10 +540,14 @@
     wire();
     roAll().then(function (recs) {
       ros = recs || [];
-      // migrate any older record missing a collection
-      ros.forEach(function (r) { if (!r.collection) { r.collection = desiredCollection(r); roPut(r); } });
+      ros.forEach(function (r) {
+        if (!r.collection) r.collection = desiredCollection(r);
+        // migrate the old single notes field into the first story line
+        if (!r.lines) r.lines = (r.notes && r.notes.trim()) ? [{ id: uid(), text: r.notes }] : [];
+        roPut(r);
+      });
       renderList();
-      if (ros.length) { openRO(ros.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0].id); }
+      if (ros.length) openRO(ros.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0].id);
       else { current = null; paint(); }
     }).catch(function () { current = null; paint(); });
   }

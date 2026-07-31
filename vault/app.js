@@ -22,7 +22,7 @@
   let onShellNav = (d) => { shellNavQueue.push(d); };
   window.addEventListener("message", (e) => {
     const d = e.data || {};
-    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection") onShellNav(d);
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection" || d.type === "vault-ro-apply") onShellNav(d);
   });
 
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
@@ -2308,6 +2308,38 @@
     if (moved) updateStorage();
   }
 
+  // Repair-Orders file wiring (driven by the ROs tab): assign files to an RO's
+  // collection, stamp the RO's VIN onto files that have none, or unassign
+  // (remove from the RO) — all DB-safely through DB.put so searchText stays
+  // correct. add/stampVin/remove are arrays of file ids.
+  async function roApply(d) {
+    const coll = String(d.coll || "");
+    const vin = d.vin ? String(d.vin).toUpperCase() : "";
+    const addSet = new Set(d.add || []);
+    const stampSet = new Set(d.stampVin || []);
+    const remSet = new Set(d.remove || []);
+    const ids = new Set([].concat(d.add || [], d.stampVin || [], d.remove || []));
+    let changed = 0;
+    for (const id of ids) {
+      const rec = await DB.get(id);
+      if (!rec) continue;
+      if (remSet.has(id)) rec.collection = "";
+      else if (addSet.has(id)) rec.collection = coll;
+      if (stampSet.has(id) && vin) {
+        rec.vins = Array.from(new Set([vin].concat(rec.vins || [])));
+        rec.vinScan = Date.now();
+      }
+      rec.updatedAt = Date.now();
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      const i = items.findIndex((x) => x.id === id);
+      if (i !== -1) items[i] = stripBlob(rec);
+      changed++;
+    }
+    if (coll && (d.add || []).length && !extraCollections.includes(coll)) { extraCollections.push(coll); DB.setMeta("collections", extraCollections); }
+    if (changed) { render(); updateStorage(); }
+  }
+
   async function requestPersistence() {
     if (navigator.storage && navigator.storage.persist) {
       const granted = await navigator.storage.persist();
@@ -2395,6 +2427,7 @@
       } else if (d.type === "vault-restore" && d.file) importVault(d.file);
       else if (d.type === "platform-backup") exportVault();
       else if (d.type === "vault-rename-collection" && d.from != null && d.to != null) renameCollection(String(d.from), String(d.to));
+      else if (d.type === "vault-ro-apply") roApply(d);
     };
     shellNavQueue.splice(0).forEach(onShellNav);
 

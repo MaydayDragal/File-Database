@@ -141,7 +141,7 @@ Platform Shell
 │   ├── {shell-switch, n} / {shell-quickopen} → keyboard forwarded from inside iframes
 │   ├── Shell→app contracts: li-open/li-search/li-filter/li-restore/platform-backup ·
 │   │   inventory-filter/inventory-open/inventory-search/inventory-import/platform-backup ·
-│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/platform-backup (apps queue nav that
+│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/vault-ro-apply/platform-backup (apps queue nav that
 │   │   arrives before their DB boot finishes, then replay it)
 │   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
 ├── PWA (the installable "one app")
@@ -451,35 +451,53 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 ## 5b. Repair Orders — `/ros/` (single self-contained `index.html`)
 
 One place per repair order: its files (stored in the **Vault** under a per-RO
-collection, so they get all the Vault's features) plus a basic notes box for
-the job's story. Works alongside the Vault; the RO tab is a focused view + notes.
+collection, so they get all the Vault's features) plus the job's story, written
+as multiple lines. Works alongside the Vault; the RO tab is a focused view.
 
 ```
 Repair Orders
 ├── Repair orders (IndexedDB "repair-orders" → store "ros"
-│   │   {id, ro, vehicle, vin, notes, collection, createdAt, updatedAt})
+│   │   {id, ro, vehicle, vin, lines:[{id,text}], collection, createdAt, updatedAt})
 │   ├── Sidebar list (RO number · vehicle), newest-first; ＋ New; click to open
-│   ├── Fields: RO number · Vehicle (free text) · VIN (optional)
-│   ├── 📝 Notes — a plain <textarea> (the "story"); debounced autosave (~400ms)
+│   ├── Fields: RO number · Vehicle (free text) · VIN
+│   ├── 📝 Stories / repairs — MULTIPLE lines per RO (Line A, Line B, …), each a
+│   │   plain <textarea>; ＋ Add line / ✕ remove; positional A/B/C labels;
+│   │   debounced autosave (migrates an older single notes field into Line A)
 │   └── Delete (confirmed) — removes the RO; its Vault files are left in place
 ├── Files (live in the Vault, collection = "RO <number>")
-│   ├── Add: ＋ Add files / drop zone → postMessage {shell-add-files, collection,
-│   │   vin, stay:true} → shell files them into the Vault WITHOUT switching tabs
-│   │   (materialized + verified + VIN-tagged by the Vault's normal intake)
+│   ├── Add (upload): ＋ Add files / drop zone → {shell-add-files, collection,
+│   │   stay:true} → shell files them into the Vault WITHOUT switching tabs
+│   │   (materialized + verified by the Vault's normal intake)
+│   ├── Import from Vault: a picker of existing Vault files (search by name / VIN /
+│   │   collection, multi-select) → assigns them to this RO's collection
+│   ├── VIN reconcile on every add/import (see 5b.1 below)
 │   ├── List: read-only peek of IndexedDB "file-vault" filtered by the collection
-│   │   (upgrade-abort guard — never creates/mutates the Vault DB); re-polled after
+│   │   (upgrade-abort guard — never creates/mutates the Vault DB); shows a
+│   │   per-file VIN badge (highlighted when it matches the RO); re-polled after
 │   │   an add and on window focus
 │   ├── Open in Vault ↗ → {shell-nav vault, payload vault-filter collection:…}
 │   └── Rename safety: editing the RO number relays {vault-rename-collection
 │       from→to} so the RO's Vault files move with it (none left behind)
 └── Platform integration
     ├── Deep link #ros; embedded theme; Alt+1–9 & Ctrl+K forwarded; shell-nav {id}
-    ├── Standalone at /ros/ (notes work; file add/open need the shell)
+    ├── Standalone at /ros/ (notes work; file add/import/open need the shell)
     └── No own SW/manifest — the SHELL's service worker precaches this page
 ```
 
-**Tied into:** Vault (files stored there under the RO collection; rename kept in
-sync), shell (shell-add-files{stay}, shell-relay, shell-nav, theme, keyboard).
+**5b.1 VIN reconciliation** (applied to every batch added or imported, via the
+Vault's `vault-ro-apply {coll, vin, add[], stampVin[], remove[]}` handler —
+DB-safe, rebuilds searchText):
+- a file with **no VIN** → the RO's VIN is stamped onto it (auto-fill)
+- a file whose VIN **matches** the RO → added as-is
+- a file whose VIN **differs** from the RO → a modal asks **Add anyway**
+  (added, its own VIN kept — never overwritten) or **Ignore** (uploads are
+  ejected from the RO back to uncategorized; imports are simply not assigned)
+- uploads reconcile after a short settle so the Vault's no-OCR VIN read of the
+  file's own contents has run first
+
+**Tied into:** Vault (files stored there under the RO collection; VIN reconcile
+and rename kept in sync via vault-ro-apply / vault-rename-collection), shell
+(shell-add-files{stay}, shell-relay, shell-nav, theme, keyboard).
 
 ---
 
