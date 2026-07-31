@@ -292,12 +292,11 @@
   async function verifyStored(record) {
     try {
       const back = await DB.get(record.id);
-      if (!back || !back.blob || back.blob.size !== record.blob.size) return false;
-      const a = new Uint8Array(await record.blob.slice(0, 8).arrayBuffer());
-      const b = new Uint8Array(await back.blob.slice(0, 8).arrayBuffer());
-      if (a.length !== b.length) return false;
-      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-      return true;
+      if (!back || !back.blob) return false;
+      // Full-byte comparison (chunked): a first-few-bytes check missed
+      // same-size mid-file corruption, exactly the failure mode this machine
+      // has shown. equalBlobs also handles the size check.
+      return await window.FileVaultIntegrity.equalBlobs(record.blob, back.blob);
     } catch (e) { return false; }
   }
   async function addFiles(fileList) {
@@ -1403,7 +1402,7 @@
       toast("Reading backup…");
       const head = new DataView(await file.slice(0, 12).arrayBuffer());
       const isBinary = head.byteLength >= 12 && FVLT_MAGIC.every((b, i) => head.getUint8(i) === b);
-      if (isBinary) return importBinary(file, head);
+      if (isBinary) return importBinary(file);
       return importLegacyJson(file); // older base64 JSON backups
     } catch (e) {
       console.error(e);
@@ -1411,23 +1410,28 @@
     }
   }
 
-  async function importBinary(file, head) {
-    const metaLen = head.getUint32(8, true);
-    const data = JSON.parse(await file.slice(12, 12 + metaLen).text());
-    if (!data || data.format !== "file-vault" || !Array.isArray(data.files)) {
-      toast("That doesn't look like a File Vault backup."); return;
+  async function importBinary(file) {
+    // Validate the WHOLE file before touching the database: a truncated,
+    // overrun, size-mismatched or trailing-garbage backup must be rejected
+    // with nothing written, so a bad import can't leave a half-filled vault.
+    let parsed;
+    try {
+      parsed = await window.FileVaultBackup.parseBinary(file);
+    } catch (e) {
+      console.error(e);
+      toast(e && e.name === "BackupFormatError"
+        ? "Import failed — the backup is invalid (" + e.code + ")."
+        : "Import failed — the file may be corrupted.");
+      return;
     }
     const existing = new Set(items.map((i) => i.id));
-    let off = 12 + metaLen, imported = 0;
-    for (const f of data.files) {
-      const bl = f.blobLen || 0, tl = f.thumbLen || 0;
-      // Blob.slice references the region on disk — no bytes copied into memory.
-      const blob = file.slice(off, off + bl, f.blobType || f.type || "application/octet-stream"); off += bl;
-      const thumb = tl ? file.slice(off, off + tl, f.thumbType || "image/jpeg") : null; off += tl;
+    let imported = 0;
+    for (const en of parsed.entries) {
+      const f = en.meta;
       const id = existing.has(f.id) ? uid() : f.id;
       const rec = {
         id, name: f.name, type: f.type, kind: f.kind || classify({ name: f.name, type: f.type }),
-        size: f.size != null ? f.size : blob.size, blob, thumb,
+        size: f.size != null ? f.size : en.blob.size, blob: en.blob, thumb: en.thumb,
         tags: f.tags || [], collection: f.collection || "", note: f.note || "",
         vins: f.vins || [], fins: f.fins || [], vinScan: f.vinScan || 0,
         starred: !!f.starred, createdAt: f.createdAt || Date.now(), updatedAt: f.updatedAt || Date.now(),

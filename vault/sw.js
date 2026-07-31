@@ -5,7 +5,7 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "vault-app-v23";
+const CACHE = "vault-app-v25";
 // Required for the app to boot offline — the install fails (and retries) if
 // any of these can't be cached.
 const CORE = [
@@ -13,6 +13,8 @@ const CORE = [
   "./index.html",
   "./styles.css",
   "./db.js",
+  "./backup-format.js",
+  "./blob-integrity.js",
   "./app.js",
 ];
 // Nice-to-have — cached tolerantly so a single hiccup (a momentarily
