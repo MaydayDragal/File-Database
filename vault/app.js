@@ -194,10 +194,14 @@
       const s = document.createElement("script");
       s.src = "vendor/pdf.min.js";
       s.onload = () => {
-        const lib = window.pdfjsLib;
-        if (!lib) { reject(new Error("pdf.js unavailable")); return; }
-        try { lib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; } catch (e) {}
-        _pdfjs = lib; resolve(lib);
+        // The v4 bundle finishes initializing in a microtask — wait for the
+        // readiness promise it publishes instead of reading the global directly.
+        Promise.resolve(window.pdfjsLibPromise || window.pdfjsLib).then((lib) => {
+          lib = lib || window.pdfjsLib;
+          if (!lib) { reject(new Error("pdf.js unavailable")); return; }
+          try { lib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; } catch (e) {}
+          _pdfjs = lib; resolve(lib);
+        }).catch(reject);
       };
       s.onerror = () => { _pdfjsLoading = null; reject(new Error("pdf.js failed to load")); };
       document.head.appendChild(s);
@@ -207,7 +211,7 @@
   async function makePdfThumb(file) {
     const lib = await ensurePdfjs();
     const buf = await file.arrayBuffer();
-    const doc = await lib.getDocument({ data: buf, disableAutoFetch: true, disableStream: true }).promise;
+    const doc = await lib.getDocument({ data: buf, isEvalSupported: false, disableAutoFetch: true, disableStream: true }).promise;
     try {
       const page = await doc.getPage(1);
       const unit = page.getViewport({ scale: 1 });
@@ -2042,7 +2046,7 @@
     try {
       const lib = await ensurePdfjs();
       const buf = await blob.arrayBuffer();
-      doc = await lib.getDocument({ data: buf, disableAutoFetch: true, disableStream: true }).promise;
+      doc = await lib.getDocument({ data: buf, isEvalSupported: false, disableAutoFetch: true, disableStream: true }).promise;
     } catch (e) { return { text: "", ocr: false }; }
     try {
       let text = "";

@@ -41,10 +41,43 @@ for (const f of manifests) {
 // ---------- 3. No machine-specific browser path ----------
 const offenders = [];
 for (const f of tracked(["tools/*.mjs", "package.json"])) {
+  if (f === "tools/test-static.mjs") continue; // this file names the path to ban it
   const src = fs.readFileSync(path.join(ROOT, f), "utf8");
   if (src.includes("/opt/pw-browsers")) offenders.push(f);
 }
 check(offenders.length === 0, "no suite depends on a fixed /opt browser path", offenders.join(", "));
+
+// ---------- 4. PDF.js source policy ----------
+// (a) no app source may still carry the vulnerable 3.x PDF.js build, and
+// (b) every application getDocument({...}) call must disable eval.
+// The vendored bundles themselves (vault/vendor/*, and the generated
+// <script id="pdfjs-lib">/<script id="pdfjs-worker"> blocks in the
+// single-file apps) are the library, not call sites — strip them first.
+function stripGeneratedBlocks(html) {
+  return html
+    .replace(/<script id="pdfjs-lib">[\s\S]*?<\/script>/, "")
+    .replace(/<script type="text\/js-worker" id="pdfjs-worker">[\s\S]*?<\/script>/, "");
+}
+const appSources = tracked(["*.js", "*.html"]).filter((f) => !f.startsWith("tools/") && !f.startsWith("vault/vendor/"));
+const oldPdfjs = [];
+const unsafeCalls = [];
+for (const f of appSources) {
+  let src = fs.readFileSync(path.join(ROOT, f), "utf8");
+  if (f.endsWith(".html")) src = stripGeneratedBlocks(src);
+  if (src.includes("3.11.174")) oldPdfjs.push(f);
+  const re = /getDocument\(\s*\{/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const slice = src.slice(m.index, m.index + 400);
+    if (!/isEvalSupported\s*:\s*false/.test(slice)) unsafeCalls.push(f + " @" + m.index);
+  }
+}
+for (const f of tracked(["vault/vendor/*.js"])) {
+  const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+  if (src.includes("3.11.174")) oldPdfjs.push(f);
+}
+check(oldPdfjs.length === 0, "no PDF.js 3.11.174 artifacts remain", oldPdfjs.join(", "));
+check(unsafeCalls.length === 0, "every app getDocument({...}) call passes isEvalSupported: false", unsafeCalls.slice(0, 5).join(", "));
 
 console.log(failures === 0 ? "\nSTATIC CHECKS PASSED ✅" : `\n${failures} STATIC CHECK(S) FAILED ❌`);
 process.exit(failures === 0 ? 0 : 1);
