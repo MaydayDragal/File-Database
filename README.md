@@ -12,9 +12,10 @@ local‑first apps behind a single page:
 - **🗄️ LI Documents** — a database for Mercedes‑Benz LI PDFs.
 - **🔧 Tool Inventory** — a searchable catalog of dealer special tools.
 - **🧰 Toolbox** — ten file & workshop utilities (compress, split, convert, OCR…).
-- **🧾 Repair Orders** — one place per RO: attach files (upload or import from
-  the Vault, saved under a per‑RO collection), write the job's story as multiple
-  lines (Line A, B, …), and auto‑stamp the RO's VIN onto files that lack one.
+- **🧾 Repair Orders** — one place per RO: attach files (upload, or pick them on
+  the normal Vault screen and hit **➕ Add to RO**), write the job's story as
+  multiple lines (Line A, B, …), and auto‑stamp the RO's VIN onto files that
+  lack one.
 - **🔓 Extract** — open a `.fvault` / `.lidb` / `.tidb` backup and save its
   contents back out as ordinary files.
 

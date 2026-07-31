@@ -43,6 +43,9 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 let failures = 0;
 const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failures++; };
 const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(150); } return false; };
+// The VIN-mismatch prompt is a confirm() in the Vault: accept = add anyway, dismiss = ignore.
+let nextDialog = null;
+page.on("dialog", (d) => { if (nextDialog === "dismiss") d.dismiss(); else d.accept(); nextDialog = null; });
 
 // Read all vault files (id, name, vins, collection) from the page context.
 const vaultAll = () => page.evaluate(() => new Promise((res) => {
@@ -105,52 +108,53 @@ const autofilled = await waitFor(async () => {
 }, 15000);
 check(autofilled, "an uploaded file with no VIN is saved to the RO and stamped with the RO's VIN");
 
+// Import happens on the NORMAL Vault screen: the RO's Import button sends us
+// there in "select for RO" mode; pick with the Vault's multi-select, then click
+// its ➕ Add to RO button.
+const vaultF = page.frameLocator("#frame-vault");
+async function importIntoRO(name, dialog) {
+  await ro.locator("#import-btn").click();
+  await waitFor(async () => (await page.locator("#tab-vault.is-active").count()) === 1 && (await vaultF.locator("#ro-import-banner:not([hidden])").count()) === 1);
+  // Isolate and select the file in the Vault.
+  await vaultF.locator("#search-input").fill(name);
+  await waitFor(async () => (await vaultF.locator(".card").count()) === 1);
+  await vaultF.locator(".card").first().hover();
+  await vaultF.locator(".card__select").first().click();
+  await waitFor(async () => (await vaultF.locator("#bulk-add-ro:not([hidden])").count()) === 1);
+  nextDialog = dialog || null; // arm the mismatch confirm response, if any
+  await vaultF.locator("#bulk-add-ro").click();
+  // It applies and navigates back to the RO tab.
+  await waitFor(async () => (await page.locator("#tab-ros.is-active").count()) === 1, 8000);
+}
+
 // (2) Import an EXISTING no-VIN vault file into the RO → assigned + VIN stamped.
 await frontDoor("spare-note.txt", "just a spare note, no vehicle number");
 await waitFor(async () => !!(await fileByName("spare-note.txt")));
-await ro.locator("#import-btn").click();
-await page.waitForTimeout(300);
-await ro.locator("#pick-search").fill("spare-note");
-await page.waitForTimeout(200);
-await ro.locator("#pick-list .pick input").first().check();
-await ro.locator("#pick-import").click();
+check(await waitFor(async () => (await vaultF.locator("#bulk-add-ro").count()) === 1), "the Vault has an ‘Add to RO’ bulk button");
+await importIntoRO("spare-note.txt", null);
 const imported = await waitFor(async () => {
   const f = await fileByName("spare-note.txt");
   return f && f.collection === "RO 7654321" && f.vins.includes(RO_VIN);
 }, 12000);
-check(imported, "importing a no-VIN Vault file assigns it to the RO and stamps the RO VIN");
+check(imported, "selecting a no-VIN file in the Vault and clicking ‘Add to RO’ assigns it and stamps the RO VIN");
 
-// (3) Import a file whose VIN DIFFERS → mismatch prompt → Add anyway (keeps its VIN).
+// (3) Import a file whose VIN DIFFERS → mismatch confirm → Add anyway (keeps its VIN).
 await frontDoor("othercar.txt", "inspection for VIN " + OTHER_VIN + " today");
 await waitFor(async () => { const f = await fileByName("othercar.txt"); return f && f.vins.includes(OTHER_VIN); });
-await ro.locator("#import-btn").click();
-await page.waitForTimeout(300);
-await ro.locator("#pick-search").fill("othercar");
-await page.waitForTimeout(200);
-await ro.locator("#pick-list .pick input").first().check();
-await ro.locator("#pick-import").click();
-check(await waitFor(async () => (await ro.locator("#mm-modal.show").count()) === 1), "a mismatched VIN raises the add-or-ignore prompt");
-await ro.locator("#mm-add").click();
+await importIntoRO("othercar.txt", "accept");
 const added = await waitFor(async () => {
   const f = await fileByName("othercar.txt");
   return f && f.collection === "RO 7654321" && f.vins.includes(OTHER_VIN) && !f.vins.includes(RO_VIN);
 }, 12000);
-check(added, "‘Add anyway’ adds the mismatched file, keeping its own VIN (not overwritten)");
+check(added, "a mismatched VIN prompts, and ‘Add anyway’ adds it keeping its own VIN");
 
 // (4) Import another mismatched file → Ignore → NOT added to the RO.
 await frontDoor("thirdcar.txt", "notes for VIN " + THIRD_VIN + " elsewhere");
 await waitFor(async () => { const f = await fileByName("thirdcar.txt"); return f && f.vins.includes(THIRD_VIN); });
-await ro.locator("#import-btn").click();
-await page.waitForTimeout(300);
-await ro.locator("#pick-search").fill("thirdcar");
-await page.waitForTimeout(200);
-await ro.locator("#pick-list .pick input").first().check();
-await ro.locator("#pick-import").click();
-await waitFor(async () => (await ro.locator("#mm-modal.show").count()) === 1);
-await ro.locator("#mm-ignore").click();
-await page.waitForTimeout(1500);
+await importIntoRO("thirdcar.txt", "dismiss");
+await page.waitForTimeout(800);
 const ignored = await (async () => { const f = await fileByName("thirdcar.txt"); return f && f.collection !== "RO 7654321"; })();
-check(ignored, "‘Ignore’ leaves the mismatched file out of the RO");
+check(ignored, "choosing ‘Ignore’ (Cancel) leaves the mismatched file out of the RO");
 
 // The RO's file list now shows the three kept files (invoice, spare, othercar).
 check(await waitFor(async () => (await ro.locator("#files .file").count()) === 3), "the RO lists its three attached files");

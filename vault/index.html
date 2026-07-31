@@ -152,6 +152,12 @@
         </div>
       </div>
 
+      <!-- Shown when the Repair Orders tab sent us here to pick files for an RO. -->
+      <div id="ro-import-banner" class="ro-import-banner" hidden>
+        <span id="ro-import-label"></span>
+        <button id="ro-import-cancel" class="btn btn--ghost btn--sm" type="button">Cancel</button>
+      </div>
+
       <div id="list-head" class="list-head" hidden>
         <span class="lh-star">★</span>
         <span class="lh-icon"></span>
@@ -168,6 +174,7 @@
       <div id="bulkbar" class="bulkbar" hidden>
         <span id="bulk-count" class="bulkbar__count"></span>
         <button id="bulk-all" class="btn btn--ghost" title="Select every file in the current view (Ctrl+A)">Select all</button>
+        <button id="bulk-add-ro" class="btn btn--primary" title="Add the selected files to the repair order" hidden>➕ Add to RO</button>
         <span class="bulkbar__sep"></span>
         <button id="bulk-collection" class="btn btn--ghost" title="Move the selected files to a collection">📂 Set collection</button>
         <button id="bulk-tags" class="btn btn--ghost" title="Add tags to the selected files">🏷 Add tags</button>

@@ -22,7 +22,7 @@
   let onShellNav = (d) => { shellNavQueue.push(d); };
   window.addEventListener("message", (e) => {
     const d = e.data || {};
-    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection" || d.type === "vault-ro-apply") onShellNav(d);
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection" || d.type === "vault-ro-apply" || d.type === "vault-ro-import") onShellNav(d);
   });
 
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
@@ -567,6 +567,9 @@
     bar.hidden = selection.size === 0;
     if (bar.hidden) return;
     $("#bulk-count").textContent = selection.size + " selected";
+    // "Add to RO" appears only while the Repair Orders tab has us in import mode.
+    const addRo = $("#bulk-add-ro");
+    if (addRo) { addRo.hidden = !roImport; if (roImport) addRo.textContent = "➕ Add to RO " + (roImport.roNo || ""); }
     const sel = items.filter((it) => selection.has(it.id));
     const allStarred = sel.length > 0 && sel.every((it) => it.starred);
     $("#bulk-star").textContent = allStarred ? "☆ Unstar" : "★ Star";
@@ -603,6 +606,8 @@
   function wireBulkBar() {
     $("#bulk-clear").onclick = clearSelection;
     $("#bulk-all").onclick = selectAllVisible;
+    $("#bulk-add-ro").onclick = importSelectionToRo;
+    const roCancel = $("#ro-import-cancel"); if (roCancel) roCancel.onclick = exitRoImport;
     $("#bulk-collection").onclick = () => {
       const name = prompt(`Move ${selection.size} file(s) to collection (leave empty to remove from any collection):`);
       if (name === null) return;
@@ -2340,6 +2345,77 @@
     if (changed) { render(); updateStorage(); }
   }
 
+  // ---- "Add to RO" import mode (driven from the Repair Orders tab) ----
+  // The RO tab sends us here so files are picked with the normal vault screen
+  // and its multi-select, then transferred with one button.
+  let roImport = null;
+  function enterRoImport(d) {
+    roImport = {
+      coll: String(d.coll || ""),
+      vin: d.vin ? String(d.vin).toUpperCase() : "",
+      roNo: String(d.roNo || ""),
+      roId: String(d.roId || ""),
+    };
+    clearSelection();
+    $("#search-input").value = ""; state.query = "";
+    setFilter("all"); // clean slate to pick from
+    const b = $("#ro-import-banner");
+    if (b) {
+      b.hidden = false;
+      $("#ro-import-label").textContent = "Importing to RO " + (roImport.roNo || "") + " — select files, then ➕ Add to RO.";
+    }
+    renderBulkBar();
+  }
+  function exitRoImport() {
+    roImport = null;
+    const b = $("#ro-import-banner"); if (b) b.hidden = true;
+    renderBulkBar();
+  }
+  async function importSelectionToRo() {
+    if (!roImport) return;
+    const target = roImport;
+    const sel = items.filter((it) => selection.has(it.id));
+    if (!sel.length) { toast("Select some files first."); return; }
+    const roVin = target.vin;
+    const noVin = [], match = [], mismatch = [];
+    sel.forEach((it) => {
+      const v = it.vins || [];
+      if (!v.length) noVin.push(it);
+      else if (roVin && v.includes(roVin)) match.push(it);
+      else if (roVin) mismatch.push(it);
+      else match.push(it);
+    });
+    let keep = noVin.concat(match);
+    if (mismatch.length && roVin) {
+      const addAnyway = confirm(mismatch.length + " selected file(s) have a different VIN than RO " + target.roNo + ".\n\nOK = add them anyway (their own VIN is kept)\nCancel = skip those files");
+      if (addAnyway) keep = keep.concat(mismatch);
+    } else if (mismatch.length) {
+      keep = keep.concat(mismatch);
+    }
+    let moved = 0;
+    for (const it of keep) {
+      const rec = await DB.get(it.id);
+      if (!rec) continue;
+      rec.collection = target.coll;
+      if (!(rec.vins && rec.vins.length) && roVin) { rec.vins = Array.from(new Set([roVin].concat(rec.vins || []))); rec.vinScan = Date.now(); } // auto-fill VIN
+      rec.updatedAt = Date.now();
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      const i = items.findIndex((x) => x.id === it.id);
+      if (i !== -1) items[i] = stripBlob(rec);
+      moved++;
+    }
+    if (target.coll && !extraCollections.includes(target.coll)) { extraCollections.push(target.coll); DB.setMeta("collections", extraCollections); }
+    clearSelection();
+    exitRoImport();
+    $("#search-input").value = ""; state.query = ""; // don't leave the pick search lingering
+    render();
+    updateStorage();
+    toast("Added " + moved + " file(s) to RO " + (target.roNo || "") + ".");
+    // Go back to the repair order we imported to.
+    if (embedded) { try { window.parent.postMessage({ type: "shell-nav", app: "ros", payload: { type: "shell-nav", id: target.roId } }, "*"); } catch (e) {} }
+  }
+
   async function requestPersistence() {
     if (navigator.storage && navigator.storage.persist) {
       const granted = await navigator.storage.persist();
@@ -2419,7 +2495,7 @@
     // Cross-app navigation (now that data is loaded): apply, then drain any
     // messages that arrived during boot.
     onShellNav = (d) => {
-      if (d.type === "vault-filter" && d.filter) setFilter(String(d.filter));
+      if (d.type === "vault-filter" && d.filter) { $("#search-input").value = ""; state.query = ""; setFilter(String(d.filter)); }
       else if (d.type === "vault-search" && d.q != null) {
         $("#search-input").value = String(d.q);
         state.query = String(d.q).trim();
@@ -2428,6 +2504,7 @@
       else if (d.type === "platform-backup") exportVault();
       else if (d.type === "vault-rename-collection" && d.from != null && d.to != null) renameCollection(String(d.from), String(d.to));
       else if (d.type === "vault-ro-apply") roApply(d);
+      else if (d.type === "vault-ro-import") enterRoImport(d);
     };
     shellNavQueue.splice(0).forEach(onShellNav);
 

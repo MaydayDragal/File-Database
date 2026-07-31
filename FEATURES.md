@@ -141,7 +141,7 @@ Platform Shell
 │   ├── {shell-switch, n} / {shell-quickopen} → keyboard forwarded from inside iframes
 │   ├── Shell→app contracts: li-open/li-search/li-filter/li-restore/platform-backup ·
 │   │   inventory-filter/inventory-open/inventory-search/inventory-import/platform-backup ·
-│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/vault-ro-apply/platform-backup (apps queue nav that
+│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/vault-ro-apply/vault-ro-import/platform-backup (apps queue nav that
 │   │   arrives before their DB boot finishes, then replay it)
 │   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
 ├── PWA (the installable "one app")
@@ -468,8 +468,10 @@ Repair Orders
 │   ├── Add (upload): ＋ Add files / drop zone → {shell-add-files, collection,
 │   │   stay:true} → shell files them into the Vault WITHOUT switching tabs
 │   │   (materialized + verified by the Vault's normal intake)
-│   ├── Import from Vault: a picker of existing Vault files (search by name / VIN /
-│   │   collection, multi-select) → assigns them to this RO's collection
+│   ├── Import from Vault: ⬇ button hands off to the NORMAL Vault screen in
+│   │   "select for RO" mode (a banner + the Vault's own multi-select) → pick
+│   │   files, then the Vault's ➕ Add to RO button transfers them to this RO's
+│   │   collection and jumps back to the RO (payload vault-ro-import)
 │   ├── VIN reconcile on every add/import (see 5b.1 below)
 │   ├── List: read-only peek of IndexedDB "file-vault" filtered by the collection
 │   │   (upgrade-abort guard — never creates/mutates the Vault DB); shows a
@@ -484,16 +486,19 @@ Repair Orders
     └── No own SW/manifest — the SHELL's service worker precaches this page
 ```
 
-**5b.1 VIN reconciliation** (applied to every batch added or imported, via the
-Vault's `vault-ro-apply {coll, vin, add[], stampVin[], remove[]}` handler —
-DB-safe, rebuilds searchText):
+**5b.1 VIN reconciliation** (applied when files are added to an RO):
 - a file with **no VIN** → the RO's VIN is stamped onto it (auto-fill)
 - a file whose VIN **matches** the RO → added as-is
-- a file whose VIN **differs** from the RO → a modal asks **Add anyway**
-  (added, its own VIN kept — never overwritten) or **Ignore** (uploads are
-  ejected from the RO back to uncategorized; imports are simply not assigned)
-- uploads reconcile after a short settle so the Vault's no-OCR VIN read of the
-  file's own contents has run first
+- a file whose VIN **differs** from the RO → prompt to **Add anyway** (added,
+  its own VIN kept — never overwritten) or **Ignore** (skipped)
+- **Import path** (files already in the Vault): reconciled in the Vault by
+  `importSelectionToRo()` — the mismatch prompt is a confirm(); files move to
+  the RO collection there
+- **Upload path** (new files from disk): reconciled in the RO tab via the
+  Vault's `vault-ro-apply {coll, vin, add[], stampVin[], remove[]}` handler
+  (DB-safe, rebuilds searchText), after a short settle so the Vault's no-OCR
+  VIN read of the file's own contents has run first (ignored uploads are
+  ejected back to uncategorized)
 
 **Tied into:** Vault (files stored there under the RO collection; VIN reconcile
 and rename kept in sync via vault-ro-apply / vault-rename-collection), shell
