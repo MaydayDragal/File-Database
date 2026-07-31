@@ -14,7 +14,7 @@
     li:        { view: "#view-li",        frame: "#frame-li",        tab: "#tab-li",        src: "li/index.html",        title: "LI Documents",   loaded: false, pending: [] },
     inventory: { view: "#view-inventory", frame: "#frame-inventory", tab: "#tab-inventory", src: "inventory/index.html", title: "Tool Inventory", loaded: false, pending: [] },
     toolbox:   { view: "#view-toolbox",   frame: "#frame-toolbox",   tab: "#tab-toolbox",   src: "toolbox/index.html",   title: "Toolbox",        loaded: false, pending: [] },
-    story:     { view: "#view-story",     frame: "#frame-story",     tab: "#tab-story",     src: "story/index.html",     title: "Story Studio",   loaded: false, pending: [] },
+    ros:       { view: "#view-ros",       frame: "#frame-ros",       tab: "#tab-ros",       src: "ros/index.html",       title: "Repair Orders",  loaded: false, pending: [] },
     viewer:    { view: "#view-viewer",    frame: "#frame-viewer",    tab: "#tab-viewer",    src: "viewer.html",          title: "Extract",        loaded: false, pending: [] },
   };
   var DEFAULT_APP = "vault";
@@ -125,6 +125,7 @@
         // forwarded from inside an open vault collection keeps that collection.
         var meta = { fromShell: true };
         if (target === "vault" && vehiclePin) meta.vin = vehiclePin.vin;
+        if (target === "vault" && opts.vin) meta.vin = opts.vin; // RO's own vehicle wins
         if (target === "vault" && opts.collection) meta.collection = opts.collection;
         materialize(f)
           .then(function (safe) { return window.VaultBridge.send(target, { name: f.name, type: f.type, blob: safe, meta: meta }); })
@@ -147,7 +148,7 @@
     var only = special.length === 1 && !n ? special[0].app
       : (!special.length && toLI.length && !toVault.length) ? "li"
       : (!special.length && toVault.length && !toLI.length) ? "vault" : null;
-    if (only && only !== current) activate(only);
+    if (only && only !== current && !opts.stay) activate(only);
 
     // New rows land after the receiver ingests (LI may OCR) — nudge the badges.
     [500, 1500, 3500].forEach(function (d) { setTimeout(updateBadges, d); });
@@ -503,8 +504,11 @@
       else if (d.type === "li-changed") updateBadges();
       // An embedded app forwards files dropped/pasted over it, so the platform
       // files them through one router regardless of which tab is showing.
-      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files, { collection: d.collection || "" });
+      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files, { collection: d.collection || "", vin: d.vin || "", stay: !!d.stay });
       else if (d.type === "shell-open-picker") $("#shell-file-input").click();
+      // Deliver a message to another app WITHOUT switching to it (used by the
+      // Repair Orders tab to keep an RO's files in sync in the background).
+      else if (d.type === "shell-relay" && APPS[d.app] && d.payload) { ensureLoaded(d.app); frameMessage(d.app, d.payload); }
       // Toast relay: an app in a BACKGROUND tab announced something (import
       // finished, sync ran, bridge delivery). Surface it with an app prefix —
       // otherwise it toasts invisibly inside a hidden iframe.

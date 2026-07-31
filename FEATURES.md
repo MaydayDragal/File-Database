@@ -26,7 +26,7 @@ flowchart TB
     Shell -->|iframe| L["/li/ · LI Documents"]
     Shell -->|iframe| I["/inventory/ · Tool Inventory"]
     Shell -->|iframe| T["/toolbox/ · Toolbox (10 tools)"]
-    Shell -->|iframe| S["/story/ · Story Studio"]
+    Shell -->|iframe| S["/ros/ · Repair Orders"]
 
     B[("bridge.js<br/>IndexedDB 'vault-bridge' + BroadcastChannel")]
     V <-->|"send/receive files"| B
@@ -54,7 +54,7 @@ The only component that knows all six apps exist. Owns everything shared.
 ```
 Platform Shell
 ├── App switching
-│   ├── Six tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · ✍️ Story Studio · 🔓 Extract
+│   ├── Six tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · 🧾 Repair Orders · 🔓 Extract
 │   ├── Lazy iframes — an app loads on first visit, then stays warm (instant switching)
 │   ├── One panel visible at a time (ARIA tab pattern: arrow keys, Home/End, roving tabindex)
 │   └── Last-used app remembered (localStorage "fd-app") and restored on launch
@@ -132,13 +132,16 @@ Platform Shell
 │   │   e.g. {inventory-filter, grp}) is forwarded to the target — how cross-app links travel
 │   ├── {vault-nav, to:"files"}       → activate vault (legacy contract, still honored)
 │   ├── {li-changed}                  → refresh tab badges
-│   ├── {shell-add-files, files}      → route files through the unified intake (forwarded iframe drop/paste)
+│   ├── {shell-add-files, files, collection?, vin?, stay?} → route files through the unified
+│   │   intake; collection/vin file them (RO tab), stay:true keeps the current tab
+│   ├── {shell-relay, app, payload}   → forward a message to an app WITHOUT switching to it
+│   │   (RO tab uses it for vault-rename-collection)
 │   ├── {shell-open-picker}           → open the platform file picker (from an app's empty-state)
 │   ├── {shell-toast, app, msg}       → app-prefixed toast for background tabs + badge refresh
 │   ├── {shell-switch, n} / {shell-quickopen} → keyboard forwarded from inside iframes
 │   ├── Shell→app contracts: li-open/li-search/li-filter/li-restore/platform-backup ·
 │   │   inventory-filter/inventory-open/inventory-search/inventory-import/platform-backup ·
-│   │   vault-filter/vault-search/vault-restore/platform-backup (apps queue nav that
+│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/platform-backup (apps queue nav that
 │   │   arrives before their DB boot finishes, then replay it)
 │   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
 ├── PWA (the installable "one app")
@@ -445,41 +448,38 @@ deep-links, theme, toolbox-open), CDN (OCR only).
 
 ---
 
-## 5b. Story Studio — `/story/` (single self-contained `index.html`)
+## 5b. Repair Orders — `/ros/` (single self-contained `index.html`)
 
-A Markdown editor for stories and technical writeups, with the Toolbox's text
-tools built directly in (per the request: the tools are merged INTO the story
-tab, not sent across apps).
+One place per repair order: its files (stored in the **Vault** under a per-RO
+collection, so they get all the Vault's features) plus a basic notes box for
+the job's story. Works alongside the Vault; the RO tab is a focused view + notes.
 
 ```
-Story Studio
-├── Stories (IndexedDB "story-studio" → store "stories" {id,title,body,createdAt,updatedAt})
-│   ├── Sidebar list (title · word count · updated), newest-first; ＋ New; click to open
-│   ├── Autosave (debounced ~400ms) with a "Saving…/Saved" note; Ctrl+S forces a save
-│   └── Delete (from the Export menu, confirmed)
-├── Editor
-│   ├── Markdown <textarea> + LIVE PREVIEW (self-contained, XSS-safe renderer:
-│   │   headings, bold/italic, inline code, fenced code, lists, blockquote, hr, links)
-│   ├── View modes: Edit · Split · Preview (remembered in localStorage "story-view")
-│   ├── Format toolbar: H1/H2/H3 · Bold(Ctrl+B) · Italic(Ctrl+I) · code · lists ·
-│   │   quote · rule · link · code block (wrap selection / prefix lines)
-│   ├── Tab inserts two spaces; stats bar: words · characters · lines · reading time
-│   └── Spell-check on every text field (focusin flips spellcheck=true)
-├── 🧰 Text tools (drawer) — merged from the Toolbox Text tool; operate on the
-│   │   SELECTION if any, else the whole story
-│   ├── Change case: UPPER/lower/Title/Sentence/camel/snake/kebab/CONSTANT/invert
-│   ├── Lines: sort A→Z / Z→A · remove duplicates · reverse · shuffle · trim ·
-│   │   drop blank · collapse spaces
-│   └── Find & replace: literal or regex, ignore-case, count, replace-all
-├── Export: ⬇ .md · ⬇ .txt · 📋 Copy all · 🖨️ Print/PDF (prints the rendered story)
+Repair Orders
+├── Repair orders (IndexedDB "repair-orders" → store "ros"
+│   │   {id, ro, vehicle, vin, notes, collection, createdAt, updatedAt})
+│   ├── Sidebar list (RO number · vehicle), newest-first; ＋ New; click to open
+│   ├── Fields: RO number · Vehicle (free text) · VIN (optional)
+│   ├── 📝 Notes — a plain <textarea> (the "story"); debounced autosave (~400ms)
+│   └── Delete (confirmed) — removes the RO; its Vault files are left in place
+├── Files (live in the Vault, collection = "RO <number>")
+│   ├── Add: ＋ Add files / drop zone → postMessage {shell-add-files, collection,
+│   │   vin, stay:true} → shell files them into the Vault WITHOUT switching tabs
+│   │   (materialized + verified + VIN-tagged by the Vault's normal intake)
+│   ├── List: read-only peek of IndexedDB "file-vault" filtered by the collection
+│   │   (upgrade-abort guard — never creates/mutates the Vault DB); re-polled after
+│   │   an add and on window focus
+│   ├── Open in Vault ↗ → {shell-nav vault, payload vault-filter collection:…}
+│   └── Rename safety: editing the RO number relays {vault-rename-collection
+│       from→to} so the RO's Vault files move with it (none left behind)
 └── Platform integration
-    ├── Deep link #story; embedded theme (platform-theme); Alt+1–9 & Ctrl+K forwarded
-    ├── shell-nav {id} opens a specific story
+    ├── Deep link #ros; embedded theme; Alt+1–9 & Ctrl+K forwarded; shell-nav {id}
+    ├── Standalone at /ros/ (notes work; file add/open need the shell)
     └── No own SW/manifest — the SHELL's service worker precaches this page
 ```
 
-**Tied into:** shell (tab, theme, keyboard, deep-link). Self-contained storage;
-no bridge/network. Standalone at `/story/`.
+**Tied into:** Vault (files stored there under the RO collection; rename kept in
+sync), shell (shell-add-files{stay}, shell-relay, shell-nav, theme, keyboard).
 
 ---
 

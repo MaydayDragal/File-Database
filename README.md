@@ -12,8 +12,8 @@ local‑first apps behind a single page:
 - **🗄️ LI Documents** — a database for Mercedes‑Benz LI PDFs.
 - **🔧 Tool Inventory** — a searchable catalog of dealer special tools.
 - **🧰 Toolbox** — ten file & workshop utilities (compress, split, convert, OCR…).
-- **✍️ Story Studio** — a Markdown editor for stories & technical writeups, with
-  live preview and the Toolbox's text tools (case, sort, find/replace) built in.
+- **🧾 Repair Orders** — one place per RO: attach all its files (saved in the
+  Vault under a per‑RO collection) and keep freeform notes for the job.
 - **🔓 Extract** — open a `.fvault` / `.lidb` / `.tidb` backup and save its
   contents back out as ordinary files.
 
@@ -255,7 +255,7 @@ inventory/            🔧 Tool Inventory app (empty; loads a portable .tidb fil
 inventory-data/       Source data (tools.json + img/) used to build the .tidb — not shipped in the app
 tools/build-inventory-db.mjs  Builds FileInventory.tidb (tools + photos) from inventory-data/
 toolbox/              🧰 Toolbox — ten file & workshop tools in a single page
-story/                ✍️ Story Studio — Markdown writeup editor (single self-contained page)
+ros/                  🧾 Repair Orders — per-RO notes + files (files saved in the Vault)
 viewer.html           🔓 Extract — open a .fvault/.lidb/.tidb backup and save its files out
 tools/gen_icons.py    Regenerates the root icons (no dependencies)
 tools/e2e.mjs         End-to-end test — File Vault, standalone at /vault/

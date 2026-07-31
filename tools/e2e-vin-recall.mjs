@@ -110,7 +110,16 @@ check(await waitFor(async () => (await page.locator("#results .card").count()) =
 
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
-check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "")), "scan completes");
+// The scan does a cold-start OCR (tesseract) that can outlast the transient
+// "finished" toast's poll window; treat completion as the toast OR all four
+// records carrying a vinScan stamp, with a generous timeout for the download.
+const allScanned = () => page.evaluate(() => new Promise((res) => {
+  const r = indexedDB.open("file-vault");
+  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
+  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const a = c.result; res(a.length === 4 && a.every((x) => x.vinScan)); }; c.onerror = () => res(false); };
+  r.onerror = () => res(false);
+}));
+check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "") || (await allScanned()), 60000), "scan completes");
 
 const vinList = await page.evaluate(() => new Promise((res) => {
   const r = indexedDB.open("file-vault");

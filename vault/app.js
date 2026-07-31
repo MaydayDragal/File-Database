@@ -22,7 +22,7 @@
   let onShellNav = (d) => { shellNavQueue.push(d); };
   window.addEventListener("message", (e) => {
     const d = e.data || {};
-    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup") onShellNav(d);
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection") onShellNav(d);
   });
 
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
@@ -2281,6 +2281,33 @@
     toast(`Collection “${clean}” created. Add files or drag them here to fill it.`);
   }
 
+  // Move every file in one collection to another name — used by the Repair
+  // Orders app when an RO number is edited, so its files stay linked. Rebuilds
+  // searchText through DB.put so the rename is done DB-safely (not a raw write).
+  async function renameCollection(from, to) {
+    if (!from || !to || from === to) return;
+    let moved = 0;
+    for (const it of items.slice()) {
+      if (it.collection !== from) continue;
+      const rec = await DB.get(it.id);
+      if (!rec) continue;
+      rec.collection = to;
+      rec.updatedAt = Date.now();
+      rec.searchText = DB.buildSearchText(rec);
+      await DB.put(rec);
+      const i = items.findIndex((x) => x.id === it.id);
+      if (i !== -1) items[i] = stripBlob(rec);
+      moved++;
+    }
+    const fi = extraCollections.indexOf(from);
+    if (fi !== -1) extraCollections.splice(fi, 1);
+    if (to && !extraCollections.includes(to)) extraCollections.push(to);
+    DB.setMeta("collections", extraCollections);
+    if (state.filter === "collection:" + from) setFilter("collection:" + to);
+    else render();
+    if (moved) updateStorage();
+  }
+
   async function requestPersistence() {
     if (navigator.storage && navigator.storage.persist) {
       const granted = await navigator.storage.persist();
@@ -2367,6 +2394,7 @@
         render();
       } else if (d.type === "vault-restore" && d.file) importVault(d.file);
       else if (d.type === "platform-backup") exportVault();
+      else if (d.type === "vault-rename-collection" && d.from != null && d.to != null) renameCollection(String(d.from), String(d.to));
     };
     shellNavQueue.splice(0).forEach(onShellNav);
 

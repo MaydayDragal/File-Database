@@ -1,7 +1,7 @@
 /* File Database platform shell service worker — offline shell + toolbox.
    The vault, LI and inventory apps register their own service workers for
    their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v13";
+const CACHE = "platform-shell-v14";
 // The shell can't start without these…
 const CORE = [
   "./",
@@ -17,7 +17,7 @@ const EXTRAS = [
   "./viewer.html",
   "./manifest.webmanifest",
   "./toolbox/index.html",
-  "./story/index.html",
+  "./ros/index.html",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -64,7 +64,7 @@ self.addEventListener("fetch", (e) => {
       }).catch(() =>
         caches.match(req, { ignoreSearch: true }).then((m) => m || caches.match(
           url.pathname.includes("/toolbox/") ? "./toolbox/index.html"
-            : url.pathname.includes("/story/") ? "./story/index.html"
+            : url.pathname.includes("/ros/") ? "./ros/index.html"
             : "./index.html"
         ))
       )
