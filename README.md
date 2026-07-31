@@ -266,13 +266,40 @@ vault/vendor/         Vendored pdf.js (renders PDF first-page previews, offline)
 ```bash
 npm start          # serve the platform locally at http://localhost:8080
 npm run icons      # regenerate icons/ from tools/gen_icons.py
-npm test           # run all four end-to-end browser tests (needs a Chromium)
+npm test           # static + backup + integrity checks, then the full E2E suite
 npm run test:shell # just the shell test (also: test:vault, test:merge, test:inventory)
 ```
 
 The platform has **no build step and no runtime dependencies** — the files in
 the repo are exactly what ships. `npm`/Python are only used for the optional
-dev helpers above.
+dev helpers above and the tests.
+
+### Local QA (release verification)
+
+On a clean machine, this is the exact sequence the CI release gate runs:
+
+```bash
+npm ci --omit=optional              # lockfile-driven install (skip pdfjs-dist's
+                                    #   unused optional `canvas` native dep)
+npm audit --omit=optional --audit-level=high   # no high/critical advisories
+npx playwright install chromium     # Playwright-managed browser (no fixed path)
+npm run test:static                 # syntax, manifests, PDF.js + browser-path policy
+npm run test:backup                 # malformed .fvault backups are rejected
+npm run test:integrity              # full-byte stored-blob comparison
+npm test                            # the above three + every tools/e2e*.mjs suite
+npm run build:portable              # the USB package builds
+```
+
+The E2E suites launch **Playwright-managed Chromium** — there is no fixed
+`/opt` executable path. If the browser is missing, the runner prints the exact
+`npx playwright install chromium` command. To regenerate the vendored,
+version-pinned PDF.js runtime: `npm run vendor:pdfjs` (verify with
+`node tools/vendor-pdfjs.mjs --check`).
+
+Continuous integration runs `.github/workflows/qa.yml` on pushes and pull
+requests (`npm ci` → `npm audit --audit-level=high` → install Chromium →
+static/backup/integrity → `npm test` → portable build), and
+`.github/workflows/zip-test.yml` covers Windows ZIP validation.
 
 ---
 

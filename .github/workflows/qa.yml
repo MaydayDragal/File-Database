@@ -1,0 +1,38 @@
+name: QA release gate
+
+# Blocks a release until static checks, unit-style checks, the full E2E suite
+# and the portable build all pass on a clean, lockfile-driven install.
+on:
+  push:
+    branches: [claude/pwa-file-database-hqbppy]
+  pull_request:
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies (lockfile-driven)
+        # Omit optional deps: pdfjs-dist's optional `canvas` (Node-only PDF
+        # rendering, unused here — the vendor script reads its .mjs files) drags
+        # in vulnerable node-pre-gyp/tar. We never install or ship it.
+        run: npm ci --omit=optional
+      - name: Audit dependencies
+        # A high/critical finding fails the job. Document any approved
+        # exception here and in the issue tracker before adding an override.
+        run: npm audit --omit=optional --audit-level=high
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Static checks
+        run: npm run test:static
+      - name: Backup-format checks
+        run: npm run test:backup
+      - name: Blob-integrity checks
+        run: npm run test:integrity
+      - name: Full E2E suite
+        run: npm test
+      - name: Portable build
+        run: npm run build:portable

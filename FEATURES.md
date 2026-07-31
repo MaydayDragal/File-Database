@@ -11,7 +11,10 @@
 slim **shell** that hosts four independent apps in lazy, same-origin iframes. Apps never
 talk to each other directly — everything cross-app goes through two thin channels:
 
-- **`bridge.js` (VaultBridge)** — file handoffs (IndexedDB mailbox + BroadcastChannel nudge)
+- **`bridge.js` (VaultBridge)** — file handoffs (IndexedDB mailbox + BroadcastChannel nudge).
+  Durable delivery: items are claimed with a time-limited lease and acknowledged (deleted)
+  only after the receiver's handler promise settles, so a rejected handler or a crashed
+  receiver never loses a file, and two live receivers process each item exactly once.
 - **`postMessage`** — navigation + theme signals, always via the shell
 
 ```mermaid

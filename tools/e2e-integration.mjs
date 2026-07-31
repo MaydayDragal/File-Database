@@ -51,7 +51,7 @@ const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fa
 const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(200); } return false; };
 
 // ---------- 1. Standalone-build catalog offer: empty inventory offers a one-click load ----------
-await page.goto(base + "#inventory", { waitUntil: "networkidle" });
+await page.goto(base + "#inventory", { waitUntil: "load" });
 const inv = page.frameLocator("#frame-inventory");
 await inv.locator("#empty").waitFor({ timeout: 15000 });
 const offerShown = await waitFor(async () => (await inv.locator("#loadBuiltinBtn").count()) > 0, 10000);
@@ -61,7 +61,7 @@ const catalogLoaded = await waitFor(async () => (await inv.locator("#tbody tr").
 check(catalogLoaded, "one click loads the full catalog (1,688 tools)");
 
 // ---------- 2. Deep links ----------
-await page.goto(base + "#inventory/group/54", { waitUntil: "networkidle" });
+await page.goto(base + "#inventory/group/54", { waitUntil: "load" });
 await page.waitForTimeout(700);
 check(await page.locator("#tab-inventory.is-active").count() === 1, "#inventory/group/54 activates the Tool Inventory");
 const chipTxt = ((await inv.locator("#modelChip").textContent()) || "").trim();
@@ -73,7 +73,7 @@ await inv.locator("#modelChip").click();
 await page.waitForTimeout(300);
 check((await inv.locator("#tbody tr").count()) > 1000, "clicking the chip clears the cross-filter");
 
-await page.goto(base + "#li/group/54", { waitUntil: "networkidle" });
+await page.goto(base + "#li/group/54", { waitUntil: "load" });
 await page.waitForTimeout(700);
 const li = page.frameLocator("#frame-li");
 check(await page.locator("#tab-li.is-active").count() === 1, "#li/group/54 activates LI Documents");
@@ -90,7 +90,7 @@ const FIX = path.join(ROOT, "tools", "_fixtures");
 fs.mkdirSync(FIX, { recursive: true });
 const vinName = "Datacard WDD2130461A123456.txt";
 fs.writeFileSync(path.join(FIX, vinName), "Vehicle datacard for VIN WDD2130461A123456 — model 213");
-await page.goto(base, { waitUntil: "networkidle" });
+await page.goto(base, { waitUntil: "load" });
 await page.waitForTimeout(500);
 await page.setInputFiles("#shell-file-input", path.join(FIX, vinName));
 const vinDetected = await waitFor(async () => {
@@ -109,7 +109,7 @@ check(vinDetected, "a file added through the front door is auto-read for its VIN
 
 // ---------- 4. By-VIN series chips → cross-app jump ----------
 const vault = page.frameLocator("#frame-vault");
-await page.goto(base + "#vault", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "load" });
 await page.waitForTimeout(500);
 await vault.locator('#nav-filters .nav__item[data-filter="vins"], [data-filter="vins"]').first().click();
 await page.waitForTimeout(400);

@@ -76,13 +76,22 @@ check(await waitFor(async () => (await page.locator("#results .card").count()) =
 
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
-check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "")), "scan completes");
-
-const rec = await page.evaluate(() => new Promise((res) => {
+// The scan may need a cold-start OCR download (tesseract) that can outlast the
+// transient "finished" toast's poll window on a slow network. Treat the scan
+// as complete when the finished toast shows OR the record has been scanned
+// (durable), with a generous timeout for the OCR cold start.
+const readRec = () => page.evaluate(() => new Promise((res) => {
   const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const x = c.result[0] || {}; res({ vins: x.vins || [], fins: x.fins || [] }); }; c.onerror = () => res({}); };
+  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const x = c.result[0] || {}; res({ vins: x.vins || [], fins: x.fins || [], vinScan: x.vinScan || 0 }); }; c.onerror = () => res({}); };
   r.onerror = () => res({});
 }));
+check(await waitFor(async () => {
+  if (/VIN scan finished/.test(await toastText() || "")) return true;
+  const r = await readRec();
+  return !!(r && r.vinScan);
+}, 60000), "scan completes");
+
+const rec = await readRec();
 check(rec.vins && rec.vins.length === 1 && rec.vins[0] === VIN, `VIN detected as the VIN (${JSON.stringify(rec.vins)})`);
 check(rec.fins && rec.fins.includes(FIN), `FIN detected separately (${JSON.stringify(rec.fins)})`);
 check(!rec.vins.includes(FIN), "FIN is NOT grouped as a VIN");
