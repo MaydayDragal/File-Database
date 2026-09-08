@@ -1,653 +1,422 @@
-# File Database — Feature Tree & Application Topology
+# File Database — Features and Application Topology
 
-> A complete map of the platform: every feature, what it does, and what it's tied into.
-> Matches the code as of this document's last commit. See `README.md` for user-facing docs.
+This map describes the checked-in application. See [README.md](README.md) for
+setup, workflows, backups, and portable use. Source links identify the implementation
+behind each area; test coverage describes assertions in the repository, not a
+passing-test certification.
 
----
+## 1. Platform topology
 
-## 0. Bird's-eye view
+The [shell](shell.js) hosts six lazy-loaded, same-origin iframes. A visited frame
+stays loaded while another tab is visible. Cross-app work uses three mechanisms:
 
-**File Database** is a static, no-build, offline-first PWA platform. The repo root is a
-slim **shell** that hosts six independent apps in lazy, same-origin iframes. Apps never
-talk to each other directly — everything cross-app goes through two thin channels:
+| Mechanism | Purpose | Participants |
+| --- | --- | --- |
+| [VaultBridge](bridge.js) | Queue file Blobs in IndexedDB; notify receivers through BroadcastChannel | Shell sends; Vault, LI, and Toolbox send/receive |
+| `postMessage` through the shell | Navigation, theme, keyboard commands, intake, restores, and RO updates | Shell and app frames |
+| Read-only IndexedDB peeks | Counts and RO attachment listings | Shell reads Vault/LI/Inventory; RO reads Vault |
 
-- **`bridge.js` (VaultBridge)** — file handoffs (IndexedDB mailbox + BroadcastChannel nudge).
-  Durable delivery: items are claimed with a time-limited lease and acknowledged (deleted)
-  only after the receiver's handler promise settles, so a rejected handler or a crashed
-  receiver never loses a file, and two live receivers process each item exactly once.
-- **`postMessage`** — navigation + theme signals, always via the shell
+Navigation messages usually contain metadata, but file-bearing messages also
+exist: `shell-add-files` carries Files to the shell, and restore/import messages
+carry backup Files into their app. It is incorrect to describe all postMessage
+traffic as having no file bytes. IndexedDB peeks abort upgrades to avoid creating
+another app's database accidentally. Same-origin deployment is required for the
+shared databases, theme, and bridge; it is not an isolation boundary between apps.
 
-```mermaid
-flowchart TB
-    subgraph Shell["/ · Platform Shell (index.html + shell.js)"]
-        TABS["App tabs + badges"] --- THEME["Theme owner (fv-theme)"] --- PWA["Platform PWA + SW"]
-    end
-    Shell -->|iframe| V["/vault/ · File Vault"]
-    Shell -->|iframe| L["/li/ · LI Documents"]
-    Shell -->|iframe| I["/inventory/ · Tool Inventory"]
-    Shell -->|iframe| T["/toolbox/ · Toolbox (10 tools)"]
-    Shell -->|iframe| S["/ros/ · Repair Orders"]
+| App key | Entry point | Standalone support | Own SW/manifest |
+| --- | --- | --- | --- |
+| `vault` (`files` alias) | [vault/index.html](vault/index.html) | Files and organization | Yes |
+| `li` | [li/index.html](li/index.html) | LI library and PDF processing | Yes |
+| `inventory` | [inventory/index.html](inventory/index.html) | Catalog and local edits | Yes |
+| `toolbox` | [toolbox/index.html](toolbox/index.html) | Utility tabs | No; platform cache |
+| `ros` | [ros/index.html](ros/index.html) | RO records/stories; attachment actions need the shell | No; platform cache |
+| `viewer` | [viewer.html](viewer.html) | Backup extraction, without database restore | No; platform cache |
 
-    B[("bridge.js<br/>IndexedDB 'vault-bridge' + BroadcastChannel")]
-    V <-->|"send/receive files"| B
-    L <-->|"send/receive PDFs"| B
-    T <-->|"receive files / save outputs"| B
+## 2. Shell behavior
 
-    V -.->|"shell-nav"| Shell
-    L -.->|"vault-nav, li-changed"| Shell
-    T -.->|"toolbox-open ⟵"| Shell
-    Shell -.->|"platform-theme → all frames"| V & L & I & T & S
+[shell.js](shell.js) and [index.html](index.html) implement:
 
-    FS[["Linked folders<br/>(File System Access)"]] -->|"sync / auto-sync"| V
-    FS -->|"sync / auto-sync"| L
-```
+- Six ARIA tabs with one visible panel, arrow/Home/End navigation, and remembered
+  last-used app (`fd-app`).
+- Live row-count badges for Vault, LI, and Inventory; refresh on navigation,
+  focus/visibility changes, app notifications, and intake timers. Background count
+  changes pulse, and background app toasts are relayed to the shell.
+- A shared System/Light/Dark theme, applied before paint and broadcast to frames.
+- A unified file picker and drop router. PDF filenames matching
+  `/\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i` route to LI. Other ordinary files
+  route to Vault. This is filename recognition, not PDF-content classification.
+- `.fvault`, `.lidb`, and `.tidb` inputs invoke app restore/import messages instead
+  of being stored as ordinary files. Ordinary inputs up to 256 MiB are eagerly
+  materialized before bridge delivery; larger files retain their original handle.
+- Single-target batches normally surface their destination; mixed batches stay
+  on the current tab. `stay:true` keeps an RO upload on its existing tab.
+- Optional collection/VIN metadata for Vault intake. An explicit intake VIN wins
+  over the pinned vehicle; LI routing does not use those Vault collection fields.
+- A pinned active vehicle (`fd-vehicle`). Vault filters by VIN. LI/Inventory scope
+  by the three characters at positions 4–6 only if they are all digits. There is
+  no external VIN decoder. Unpinning clears these scopes.
+- Ctrl/Cmd+K recognition of LI numbers, special-tool numbers, and 17-character
+  VINs; arbitrary text offers searches in Vault, LI, and Inventory.
+- Alt+1–6 app switching, forwarded by embedded pages. `/` search belongs to the
+  Vault, LI, and Inventory handlers, not every app.
+- **Back up everything** sends `platform-backup` to Vault, LI, and Inventory at
+  1.2-second offsets. RO records, preferences, and bridge/log databases are excluded.
+- Install prompting when offered by the browser, platform service-worker
+  registration on HTTPS/loopback, and refresh handling for worker updates.
 
-Every app also runs **standalone** at its own URL with its own service worker and manifest —
-the shell is a convenience layer, not a dependency.
+### Navigation routes
 
----
+| Route | Result |
+| --- | --- |
+| `#vault`, `#files`, `#li`, `#inventory`, `#toolbox`, `#ros`, `#viewer` | Select app |
+| `#toolbox/<key>` | Open utility; keys: `zip media ocr convert elec text calc csv img pdf` |
+| `#li/<LI number>` | Open matching LI document |
+| `#li/group/54` | Search `LI54.` |
+| `#li/model/214`, `#li/search/<query>` | Model filter or text search |
+| `#inventory/group/54`, `#inventory/model/214` | Group-membership or model filter |
+| `#inventory/<tool number>`, `#inventory/tool/<tool number>` | Open tool |
+| `#inventory/search/<query>` | Catalog search |
+| `#vault/vin/<VIN>`, `#vault/search/<query>` | Vehicle filter or metadata search |
+| `?view=li`, `?view=inventory` | Legacy app selection |
+| `?view=starred`, `?action=add` | Legacy Vault shortcut forwarded into its frame |
 
-## 1. Platform Shell — `/` (`index.html`, `shell.js`, `shell.css`, `sw.js`, `manifest.webmanifest`)
+Consumed queries are removed. Hash changes route in place. Links resolve against
+local browser data; sharing a link does not share its document. RO has a tab route
+but no implemented record-ID hash router.
 
-The only component that knows all six apps exist. Owns everything shared.
+## 3. File Vault
 
-```
-Platform Shell
-├── App switching
-│   ├── Six tabs: 📁 Files · 🗄️ LI Documents · 🔧 Tool Inventory · 🧰 Toolbox · 🧾 Repair Orders · 🔓 Extract
-│   ├── Lazy iframes — an app loads on first visit, then stays warm (instant switching)
-│   ├── One panel visible at a time (ARIA tab pattern: arrow keys, Home/End, roving tabindex)
-│   └── Last-used app remembered (localStorage "fd-app") and restored on launch
-├── Unified file intake (ONE front door for the whole platform)
-│   ├── "＋ Add files" button + one hidden <input> + a full-window drop zone, all in the top bar
-│   ├── Auto-routing (silent, no prompt): a PDF whose NAME carries a Mercedes
-│   │   document number (LI_DOCNUM, same pattern the LI app uses) → LI Documents;
-│   │   every other file → Files (the Vault)
-│   ├── The platform's OWN formats open in their app instead of being stored as blobs:
-│   │   .tidb → Tool Inventory import · .fvault → vault restore · .lidb → LI restore
-│   ├── Files landing in the vault get an immediate no-OCR VIN read (filename, text,
-│   │   PDF text layer) — vehicle paperwork groups under its car with zero clicks;
-│   │   files that would need OCR stay unstamped for the manual VIN scan to pick up
-│   ├── Delivery: shell loads bridge.js and VaultBridge.send()s each file to its
-│   │   target's outbox (meta.fromShell); ensures the target iframe is loaded so it ingests now
-│   ├── Drops over an app's iframe are caught inside that app and forwarded up as
-│   │   {shell-add-files} — so intake is unified no matter which tab is showing
-│   ├── Single-target batch → that app is surfaced; mixed batch stays put; toast summarizes the split
-│   └── The apps' own add buttons (Vault "Add files", LI "Import PDFs") are HIDDEN when embedded
-├── Tab badges (live counts)
-│   ├── Files count      ← peeks IndexedDB "file-vault" / store "files"
-│   ├── LI docs count    ← peeks IndexedDB "LIDocsDB" / store "docs"
-│   ├── Tools count      ← peeks IndexedDB "tool-inventory" / store "tools"
-│   ├── Read-only peek with upgrade-abort guard — can NEVER create/corrupt an app's DB
-│   └── Refreshes on: app switch · window focus · tab visible · {li-changed} message · after an add
-├── Theme (single source of truth for every app)
-│   ├── ◐ button cycles System → Light → Dark
-│   ├── Persists: localStorage "fv-theme" (set for light/dark, REMOVED for system)
-│   ├── Applies: data-theme attribute on <html> + theme-color meta swap
-│   ├── Broadcasts {platform-theme, mode} to every loaded iframe, and once per iframe load
-│   └── System mode live-follows the OS via a prefers-color-scheme listener
-├── Deep links & legacy URLs
-│   ├── #vault (alias #files) · #li · #inventory · #toolbox · #toolbox/<toolKey>
-│   ├── RECORD-level links (subMessage router): #li/<LI number> opens that document ·
-│   │   #li/group/54 ("LI54." precise search) · #li/model/214 · #li/search/<q> ·
-│   │   #inventory/group/54 · #inventory/model/214 · #inventory/<toolNo> · #inventory/search/<q> ·
-│   │   #vault/vin/<VIN> · #vault/search/<q>
-│   ├── hashchange while open switches apps in place (and re-forwards the sub-path)
-│   ├── ?view=li|inventory → opens that app        (legacy hub URLs)
-│   ├── ?view=starred / ?action=add → opens the vault WITH the query passed into its iframe
-│   └── Consumed queries are stripped from the URL so reload follows the hash, not the shortcut
-├── Pinned "Active Vehicle" (platform-wide current-car context; localStorage fd-vehicle)
-│   ├── Pin from: vault By-VIN header 📌 · a file's Related chips · quick-open's VIN row
-│   ├── Chip in the top bar: 🚗 …<VIN tail> (click = that vehicle's files) + ✕ unpin
-│   ├── Scoping: vault → vin:<VIN> filter · LI + inventory → model series from the VIN's
-│   │   Baumuster digits; applied on pin and on app first-load (BEFORE queued deep links,
-│   │   so explicit navigation wins); unpin clears all three scopes
-│   └── Front-door files headed to the vault while pinned get meta.vin → tagged with the
-│       car (auto VIN detect UNIONS its findings instead of clobbering the pin)
-├── Ctrl+K quick-open (ID router — works from inside any iframe, forwarded up)
-│   ├── Recognizes an LI number → open that doc · a tool number (3-3-2-2-2) → open that tool ·
-│   │   a 17-char VIN → that vehicle's files
-│   └── Anything else → "Search Files / LI Documents / Tool Inventory" rows with the query carried over
-├── One-click "Back up everything" (top-bar ⬇ button)
-│   └── Commands each data app to run its own existing export — .fvault + .lidb + .tidb, staggered
-├── Database File Viewer — the shell's 🔓 Extract tab (also standalone at /viewer.html;
-│   Files ⋮ → "Extract a backup file…" jumps to it; deep link #viewer)
-│   ├── Standalone, offline, ZERO dependencies (own ZIP reader/writer + format parsers inline)
-│   ├── Opens .fvault (binary v2 + legacy JSON), .lidb (ZIP+manifest; stored or deflated
-│   │   entries via DecompressionStream), .tidb — lists contents with sizes
-│   ├── "Download all as ZIP" (STORE + CRC32, UTF-8 names, memory-safe: one file at a time;
-│   │   4 GB ZIP limit guarded) or per-file downloads
-│   ├── fvault → collection folders; lidb → readable "LI…_ver - Title.pdf" names from the
-│   │   manifest; tidb → tools.csv + tools.json + photos/*.png
-│   └── Precached by the shell SW + shipped in the USB build — data is never locked in
-├── Toast relay + badge pulse (the platform feels like ONE app)
-│   ├── Apps forward their toasts up as {shell-toast, app, msg}; the shell shows them app-prefixed
-│   │   ONLY when that app's tab is in the background (foreground apps toast themselves)
-│   └── Badge counts pulse when a background app's row count changes
-├── Keyboard layer (forwarded from inside every iframe)
-│   ├── Alt+1–5 switches apps · Ctrl/Cmd+K opens quick-open · "/" focuses search in every app
-│   └── Escape closes quick-open / app overlays
-├── Message hub (window "message" listener)
-│   ├── {shell-nav, app, tab?, payload?} → activate app; payload (a ready-made app message,
-│   │   e.g. {inventory-filter, grp}) is forwarded to the target — how cross-app links travel
-│   ├── {vault-nav, to:"files"}       → activate vault (legacy contract, still honored)
-│   ├── {li-changed}                  → refresh tab badges
-│   ├── {shell-add-files, files, collection?, vin?, stay?} → route files through the unified
-│   │   intake; collection/vin file them (RO tab), stay:true keeps the current tab
-│   ├── {shell-relay, app, payload}   → forward a message to an app WITHOUT switching to it
-│   │   (RO tab uses it for vault-rename-collection)
-│   ├── {shell-open-picker}           → open the platform file picker (from an app's empty-state)
-│   ├── {shell-toast, app, msg}       → app-prefixed toast for background tabs + badge refresh
-│   ├── {shell-switch, n} / {shell-quickopen} → keyboard forwarded from inside iframes
-│   ├── Shell→app contracts: li-open/li-search/li-filter/li-restore/platform-backup ·
-│   │   inventory-filter/inventory-open/inventory-search/inventory-import/platform-backup ·
-│   │   vault-filter/vault-search/vault-restore/vault-rename-collection/vault-ro-apply/vault-ro-import/platform-backup (apps queue nav that
-│   │   arrives before their DB boot finishes, then replay it)
-│   └── Queues messages for not-yet-loaded frames; flushed on the frame's load event
-├── PWA (the installable "one app")
-│   ├── manifest id "/" — pre-platform installs upgrade in place
-│   ├── Shortcuts: Add files (?action=add) · Starred (?view=starred) · #li · #inventory
-│   └── ⤓ Install button on beforeinstallprompt; hidden after install
-└── Service worker (cache "platform-shell-v2")
-    ├── Precache: shell core (required) + bridge.js/toolbox/icons (tolerant — can't brick install)
-    ├── Fetch: skips /vault/ /li/ /inventory/ paths entirely (their own SWs rule there)
-    ├── Navigations network-first, cached per-URL; assets cache-first
-    └── Activate: prunes own old caches + legacy pre-platform "file-vault-*" root caches
-```
+Implementation: [app.js](vault/app.js), [db.js](vault/db.js),
+[backup-format.js](vault/backup-format.js), [blob-integrity.js](vault/blob-integrity.js).
 
-**Tied into:** all apps (iframes, theme broadcast; badges for the three data apps), three app IndexedDBs
-(read-only), and `bridge.js` — which the shell now loads to *send* unified-intake files
-to the Vault/LI outboxes (it still never *receives*; each app drains its own).
+| Area | Implemented behavior |
+| --- | --- |
+| Intake | Picker, drag/drop, paste, linked-folder import, and bridge deliveries; embedded intake forwards through the shell |
+| Stored-file checks | Materializes ordinary additions up to 256 MiB, then compares the stored Blob with the source in chunks; failed normal-intake verification removes the bad record |
+| Classification | Images, videos, audio, PDFs, documents, spreadsheets, presentations, text/code, archives, other |
+| Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders; existing PDF thumbnails backfill in the background |
+| Preview | Image/video/audio, native PDF iframe, text up to 512 KiB, fallback icon for unsupported types |
+| Organization | One collection per file, tags, note, star, editable filename, VINs and FINs |
+| Search/filter | Metadata search; type/collection/tag/VIN filters; All, Starred, Recent, By VIN; active-filter chips |
+| Sort/view | Date, name, size; grid/list saved in DB metadata |
+| Selection | Checkboxes, Ctrl/Cmd-click, Shift-click ranges, select-all, Escape; collection/tag/VIN/star/delete bulk actions |
+| Bulk outputs | Folder downloads with read-back comparison or individual-download fallback; PDFs to LI; compatible same-kind batches to Toolbox |
+| Local storage | Usage/quota display and `navigator.storage.persist()` request |
+| Keyboard | `/` search, `a` add, `g` grid, `l` list, Escape overlays/selection |
 
----
+PDF.js is pinned to **4.2.67**, generated from the npm package by
+[tools/vendor-pdfjs.mjs](tools/vendor-pdfjs.mjs). Vault lazy-loads its vendored
+runtime; loading the shell alone does not cache it. Preview support is distinct
+from accepting and storing a file.
 
-## 2. File Vault — `/vault/` (`index.html`, `app.js`, `db.js`, `styles.css`, `sw.js`, `vendor/pdf*.js`)
+### VIN scan and grouping
 
-The general-purpose file database. The platform's "hub" for incoming files from every other app.
+Direct additions and shell deliveries perform a no-OCR read; folder-sync imports
+do not invoke that automatic scan. The manual scan supports filenames,
+supported text/CSV/RTF content (first 1 MiB), PDF text (first ten pages), and image
+or sparse-page OCR fallback. Videos are skipped, including filename detection.
+A rich PDF text layer without a VIN is not indiscriminately OCR'd.
 
-```
-File Vault
-├── Adding files (5 ways in)
-│   ├── ＋ Add files button / a keyboard shortcut → file picker (multi-select)
-│   ├── Drag & drop anywhere onto the window (global overlay)
-│   ├── Paste from clipboard (window "paste" listener)
-│   ├── Folder sync (see below) — automatic
-│   └── Bridge deliveries from LI Documents and Toolbox — automatic
-├── Classification & preview
-│   ├── Auto-sorted by kind: Images · Videos · Audio · PDFs · Documents · Spreadsheets
-│   │   · Presentations · Text & code · Archives · Other  (sidebar "Types" tree w/ counts)
-│   ├── Thumbnails generated on-device:
-│   │   ├── Images  → scaled canvas JPEG
-│   │   ├── Videos  → mid-point frame grab
-│   │   └── PDFs    → first page rendered via vendored pdf.js (v3.11.174)
-│   │       ├── pdf.js lazy-loads only when a PDF needs a preview (~1.5 MB, then SW-cached)
-│   │       ├── Existing PDFs back-filled in the background, one at a time, persisted
-│   │       │   without touching updatedAt (so "Recent" order never jumps)
-│   │       └── Encrypted/broken PDFs keep the glyph icon (marked, never retried)
-│   └── Detail drawer preview: image / video / audio player / PDF (native viewer iframe)
-│       / inline text ≤512 KB / glyph fallback
-├── Multi-select + bulk actions
-│   ├── Select: hover checkbox · Ctrl/Cmd+click · Shift+click range · Ctrl+A all visible ·
-│   │   Esc clears; with a selection active, plain clicks toggle instead of opening detail
-│   ├── Bulk bar (floating): Set collection · Add tags · Add VIN (files join the 🚗 By VIN
-│   │   group) · Star/Unstar · Send to LI · Send to Toolbox · Download · Delete
-│   ├── Download: saves the whole selection into a folder you pick, each file verified on
-│   │   disk after writing (falls back to per-file downloads without the folder API)
-│   └── Bulk Toolbox send requires one kind; the toolbox buffers the bridge burst and
-│       hands the tool every file — the Media tool loads the first and queues the rest
-│       with a "Next file ▸" bar (PDF merge still gets every PDF at once)
-├── Organizing
-│   ├── Collections (create via menu or ＋; auto-created by sync & bridge imports)
-│   ├── Tags (any number per file; tag cloud in sidebar; click = filter)
-│   ├── Notes (free text per file)
-│   ├── ★ Star (card, row, and detail toggles; "Starred" smart filter)
-│   └── Detail drawer edits: name/collection/tags/VIN/FIN/note → Save
-├── VIN grouping (⋮ → "Scan files for VINs" / sidebar ↻; Shift-click = full rescan)
-│   ├── Reads every file for 17-char Vehicle Identification Numbers
-│   │   (videos are skipped — no readable VIN, and their blobs are large)
-│   │   ├── Filenames + text/CSV/RTF files → read directly (first 1 MB)
-│   │   ├── PDFs → text layer via the vendored pdf.js (first 10 pages)
-│   │   └── OCR (Tesseract.js, lazy CDN — same __TESS_* overrides as LI) is a
-│   │       FALLBACK: used only when a page is SPARSE/scanned (little/no text)
-│   │       and its text/filename yields no VIN (the VIN may sit in an image),
-│   │       and always for images. A PDF with a rich text layer (≥400 chars) and
-│   │       no VIN is taken at its word — NOT OCR'd — so datasheets/manuals can't
-│   │       have VIN-shaped noise fabricated from their prose. Fuzzy I→1/O→0 OCR
-│   │       correction only touches runs that already hold ≥2 real digits.
-│   ├── Matching: 17 chars from [A-HJ-NPR-Z0-9]; tolerant of spaces/tabs BETWEEN
-│   │   characters (PDF/OCR text often splits a VIN, e.g. "W1KLF4HB1 RA068698")
-│   │   so split VINs are still found; OCR text retried with I→1 / O,Q→0; ≤25/file
-│   ├── Only real VINs: a candidate must begin with a known Mercedes-Benz WMI
-│   │   (WDB/WDC/WDD/W1K/W1N/WDF/W1V/4JG/55S/… — extendable set), carry a numeric
-│   │   serial (≥4 digits), not spell a word (no 7+ letter run), and have ≥6
-│   │   distinct chars. This throws out engine numbers (112600009311006RE),
-│   │   OCR'd blank fields (000000000000000ER), and space-joins
-│   │   (FREEMAPUPDATES50A) while keeping every real MB VIN/FIN
-│   ├── VIN vs FIN: Mercedes datacards hold both the ISO VIN (labelled "VIN")
-│   │   and a Baumuster-based FIN/datacard number (e.g. W1K2140471A068698). The
-│   │   VIN drives grouping; the FIN is stored separately (record.fins), shown as
-│   │   a distinct amber chip + its own detail field, and still searchable.
-│   │   Classified by the preceding label ("VIN" vs "Datacard"/chassis), with an
-│   │   unlabelled Baumuster-format code (digit at position 4) beside a real VIN
-│   │   treated as a FIN
-│   ├── Multi-core: files run across up to POOL_MAX lanes (cores−1, capped 4;
-│   │   window.__VIN_OCR_WORKERS override), so several images/scanned PDFs OCR
-│   │   in parallel on separate Tesseract workers. (WASM/CPU — no browser GPU
-│   │   OCR path exists.) Each lane lazily creates one worker only when it
-│   │   first meets an OCR file; the shared script load fails once for all lanes
-│   ├── Never wedges: fast sources always run; OCR is time-boxed per file
-│   │   (load ≤15 s, recognize ≤45 s — window.__VIN_OCR_* override) and the
-│   │   scan is cancellable (Stop). If the OCR engine can't load (locked-down/
-│   │   offline machine) it's dropped for the rest of the run — those files
-│   │   are left unscanned to retry, not re-hung on one by one
-│   ├── Incremental: files are stamped vinScan when read, so re-runs only
-│   │   touch new files; OCR-needing files skipped offline stay unstamped
-│   ├── Stored per record (vins[]) without touching updatedAt; kept in
-│   │   backups (.fvault) and shown as 🚗 chips on cards/rows
-│   ├── 🚗 "By VIN" smart view — results grouped under one header per VIN
-│   │   (header click = filter to that vehicle) + sidebar VIN list w/ counts
-│   └── Detail drawer: editable VIN field + per-file "Detect" button
-├── Finding
-│   ├── Live search ("/" focuses) across name + tags + notes + collection + VINs
-│   ├── Filters: All · Starred · Recent (40 newest) · By VIN · kind:x · collection:x · tag:x · vin:x
-│   │   └── Active-filter chips with one-click removal
-│   ├── Sort: Newest · Oldest · Name A→Z/Z→A · Largest · Smallest
-│   └── Views: grid (g) / list (l) — choice persisted in DB meta "view"
-├── Folder sync (⋮ → "Sync a folder…" / "Auto-sync")                    [Edge/Chrome]
-│   ├── Link once via OS picker → handle persisted in DB meta "syncDir", restored on launch
-│   ├── Scan = recursive walk (depth ≤8, ≤20k files) → import anything new or changed
-│   │   ├── Dedup: name + size + source modified-time (srcMtime stored per record)
-│   │   ├── Dedup set read fresh from the DB each scan (two open windows can't double-import)
-│   │   └── Imports filed into a collection named after the folder
-│   ├── Auto-sync toggle (persisted, DB meta "syncAuto"): rescans every 5 min while open
-│   │   + on window focus + on tab-visible + once ~1.5 s after enabling
-│   └── Auto path is silent-unless-something-imported and never permission-prompts
-├── File actions (detail drawer footer)
-│   ├── Open (new tab) · Download · Delete
-│   ├── 🗄️ Send to LI      (PDFs)                → bridge target "li" + shell switches app
-│   └── 🧰 Send to Toolbox (image/video/PDF/.csv/.zip) → bridge target "toolbox"
-│       with meta.tab routing (media/pdf/csv/zip) + shell switches to that tool
-├── Receiving (bridge target "vault") — the single intake for LI + Toolbox sends
-│   ├── Files under meta.collection ("LI Documents" default / "Toolbox")
-│   ├── LI metadata → tags (LI number, function group, "Model <series>") + note ("LI: title")
-│   └── Thumbnails generated on arrival; toast announces the filing
-├── Backup & restore
-│   ├── Export whole vault → single .fvault file (blobs base64'd, thumbs included)
-│   ├── Import .fvault (validates format "file-vault")
-│   └── ⋮ → Request persistent storage (navigator.storage.persist)
-├── Storage meter — sidebar bar + About dialog (navigator.storage.estimate; quota is the
-│   browser's share-of-free-disk, not an app limit)
-├── Keyboard: "/" search · "a" add · "g" grid · "l" list · Esc close (menu→detail→about)
-└── Platform integration
-    ├── Embedded (html.embedded): hides brand, theme button, install button;
-    │   theme follows shell broadcasts; never writes fv-theme
-    ├── Standalone: own ◐ theme cycle (prefers shared fv-theme, falls back to DB meta),
-    │   own ⤓ install (manifest id "/vault/"), "vault-nav"-free — it IS the destination
-    └── SW cache "vault-app-v7": precaches shell + ../bridge.js; pdf.js vendor cached at runtime
-```
+Matching accepts space-split candidates and applies Mercedes-specific WMI and
+plausibility rules. It separates labelled ISO VINs from Baumuster/FIN datacard
+identifiers; VINs drive grouping, while FINs remain searchable and editable.
+Detection is heuristic, not a guarantee of recall or validity for every vehicle.
 
-**Tied into:** bridge (both directions, 2 send targets + 1 receive), shell (shell-nav out,
-platform-theme in, badge peeked), LI (receives its renamed PDFs; feeds it raw PDFs),
-Toolbox (feeds it files; receives its outputs), File System Access (folder sync),
-CDN (VIN-scan OCR only).
+The scan is cancellable and incremental (`vinScan`); Shift-click requests a full
+rescan. OCR uses up to four worker lanes by default, based on available cores,
+with load/recognition timeouts. Files needing unavailable OCR remain eligible for
+retry. `__VIN_OCR_WORKERS` and `__VIN_OCR_*` globals support controlled overrides.
 
----
+### Folder sync
 
-## 3. LI Documents — `/li/` (single-file app: `index.html` with inlined JSZip + pdf.js)
+A chosen directory handle is stored in `meta.syncDir`; auto mode in `syncAuto`.
+Scans recurse with depth/file-count limits and match filename, size, and source
+modification time. Imports go into a collection named after the folder. A fresh
+DB read helps deduplication but does not constitute a transactional cross-window
+uniqueness guarantee. Changed files can create new records; removals are not mirrored.
+Auto checks run every five minutes and on focus/visibility while the page runs,
+without requesting permission in the background.
 
-The Mercedes-Benz LI PDF specialist: parses, files, versions, renames.
+### Cross-app files
 
-```
-LI Documents
-├── Import & parse pipeline
-│   ├── ＋ Import PDFs (files or a whole folder) · drag & drop · bridge (from vault)
-│   ├── Reads each PDF's text (inlined pdf.js) and extracts:
-│   │   LI number · version · title · reason for change · function group · date · validity
-│   ├── Scanned PDFs → automatic OCR fallback (Tesseract.js, lazy CDN load — online-only,
-│   │   like the vault's and Toolbox's OCR; overridable via window.__TESS_* globals)
-│   ├── Model series derived from Validity (drives the model filter + vault tags)
-│   ├── Dedup by content identity (LI+version) — re-imports update, never duplicate
-│   └── ↻ Re-read all: re-runs the parser over every stored PDF, preserving hand edits
-├── Library table
-│   ├── Search: LI number, title, function group, or FULL TEXT of the PDFs
-│   ├── Filters: function group · model series · ☆ starred · ⚠ needs review
-│   │   └── "Needs review" = missing/suspect parsed fields (flagged during import)
-│   ├── Row select + Select all → bulk: Delete selected · ⬇ Export renamed (ZIP)
-│   └── Header shows doc/file/size totals (#storeInfo)
-├── Document detail
-│   ├── PDF preview pane (native viewer) + editable fields (LI, version, title, reason,
-│   │   function group, date, validity) → Save (edits survive re-reads)
-│   ├── Version picker — multiple versions of one LI live together; ← Back navigation
-│   ├── Compare versions (diff overlay)
-│   │   ├── Page mode: rendered pages diffed visually (red/green overlay)
-│   │   └── Text mode: extracted-text diff with summary
-│   ├── Renamed filename preview (canonical "LI…_ver Title.pdf" scheme)
-│   ├── Copy: 📋 LI number · 📋 renamed filename · 🔗 permalink (#<LI> deep link)
-│   ├── ⬇ Renamed download · Original download · ☆ star
-│   └── ＋ File Vault → bridge send("vault") with full metadata
-│       (vault files it under "LI Documents", tagged LI/fgroup/models)
-├── Folder sync (☰ menu)
-│   ├── 📂 Sync folder: link once, one click imports new/changed PDFs
-│   │   (dedup name+size+mtime; Shift-click relinks a different folder)
-│   └── ⏱ Auto-sync toggle (persisted): 5-min timer + focus/visibility rescans while open,
-│       silent unless something imports, never permission-prompts
-├── Save & backup (☰ menu)
-│   ├── 🔄 Auto-save: writes the whole database to a chosen file after every change
-│   │   (File System Access write handle, e.g. on a flash drive; warn state on permission loss)
-│   ├── 💾 Backup / ↥ Restore (single-file export/import)
-│   └── 📌 Install (desktop shortcut; hidden when embedded)
-├── Notifications out
-│   ├── {li-changed} → shell refreshes the LI tab badge after every data change
-│   └── receive("li") registered with the bridge → vault's "Send to LI" lands here
-└── Platform integration
-    ├── Embedded: hides h1 / ← Files / Install; theme follows shell; ← Files posts vault-nav
-    ├── Standalone: ← Files goes to ../index.html#vault; dark/light/system fully supported
-    └── Own SW (li-db-shell-v2 / li-db-runtime-v1: nav network-first, CDN cache-first,
-        assets stale-while-revalidate) + own manifest (scope /li/)
-```
+Vault sends PDFs to LI and supported images/videos/PDFs/CSVs/ZIPs to Toolbox.
+LI deliveries become renamed PDFs in an `LI Documents` collection with LI/group/model
+tags and a note. Toolbox outputs default to a `Toolbox` collection. Explicit
+`meta.collection` overrides defaults. Bulk Toolbox sends are buffered; PDF merge
+receives a batch, while Media can queue later files behind **Next file**.
 
-**Tied into:** vault (bi-directional file exchange via bridge), shell (badge, theme,
-vault-nav), File System Access (sync folder + auto-save handles), CDN (OCR only).
+## 4. LI Documents
 
----
+[li/index.html](li/index.html) contains the app plus inlined JSZip and generated
+PDF.js main/worker bundles.
 
-## 4. Tool Inventory — `/inventory/` (`index.html`, `app.js`, `styles.css`, `sw.js`)
+- Imports individual PDFs, folders, drops, and bridge deliveries; extracts document
+  number, version, title, reason for change, function group, date, and validity.
+- Falls back to Tesseract OCR for scanned documents. First OCR use normally needs
+  network access; this can occur during import without a separate OCR button.
+- Keeps versions under document identities; repeated LI/version imports update
+  their record. Re-read all reparses stored PDFs while preserving edited fields.
+- Searches metadata and extracted full text. Filters include function group,
+  model series, stars, and records needing review.
+- Offers PDF preview, editable metadata, version selection, visual page comparison,
+  text comparison, LI/filename/permalink copying, original or renamed downloads,
+  and bulk deletion/renamed ZIP export.
+- Copies renamed PDFs to Vault with LI/group/model metadata; links to Inventory
+  by service group/model and referenced special-tool numbers.
+- Supports folder import and five-minute auto-sync while open. Folder identity
+  uses name/size/mtime; Shift-click allows relinking.
+- Exports `.lidb` backups and restores by document ID; optional auto-save writes a
+  backup to a selected file after changes, debounced and deferred during import.
+  File System Access permissions are required and may need renewal.
 
-A private, offline database of Mercedes-Benz special tools. Like the File Vault and LI
-Database, **the data is not built into the app** — the app ships empty and loads a single
-self-contained portable database file (`.tidb`) that holds every tool *and* its part photo.
-The full catalog (1,688 master-list tools · 999 offered · 975 with photos) is built from
-the source data in `inventory-data/` by `tools/build-inventory-db.mjs`.
+## 5. Tool Inventory
 
-```
-Tool Inventory
-├── Portable database file (.tidb) — the data lives here, not in the code
-│   ├── Binary container: "TIDB" · uint32 version · uint32 metaLen · meta JSON · photo bytes
-│   ├── meta JSON: { format:"tool-inventory-db", version, source, updated, tools[], photos[] }
-│   ├── Each tool: tool number · description · service group · category (Ct) · bin location ·
-│   │   quantity · year · dealer-net price · notes · offered flag · catalog name/description ·
-│   │   WIS document + version · model validities
-│   └── Part photos stored INSIDE the file (concatenated PNG bytes), keyed by photo id
-├── Storage: IndexedDB `tool-inventory` (DB v2) — stores: tools · photos (id→Blob) · meta
-│   └── Photos read as blobs → object URLs at boot (no img/*.png URLs)
-├── Browsing
-│   ├── Search across tool number, descriptions, catalog text, location, WIS, comments
-│   ├── Filters: service group · category (Ct) · note code · 🛒 Offered · ★ Starred
-│   ├── Sort by any column (asc/desc)
-│   ├── Part-photo thumbnails in the list (from the database file's blobs)
-│   └── Header stats: total · offered · with photo (or "No database loaded")
-├── Detail view
-│   ├── Full record + part photo + catalog description + model validities list
-│   ├── Editable: location · quantity · note · comment
-│   └── ★ star toggle
-├── Data management (☰ menu)
-│   ├── Open database… (.tidb) · Save database (.tidb) — the whole inventory + photos
-│   ├── Import CSV (refresh/extend the list) · Export CSV (current filtered rows)
-│   ├── Legacy JSON backups (tools only) still import; drag-drop .tidb/.json/.csv onto window
-│   ├── Standalone/USB builds ship the catalog (app/data/FileInventory.tidb, built by
-│   │   bundle-app/build-portable) — an empty inventory probes for it and offers a
-│   │   one-click "Load the built-in tool catalog"
-│   └── Legend (category/note explanations)
-├── Cross-app links
-│   ├── Cross-filter chip (from LI / vault / deep links): group membership in svcGrp
-│   │   (multi-valued, e.g. "00, 54") and/or model series in validities[] — click to clear
-│   ├── Tool detail → "🗄️ LI docs · grp NN" (precise "LINN." search) and
-│   │   "🗄️ Find in LI docs" (full-text search for the tool number)
-│   └── inventory-open/-filter/-search/-import + platform-backup message contracts
-└── Platform integration
-    ├── Empty by default — open a .tidb to load the catalog (also works embedded in the shell)
-    ├── Embedded: hides h1 / install; "⌂ File Database" link only shows standalone
-    ├── Theme: full light/dark/system (platform-theme listener + pre-paint script)
-    ├── No bridge usage — it's a reference catalog, not a file inbox
-    └── Own SW (tool-inventory-v7, no bundled data) + manifest; shell badge peeks its DB
-```
+Implementation: [inventory/app.js](inventory/app.js).
 
-**Tied into:** shell only (badge, theme). Deliberately isolated otherwise.
+The app starts with an empty database. It imports a portable `.tidb` containing
+records and photos; it does not automatically seed from `inventory-data/tools.json`.
+An empty app probes `../data/FileInventory.tidb` and offers a load button when found.
+[build-inventory-db.mjs](tools/build-inventory-db.mjs) creates
+`dist-db/FileInventory.tidb` from the source JSON and referenced photos. The portable
+builder copies it to `app/data/`; there is no `bundle-app` script in this repository.
 
----
+| Area | Behavior |
+| --- | --- |
+| Record data | Tool number, description, service group, category, location, quantity, year, price, notes, offered flag, catalog details, WIS reference, model validities, photo |
+| Search/filter | Tool/catalog text, location, WIS, comments; group/category/note, offered, starred; cross-app group/model filters |
+| Browsing | Sortable columns, photo thumbnails from IndexedDB Blob URLs, record/photo/offered counts |
+| Editing | Location, quantity, note, comment; star toggle; saved locally |
+| Import/export | `.tidb` replacement after confirmation; legacy JSON input; CSV refresh/extension and filtered CSV export |
+| Cross-links | Tool's first non-00 group links to precise `LINN.` search; tool number links to LI full-text search |
 
-## 5. Toolbox — `/toolbox/` (single-file app: `index.html` with inlined pdf-lib, pdf.js, JSZip)
+Source catalog prices/offered status are snapshots. Importing a new `.tidb`
+replaces the current database. CSV imports match ID first, then tool number, and
+overwrite matching fields with nonempty incoming values, including locally edited
+fields; unmatched rows are added. Stars and fields absent from that update remain
+on existing records. Inventory uses shell messages and direct database storage,
+not VaultBridge.
 
-Ten local file utilities (imported from the File-Compressor project), wired into the platform.
+## 6. Toolbox
 
-```
-Toolbox
-├── 📦 Zip Splitter
-│   ├── Split one ZIP by file count or by max part size (never exceeds target)
-│   ├── Output zipped (.zip per part) or unzipped (real folders via directory picker,
-│   │   or one extract-to-folders ZIP on other browsers)
-│   └── Preserves inner folder structure; per-part or download-all
-├── 🎬 Media Compressor
-│   ├── Photos: quality/dimension reduction (canvas re-encode)
-│   └── Videos: MediaRecorder + captureStream re-encode → WebM
-├── 🔤 Image to Text (OCR) — Tesseract.js (lazy CDN; paste an image directly onto the tab)
-├── 📐 Unit Converter — many categories (length/mass/temp/data/…)
-├── ⚡ Electrical — Ohm's law & power · series/parallel resistors · voltage divider ·
-│   LED resistor · color codes (4-band and 5/6-band) · SMD codes · reactance ·
-│   energy cost · dBm⇄W · wire gauge (AWG) · battery life
-├── 📝 Text — editor + counters · find & replace · side-by-side compare (diff)
-├── 🧮 Calculators — percentage · discount/sale price · date difference/age · mileage/trip cost
-├── 📊 CSV Viewer — sortable, searchable table; export back to CSV/JSON
-├── 🖼️ Image Tools — format converter (batch + zip-all) · crop/rotate/resize · EXIF
-│   viewer & stripper (incl. GPS link)
-├── 📕 PDF Toolkit — organize & merge (reorder/rotate/delete pages) · images→PDF ·
-│   extract pages as images · Rename Mercedes-Benz LI Documents (regex + OCR fallback)
-└── Platform integration
-    ├── Tool tabs deep-linkable: shell #toolbox/<key> → {toolbox-open} → window.__openTab
-    │   (keys: zip media ocr convert elec text calc csv img pdf; also #<key> standalone)
-    ├── Receive from vault: bridge receive("toolbox") → picks tab from meta.tab (or MIME)
-    │   → injects the file into that tool's input (DataTransfer + change event)
-    ├── Save to File Vault: EVERY output path (all download helpers + media/OCR results)
-    │   raises a snackbar → 💾 Save to File Vault → bridge send("vault", collection "Toolbox")
-    ├── Theme: full light/dark/system on the shared tokens; brand hidden when embedded
-    └── No own SW/manifest — the SHELL's service worker precaches this page
-```
+Implementation: [toolbox/index.html](toolbox/index.html), with inlined JSZip,
+pdf-lib, and generated PDF.js main/worker bundles.
 
-**Tied into:** vault (receives files, sends outputs — both via bridge), shell (tab
-deep-links, theme, toolbox-open), CDN (OCR only).
+| Key | Tool | Capabilities |
+| --- | --- | --- |
+| `zip` | ZIP Splitter | Partition by count/size, preserve folder structure, ZIP parts or folder-oriented extraction |
+| `media` | Media Compressor | Canvas photo re-encoding; browser MediaRecorder/captureStream video output to WebM |
+| `ocr` | Image to Text | Tesseract recognition, including pasted images |
+| `convert` | Unit Converter | Length, mass, temperature, data, and other unit categories |
+| `elec` | Electrical | Ohm/power, resistors, divider, LED resistor, color/SMD codes, reactance, energy cost, dBm/W, AWG, battery life |
+| `text` | Text | Editor/counters, find/replace, comparison |
+| `calc` | Calculators | Percentage, discount, date/age, mileage/trip cost |
+| `csv` | CSV Viewer | Search/sort table; CSV/JSON export |
+| `img` | Image Tools | Format conversion, batch ZIP, crop/rotate/resize, EXIF view/strip, GPS map link |
+| `pdf` | PDF Toolkit | Merge/organize/reorder/rotate/delete, images-to-PDF, page-image extraction, LI renaming with OCR fallback |
 
----
+Standalone tool hashes use `#<key>`; the shell uses `#toolbox/<key>`. Bridge inputs
+select a tab and inject files into its input. Output download helpers offer
+**Save to File Vault**. Browser codecs and API support constrain available media
+and filesystem operations. A ZIP target cannot make an indivisible oversized
+source file arbitrarily small.
 
-## 5b. Repair Orders — `/ros/` (single self-contained `index.html`)
+## 7. Repair Orders
 
-One place per repair order: its files (stored in the **Vault** under a per-RO
-collection, so they get all the Vault's features) plus the job's story, written
-as multiple lines. Works alongside the Vault; the RO tab is a focused view.
+[ros/index.html](ros/index.html) stores records in `repair-orders/ros` separately
+from Vault. Fields are RO number, vehicle text, VIN, collection association, story
+lines, and timestamps. Stories use independently removable textareas labelled
+Line A/B/etc.; editing is debounced by 400 ms. Older single-note records migrate
+into the first line. The list is ordered by last update.
 
-```
-Repair Orders
-├── Repair orders (IndexedDB "repair-orders" → store "ros"
-│   │   {id, ro, vehicle, vin, lines:[{id,text}], collection, createdAt, updatedAt})
-│   ├── Sidebar list (RO number · vehicle), newest-first; ＋ New; click to open
-│   ├── Fields: RO number · Vehicle (free text) · VIN
-│   ├── 📝 Stories / repairs — MULTIPLE lines per RO (Line A, Line B, …), each a
-│   │   plain <textarea>; ＋ Add line / ✕ remove; positional A/B/C labels;
-│   │   debounced autosave (migrates an older single notes field into Line A)
-│   └── Delete (confirmed) — removes the RO; its Vault files are left in place
-├── Files (live in the Vault, collection = "RO <number>")
-│   ├── Add (upload): ＋ Add files / drop zone → {shell-add-files, collection,
-│   │   stay:true} → shell files them into the Vault WITHOUT switching tabs
-│   │   (materialized + verified by the Vault's normal intake)
-│   ├── Import from Vault: ⬇ button hands off to the NORMAL Vault screen in
-│   │   "select for RO" mode (a banner + the Vault's own multi-select) → pick
-│   │   files, then the Vault's ➕ Add to RO button transfers them to this RO's
-│   │   collection and jumps back to the RO (payload vault-ro-import)
-│   ├── VIN reconcile on every add/import (see 5b.1 below)
-│   ├── List: read-only peek of IndexedDB "file-vault" filtered by the collection
-│   │   (upgrade-abort guard — never creates/mutates the Vault DB); shows a
-│   │   per-file VIN badge (highlighted when it matches the RO); re-polled after
-│   │   an add and on window focus
-│   ├── Open in Vault ↗ → {shell-nav vault, payload vault-filter collection:…}
-│   └── Rename safety: editing the RO number relays {vault-rename-collection
-│       from→to} so the RO's Vault files move with it (none left behind)
-└── Platform integration
-    ├── Deep link #ros; embedded theme; Alt+1–9 & Ctrl+K forwarded; shell-nav {id}
-    ├── Standalone at /ros/ (notes work; file add/import/open need the shell)
-    └── No own SW/manifest — the SHELL's service worker precaches this page
-```
+Files live in Vault, associated by a single collection string: `RO <number>`, or
+an ID-derived fallback when there is no number. RO numbers are not unique database
+keys, so repeated numbers can share the same attachment collection.
 
-**5b.1 VIN reconciliation** (applied when files are added to an RO):
-- a file with **no VIN** → the RO's VIN is stamped onto it (auto-fill)
-- a file whose VIN **matches** the RO → added as-is
-- a file whose VIN **differs** from the RO → prompt to **Add anyway** (added,
-  its own VIN kept — never overwritten) or **Ignore** (skipped)
-- **Import path** (files already in the Vault): reconciled in the Vault by
-  `importSelectionToRo()` — the mismatch prompt is a confirm(); files move to
-  the RO collection there
-- **Upload path** (new files from disk): reconciled in the RO tab via the
-  Vault's `vault-ro-apply {coll, vin, add[], stampVin[], remove[]}` handler
-  (DB-safe, rebuilds searchText), after a short settle so the Vault's no-OCR
-  VIN read of the file's own contents has run first (ignored uploads are
-  ejected back to uncategorized)
+| Action | Implementation and effect |
+| --- | --- |
+| Upload | `shell-add-files` with collection and `stay:true`; normal shell routing still sends LI-named PDFs to LI |
+| Import existing files | `vault-ro-import` opens normal Vault selection UI; **Add to RO** changes selected records' collection, then returns to the RO |
+| VIN reconciliation | Fill a missing VIN from the RO; keep matching VINs; prompt on mismatch and preserve original VINs when accepted |
+| Upload reconciliation | Poll new collection records, allow a short settle for no-OCR VIN detection, then send `vault-ro-apply`; ignored uploads become uncategorized |
+| Existing-file mismatch | Vault uses `confirm()`; cancel skips the mismatched files |
+| Attachment listing | Read-only Vault peek, refreshed after actions and on focus; VIN badges and Vault navigation |
+| Rename | `vault-rename-collection` relayed by the shell moves the old collection's files |
+| Delete RO | Deletes the RO record, leaving Vault files |
 
-**Tied into:** Vault (files stored there under the RO collection; VIN reconcile
-and rename kept in sync via vault-ro-apply / vault-rename-collection), shell
-(shell-add-files{stay}, shell-relay, shell-nav, theme, keyboard).
+File workflows require the shell. There is **no RO export/import or
+`platform-backup` handler**. Vault backups contain attached files and collection
+names, but not the separate RO stories/vehicle records. The current portable
+builder omits `ros/` even though the shell still shows its tab.
 
----
+## 8. Backup formats and Extract
 
-## 6. Shared infrastructure
+| Format | Structure | App restore semantics |
+| --- | --- | --- |
+| `.fvault` v2 | `FVLT`, little-endian uint32 version 2 and metadata length; UTF-8 JSON; alternating raw file/thumbnail bytes described by metadata | Validates the binary structure before writes, then adds records; ID collisions receive new IDs |
+| Legacy `.fvault` | JSON `format: "file-vault"`, file/thumbnail base64 fields | Adds records; legacy path has separate validation |
+| `.lidb` | ZIP containing `manifest.json` and `files/` PDFs; current writer uses STORE | Restores by document ID, overwriting matching entries after confirmation |
+| `.tidb` | `TIDB`, little-endian uint32 version 1 and metadata length; UTF-8 JSON with tools/photo lengths; concatenated photos | Replaces inventory after confirmation |
 
-### 6.1 `bridge.js` — VaultBridge (the file bus)
+Vault exports metadata such as tags, note, collection, stars, VINs/FINs, and
+timestamps. They do not export the `meta` store (preferences, folder handles,
+empty collections), source sync timestamps, RO records, or logs. A structurally
+validated import is not a single atomic transaction for every restored record;
+write failures can still interrupt restoration. The app does not encrypt backups.
 
-| Aspect | Detail |
-|---|---|
-| Transport | IndexedDB **`vault-bridge`** / store `outbox` (id autoIncrement, index `target`) — file Blobs travel as structured clones, never over postMessage |
-| Wake-up | `BroadcastChannel("vault-bridge")` nudge `{kind:"incoming", target}` + drain on receive() registration, window focus, and a 2.5 s poll fallback |
-| API | `send(target, {name, type, blob, meta})` · `receive(target, handler)` · `drain(target)` |
-| Targets | `"vault"` (LI + Toolbox send here) · `"li"` (vault sends PDFs) · `"toolbox"` (vault sends work files) |
-| Delivery | **Atomic claim-by-delete** before handling — two live instances of one app (shell + standalone tab) can't both import an item; failed handlers **requeue** for retry |
-| Durability | send() resolves when queued — the receiver may not even be open yet; items wait in the outbox until claimed |
+[viewer.html](viewer.html) reads all three formats plus legacy Vault JSON without
+restoring app databases. It lists entries and downloads them individually or in a
+STORE ZIP with CRC32 and UTF-8 names. Vault output uses collection folders; LI uses
+readable document filenames; Inventory outputs `tools.csv`, `tools.json`, and
+`photos/`. Thumbnails and application settings are not extracted as user files.
+The standalone page embeds its own readers/writer. Deflated LI entries use
+`DecompressionStream("deflate-raw")`; ZIP output has a roughly 4 GiB limit and no
+ZIP64 support. Viewer parsers are separate from Vault's strict restore validator.
 
-### 6.2 postMessage contract (navigation & theme — no file bytes ever)
+## 9. Shared contracts and storage
+
+### VaultBridge delivery
+
+[bridge.js](bridge.js) uses IndexedDB `vault-bridge` version 2, store `outbox`, with
+an auto-incrementing ID and target index. `send(target, {name, type, blob, meta})`
+resolves after queue persistence, not after destination import.
+`receive(target, handler)` registers a receiver, drains pending items, and returns
+an unsubscribe function. `drain(target)` is also exposed.
+
+A receiver atomically claims a row with a token and a time-limited lease (default
+five minutes), renewing while the handler runs. A fulfilled handler leads to
+acknowledgement/deletion; rejection releases it for retry. A crashed receiver
+leaves a recoverable row once the lease expires and another drain occurs.
+This supports retries and competing receivers, but is not a transactional
+exactly-once guarantee across the receiver's database write and mailbox deletion.
+Handlers must return their completion promise and reject failed delivery.
+
+Wakeups occur on send/registration, BroadcastChannel messages, and window focus.
+A 2.5-second polling fallback runs only when BroadcastChannel is unavailable.
+Failed handlers schedule bounded delayed retries; expiry alone is not a universal
+background timer guaranteeing immediate crash recovery.
+
+### Shell message families
 
 | Message | Direction | Effect |
-|---|---|---|
-| `{type:"shell-nav", app, tab?}` | app → shell | Switch apps (tab forwarded to toolbox) |
-| `{type:"vault-nav", to:"files"}` | app → shell | Legacy: switch to Files |
-| `{type:"li-changed"}` | LI → shell | Refresh tab badges |
-| `{type:"platform-theme", mode}` | shell → every frame | Apply system/light/dark |
-| `{type:"toolbox-open", tab}` | shell → toolbox | Activate a tool tab |
+| --- | --- | --- |
+| `shell-nav {app, tab?, payload?}` | App → shell | Activate app and forward optional payload |
+| `shell-relay {app, payload}` | App → shell | Load target and forward without switching |
+| `vault-nav {to:"files"}` | LI → shell | Legacy Vault navigation |
+| `shell-add-files {files, collection?, vin?, stay?}` | App → shell | Unified file intake |
+| `shell-open-picker` | App → shell | Open top-bar picker |
+| `shell-toast {app, msg}`, `li-changed` | App → shell | Notifications/badge refresh |
+| `shell-switch {n}`, `shell-quickopen`, `shell-pin-vehicle {vin}` | App → shell | Keyboard/navigation/vehicle context |
+| `platform-theme {mode}` | Shell → frames | System/light/dark |
+| `platform-backup` | Shell → Vault/LI/Inventory | Per-app exports |
+| `toolbox-open {tab}` | Shell → Toolbox | Select utility |
+| `li-open`, `li-search`, `li-filter`, `li-restore` | Shell → LI | Document navigation, filters, backup restore |
+| `inventory-open`, `inventory-search`, `inventory-filter`, `inventory-import` | Shell → Inventory | Catalog navigation/import |
+| `vault-filter`, `vault-search`, `vault-restore` | Shell → Vault | Navigation/import |
+| `vault-ro-import`, `vault-ro-apply`, `vault-rename-collection` | Shell → Vault | RO selection, VIN/attachment updates, collection rename |
+| `shell-nav {id}` | Shell → RO | Open RO after Vault selection workflow |
 
-### 6.3 Storage map (all origin-scoped — same origin = same data)
+The shell queues messages until iframe load; Vault/LI/Inventory also queue their
+navigation messages until app boot. Message names alone are not authentication;
+current listeners must not be described as enforcing sender-origin validation.
 
-| Store | Owner | Contents |
-|---|---|---|
-| IndexedDB `file-vault` (files, meta) | Vault | File records + blobs + thumbs (+ vins/fins/vinScan); meta: theme, view, collections, syncDir, syncAuto |
-| IndexedDB `LIDocsDB` (docs, files, settings) | LI | Parsed docs, PDF blobs; settings: autosave/autosaveOn/syncDir/autoSyncOn handles |
-| IndexedDB `tool-inventory` (tools, photos, meta) | Inventory | Tool rows + part photos (id→Blob) loaded from a portable `.tidb` file; meta: source. Empty until a database is opened |
-| IndexedDB `vault-bridge` (outbox) | bridge.js | In-flight cross-app file handoffs |
-| IndexedDB `fv-debug` (entries) | debug.js | Origin-wide debug log — errors/warnings/app messages from every app (ring buffer ≤600) |
-| localStorage `fv-theme` | Shell (embedded) / Vault (standalone) | "light"/"dark"; absent = system. Read by every app's pre-paint script |
-| localStorage `fd-app` | Shell | Last-used app tab |
+### Storage map
 
-### 6.4 Service workers (each prunes ONLY its own cache prefix)
+| Store/key | Owner | Contents |
+| --- | --- | --- |
+| IndexedDB `file-vault`: `files`, `meta` | Vault | File records/Blobs/thumbnails; preferences, collections, folder settings |
+| IndexedDB `LIDocsDB`: `docs`, `files`, `settings` | LI | Parsed records, PDFs, autosave/folder handles and flags |
+| IndexedDB `tool-inventory`: `tools`, `photos`, `meta` | Inventory | Catalog, edits/stars, photo Blobs, source metadata |
+| IndexedDB `repair-orders`: `ros` | RO | RO fields, collection string, story lines, timestamps |
+| IndexedDB `vault-bridge`: `outbox` | Bridge | Pending files, claims/leases, attempt state |
+| IndexedDB `fv-debug`: `entries` | Logger | Local error/warning/app entries |
+| localStorage `fv-theme` | Shell / standalone Vault | Light/dark; absent means system |
+| localStorage `fd-app`, `fd-vehicle` | Shell | Last tab and pinned VIN/series |
 
-| Scope | File | Cache | Strategy highlights |
-|---|---|---|---|
-| `/` | `sw.js` | `platform-shell-v2` | Skips /vault/ /li/ /inventory/; tolerant precache; cleans legacy `file-vault-*` |
-| `/vault/` | `vault/sw.js` | `vault-app-v7` | Precaches shell + `../bridge.js`; pdf.js vendor cached at runtime |
-| `/li/` | `li/sw.js` | `li-db-shell-v2` + runtime | Nav network-first; Tesseract CDN cache-first |
-| `/inventory/` | `inventory/sw.js` | `tool-inventory-v7` | App shell only (no bundled data); data loads from a portable `.tidb` file |
+These are origin/profile scoped for hosted use. `file://` behavior depends on the
+browser and launcher configuration. App paths do not isolate databases on one origin.
 
-### 6.5 Theme system (one choice, six consumers)
+### Theme and debug log
 
-```
-◐ toggle (shell when embedded; vault standalone)
-   → localStorage "fv-theme" (light/dark; removed = system)
-   → data-theme attribute on each document's <html>
-       ├── set pre-paint by a tiny head script in ALL FIVE pages (no flash)
-       ├── updated live by {platform-theme} broadcasts (embedded)
-       └── CSS pattern everywhere: :root = light tokens ·
-           :root[data-theme=dark] + prefers-color-scheme fallback = dark tokens
-```
+All seven HTML entry pages (shell plus six apps) read the shared theme before
+paint and support embedded theme updates. The shell and standalone Vault expose
+the theme cycle; other apps do not all have their own theme-toggle control.
 
-All apps share the same palette values (dark `#0f1420` family / light `#f4f6fb` family,
-accents `#5b8cff`/`#47d18f`) on their own token names.
+[debug.js](debug.js) is loaded by the shell, Vault, LI, Inventory, and Toolbox,
+not RO or Extract. It records uncaught errors, rejected promises, resource errors,
+console warnings/errors, and explicit `FVDebug` calls. It labels the five supported
+pages by app, with entry fields `{t, level, app, src, msg, stack}`.
+Periodic trimming reduces over-600-entry logs to 400; an in-memory fallback is
+available when IndexedDB fails. Ctrl+Shift+D or `FVDebug.open()` opens the viewer,
+with filtering, copying, downloading, and clearing. Vault/LI/Inventory also have
+menu entries. It cannot capture errors that occur before it is loaded.
 
-### 6.6 Embedded-mode contract
+## 10. Offline assets and network dependencies
 
-Every app runs a head script: `window.parent !== window` → `<html class="embedded">`.
-CSS under `html.embedded` hides per-app chrome the shell already provides:
-brand/h1 · back-to-platform links · install buttons · (vault) theme toggle.
-Everything functional stays. Standalone keeps 100 % of the chrome.
+| Scope | Worker | Current cache | Strategy |
+| --- | --- | --- | --- |
+| Platform root | [sw.js](sw.js) | `platform-shell-v16` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
+| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v29` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
+| LI | [li/sw.js](li/sw.js) | `li-db-shell-v2`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
+| Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v9` | App-shell precache; network-first navigation; cache-first assets |
 
-### 6.7 `debug.js` — platform debug log (error & log tracking)
+Workers prune their own cache prefixes; the root also removes old pre-platform
+`file-vault-*` caches. User databases are not stored in service-worker caches.
+Tolerant precaching means an install can succeed with an optional asset missing.
+Open required apps/features online and verify offline before relying on them.
+Toolbox/RO/Extract have no independent worker registration for a first standalone visit.
 
-| Aspect | Detail |
-|---|---|
-| Loaded by | All five pages, before their own code (`<script src="debug.js">` / `../debug.js`) |
-| Captures | Uncaught exceptions (`window` "error") · unhandled promise rejections · failed resource loads (capture phase) · `console.error`/`console.warn` (patched pass-through) · explicit app calls |
-| API | `window.FVDebug`: `log/info/warn/error(msg, data?)` · `open()/close()/toggle()` · `getAll(cb)` · `clear()` |
-| Storage | IndexedDB **`fv-debug`** / store `entries` — origin-wide, so ONE log covers shell + all four apps; ring buffer (≤600 entries, trimmed to 400); never leaves the device |
-| Entry | `{t, level, app, src, msg, stack}` — `app` = shell/vault/li/inventory/toolbox, `src` = window/promise/resource/console/app |
-| Viewer | Self-contained overlay on any page: **Ctrl+Shift+D**, `FVDebug.open()`, or a menu entry (vault ⋮ "Debug log…" · LI ☰ "🐞 Debug log" · Inventory ☰ "🐞 Debug log"); level filter · Copy · Download `.log` · Clear · live-refreshes while open |
-| Safety | Dependency-free, never throws, no console output of its own; IndexedDB failure falls back to an in-memory buffer |
+OCR is the optional external runtime dependency in Vault, LI, and Toolbox:
+Tesseract.js 5.1.1, core 5.1.0, and language data from jsDelivr/Project Naptha.
+`__TESS_LIB`, `__TESS_WORK`, `__TESS_CORE`, and `__TESS_LANG` override resource paths;
+they do not themselves package the resources for offline use. LI's worker caches
+OCR hosts, but full offline OCR is not guaranteed across apps. The Inventory
+catalog probe is a same-origin fetch. Clicking Toolbox's EXIF GPS link sends the
+coordinates to OpenStreetMap. There is no application file-upload backend.
 
----
+## 11. Build and test map
 
-## 7. Cross-app flows (end to end)
+[package.json](package.json) declares dev dependencies `playwright@1.56.1`,
+`pdfjs-dist@4.2.67`, and `esbuild@0.25.5`. The checked-in site needs no application
+build. [build-portable.mjs](tools/build-portable.mjs) copies runtime assets and
+builds the catalog; it omits RO and deletes/recreates `dist-portable/`.
+See the README and [portable guide](portable/START-HERE.txt) for launcher limits.
 
-| # | Flow | Steps |
-|---|---|---|
-| 1 | **Vault → LI** | PDF detail → 🗄️ Send to LI → bridge `send("li")` → shell-nav switches to LI → LI claims item → full parse pipeline (OCR if scanned) → filed by LI number → `{li-changed}` → badge updates |
-| 2 | **LI → Vault** | Doc detail → ＋ File Vault → bridge `send("vault")` w/ meta {li, title, fgroup, date, validity, ver, modelSeries} → vault claims → files under "LI Documents", tags LI/fgroup/Model-series, note "LI: title", PDF thumb rendered |
-| 3 | **Vault → Toolbox** | File detail → 🧰 Send to Toolbox → bridge `send("toolbox", meta.tab)` → shell-nav (+tab) → toolbox claims → opens the tool tab → injects file into its input, ready to run |
-| 4 | **Toolbox → Vault** | Any tool produces output → download starts + snackbar → 💾 Save to File Vault → bridge `send("vault", collection:"Toolbox")` → vault files it (thumbnail included) |
-| 5 | **Folder → Vault** | Drop file in linked folder → auto-sync tick (5 min / focus / visible) → scan diff (name+size+mtime) → import into folder-named collection → badge updates |
-| 6 | **Folder → LI** | Drop PDF in linked folder → LI auto-sync tick → importFiles pipeline (parse/OCR/dedup) → `{li-changed}` |
-| 7 | **Theme** | ◐ click in shell → attr + fv-theme + broadcast → all four frames restyle instantly; late-loading frames pick it up from the pre-paint script + on-load broadcast |
+`npm test` runs static, binary-backup, and Blob-integrity checks, then
+[run-e2e.mjs](tools/run-e2e.mjs). E2E discovery uses Git-tracked `tools/e2e*.mjs`,
+excluding the browser helper, sorts the list, and stops at the first failure.
+There are currently **21 browser suites**. Git metadata, Node/npm, Python 3, and
+Playwright-managed Chromium are required for the full workflow.
 
----
+| Suite under `tools/` | Coverage focus |
+| --- | --- |
+| `e2e.mjs` | Vault standalone CRUD, search/organization, export/import, theme, PWA behavior |
+| `e2e-bridge.mjs` | Lease/ack persistence, in-flight arrivals, retries, receiver crashes, competing receivers |
+| `e2e-bulk.mjs` | Multi-selection, bulk metadata/actions, batched Toolbox delivery |
+| `e2e-debug.mjs` | Logger capture, persistence, viewer, clearing, shared shell log |
+| `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, backups, toasts, catalog offer |
+| `e2e-inventory.mjs` | Empty start, fixture `.tidb`, photos, filters, edits, import/export, embedding |
+| `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs |
+| `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
+| `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
+| `e2e-portable.mjs` | Build, local-file shell/Vault/Inventory, catalog offer, same-path profile restart; clears generated data |
+| `e2e-ros.mjs` | RO stories, persistence, attachments, Vault selection, VIN reconciliation, collection rename |
+| `e2e-shell.mjs` | Tabs, embedding, theme, hashes/legacy navigation, badges, Toolbox save |
+| `e2e-sync.mjs` | Vault folder sync with a mocked picker/directory, dedup, changed-file import, auto mode |
+| `e2e-unified-add.mjs` | Mixed-file shell intake and filename-based LI routing |
+| `e2e-viewer.mjs` | Backup extraction and ZIP validation using Python's independent ZIP reader |
+| `e2e-vin.mjs` | VIN search/grouping/persistence, incremental scan, unavailable OCR |
+| `e2e-vin-datacard.mjs` | VIN/FIN separation and false-positive rejection |
+| `e2e-vin-parallel.mjs` | Worker concurrency using a fake OCR engine |
+| `e2e-vin-recall.mjs` | Space-split VINs, PDF text and mocked OCR fallback |
+| `e2e-vin-skip-video.mjs` | Video exclusion from scanning/detection UI |
+| `e2e-vin-wmi.mjs` | Mercedes-prefix validation and engine/non-Mercedes rejection |
 
-## 8. Tie-in matrix (who depends on what)
+The portable suite does not validate RO packaging, real Windows/macOS launcher
+execution, moving a profile across machines/paths, or zero host traces. Mocked OCR
+and directory-picker tests do not prove live CDN availability or OS permission
+behavior. The PDF regression is not a comprehensive audit of every malformed PDF.
 
-| Component | bridge.js | shell messages | fv-theme | File System Access | Other apps' DBs | CDN |
-|---|---|---|---|---|---|---|
-| Shell | cached only | hub (all) | **owner** (embedded) | — | reads 3 (badges) | — |
-| Vault | send li/toolbox · receive vault | shell-nav out · theme in | owner (standalone) | sync folder | — | Tesseract (VIN OCR) |
-| LI | send vault · receive li | vault-nav/li-changed out · theme in | reads | sync folder · auto-save file | — | Tesseract (OCR) |
-| Inventory | — | theme in | reads | — | — | — |
-| Toolbox | send vault · receive toolbox | toolbox-open/theme in | reads | zip-to-folder picker | — | Tesseract (OCR) |
-
-Isolation guarantees worth knowing:
-- **Removing an app** breaks nothing else — the shell tab would just 404; bridge items for it would wait unclaimed.
-- **DB names are contracts**: `file-vault`, `LIDocsDB`, `tool-inventory`, `vault-bridge` are peeked/shared by name; renaming one silently breaks badges or handoffs.
-- **Same-origin is the platform**: bridge and theme both die across origins. Deploy everything from one origin (GH Pages path is fine).
-
----
-
-## 9. Test coverage map (`npm test` — 13 suites, all headless Chromium)
-
-| Suite | Guards |
-|---|---|
-| `e2e.mjs` | Vault standalone: add/search/filter/tags/collections/star/detail/export-import/theme cycle/SW scope/install |
-| `e2e-merge.mjs` | Cross-app through the shell: vault→LI send + parse, LI→vault send + tagging, vault→toolbox send + tool injection, bridge outbox |
-| `e2e-inventory.mjs` | Inventory standalone (catalog, photos, filters, edits, seed-upgrade preserving stars/edits) + embedded chrome + badge-peek regression |
-| `e2e-shell.mjs` | Tabs/panels/lazy loading, theme broadcast to all frames, deep links (#toolbox/pdf, #files), legacy queries, badges, toolbox→vault save |
-| `e2e-sync.mjs` | Folder sync with a mocked directory picker: link/import/dedup/changed-file re-import/auto-sync timer + persistence |
-| `e2e-pdfthumb.mjs` | PDF thumbnails: import-time render, IndexedDB persistence, background backfill after reload |
-| `e2e-vin.mjs` | VIN scan & grouping: content/filename/PDF-text detection, By-VIN grouped view, vin: filter, sidebar list, search, detail field, persistence, incremental re-scan + offline OCR skip |
-| `e2e-vin-parallel.mjs` | VIN scan runs OCR in parallel: a fake engine records peak concurrency = worker-pool size (multi-core), finishing in waves not serially |
-| `e2e-vin-skip-video.mjs` | VIN scan skips videos: a seeded video is never scanned, its filename VIN isn't matched, and its detail-drawer Detect button is hidden |
-| `e2e-vin-recall.mjs` | VIN recall: space-split VINs recovered from text; OCR skipped when the PDF text layer already has a VIN, used as fallback when it doesn't |
-| `e2e-vin-datacard.mjs` | Real Mercedes datacard: VIN grouped as VIN, Baumuster FIN kept separate (searchable, own chip/field), FREEMAPUPDATES50A garbage rejected |
-| `e2e-vin-wmi.mjs` | WMI validation: real VIN (4JG…) tagged; a Mercedes engine number (112600009311006RE) and a non-MB VIN are rejected |
-| `e2e-debug.mjs` | Debug log: console/exception/rejection capture, viewer (menu + Ctrl+Shift+D), level filter, cross-app shared log, persistence, clear |
-
----
-
-## 10. Source layout
-
-```
-/                       Platform shell (index.html · shell.js · shell.css · sw.js · manifest)
-├── bridge.js           Cross-app file bus (shared by vault, li, toolbox)
-├── debug.js            Platform debug log — error/warning capture + viewer (all five pages)
-├── icons/              Platform PWA icons (tools/gen_icons.py writes here + vault/icons)
-├── vault/              File Vault (app.js · db.js · styles.css · sw.js · manifest · icons/)
-│   └── vendor/         pdf.js + worker (PDF first-page thumbnails, offline)
-├── li/                 LI Documents (single index.html: app + inlined JSZip/pdf.js/worker)
-├── inventory/          Tool Inventory (app.js · styles.css · tools.json · img/ 862 photos · sw.js)
-├── toolbox/            Toolbox (single index.html: 10 tools + inlined pdf-lib/pdf.js/JSZip)
-└── tools/              gen_icons.py + the six e2e suites (playwright-core)
-```
+[qa.yml](.github/workflows/qa.yml) configures the Node 20 release checks and
+portable build. [zip-test.yml](.github/workflows/zip-test.yml) independently checks
+ZIP extraction with Windows .NET and Explorer. Run the relevant commands to
+establish current pass/fail status; the coverage map is not test-run evidence.

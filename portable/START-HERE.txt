@@ -1,43 +1,80 @@
-======================================================================
-  FILE DATABASE - Portable edition (runs from this USB drive)
-======================================================================
+FILE DATABASE - Portable edition
 
 WHAT THIS IS
-  A private database for your files, LI documents and special-tool
-  inventory. It runs from this USB drive using the web browser that is
-  already on the computer. There is NOTHING to install and it does NOT
-  need administrator rights.
+  A local-file version of File Database using an installed Microsoft Edge
+  or Google Chrome. The launcher selects a separate browser profile in
+  this package's data folder. It does not start a server or install a
+  browser. Workplace policies may still prevent the launcher from running.
 
-HOW TO START IT
-  Windows :  double-click  "Start File Database.bat"
-  Mac     :  double-click  "Start File Database (Mac).command"
-             (first time: right-click -> Open, to get past the warning)
+HOW TO START
+  Windows: double-click "Start File Database.bat".
+  macOS:   double-click "Start File Database (Mac).command".
+           If macOS blocks it, use the normal right-click -> Open flow
+           when permitted. Edge or Chrome must be in /Applications.
 
-  A clean app window opens. That's the whole program.
+  Keep app/ and data/ beside the launcher. On Windows, use a package path
+  without spaces: the current launcher does not quote its expanded
+  --user-data-dir argument as a whole.
 
-WHERE YOUR DATA LIVES
-  Everything you add is stored in the "data" folder on THIS drive - not
-  on the computer. Unplug the stick and nothing is left behind. Plug it
-  into another PC, start it again, and your files are all there.
+CURRENT PACKAGE LIMITATION
+  The builder copies Files, LI Documents, Tool Inventory, Toolbox, and
+  Extract. It currently omits the ros/ directory. The Repair Orders tab
+  remains visible in the shell but cannot load in this package.
+  Use the hosted/full repository version for Repair Orders.
 
-  >> Keep the "app" and "data" folders together, and always start the
-     program with the launcher (not by opening app\index.html directly),
-     or the browser won't know to use the data folder on the USB.
+WHERE DATA LIVES
+  When the launcher finds Edge/Chrome, it points --user-data-dir at this
+  package's data/ folder. That is where the selected browser profile and
+  application databases are kept.
 
-FIRST TIME / MOVING YOUR EXISTING DATA
-  If you already built a vault in the online (github.io) version, open
-  that, use  ...  menu -> "Export / back up vault", save the .fvault file
-  onto this USB, then in the portable app use "Import backup" to load it.
+  Opening app/index.html directly, or using the launcher's default-browser
+  fallback, does NOT select this USB profile. You may see different data.
+  Downloads use the browser's selected destination and may go to the host PC.
+  The launcher cannot guarantee that the browser/OS leaves no host traces.
 
-GOOD TO KNOW
-  * Use an exFAT- or NTFS-formatted USB stick. (Old FAT32 sticks can't
-    hold single files over 4 GB and may run out of room.)
-  * A fast USB 3.0 stick makes a big difference with lots of files.
-  * Safely eject the drive before pulling it out so nothing is mid-write.
-  * If your workplace blocks running .bat files, you can still open
-    app\index.html directly in Edge/Chrome - but then the data is kept in
-    that PC's browser, so use Export/Import to carry it between machines.
+MOVING EXISTING DATA
+  Data from a hosted version is separate from the portable profile.
+  Export there, copy the backups here, then import them in the relevant app:
 
-PRIVACY
-  Nothing is uploaded anywhere. Everything runs and stays on this drive.
-======================================================================
+    Files:          .fvault - adds records; repeated imports can duplicate.
+    LI Documents:   .lidb   - overwrites matching document IDs.
+    Tool Inventory: .tidb   - replaces the current inventory after confirmation.
+
+  Tool Inventory starts empty. If the package includes the source catalog,
+  its empty screen offers "Load the built-in tool catalog". You can also
+  open a .tidb manually. The catalog is a snapshot, not live supplier data.
+
+  The platform's "Back up everything" button exports those three apps
+  separately. It does not include Repair Order records/story lines,
+  preferences, or linked-folder settings. Attached RO files are part of a
+  Vault backup, but restoring them does not recreate an RO record.
+
+  To recover ordinary files without restoring, use Extract with a backup.
+  Backups are not encrypted by the app.
+
+OFFLINE AND BROWSER LIMITS
+  Local app files do not require a network. PWA installation and service
+  workers are unavailable on file://. Local-file storage and app handoffs
+  depend on the browser and launcher flags.
+
+  OCR in Files, LI Documents, and Toolbox may download Tesseract.js,
+  worker/WASM files, and language data from jsDelivr and Project Naptha.
+  Scanned LI imports can trigger this automatically. Recognition happens
+  on the device; first use normally requires a network. Offline OCR is
+  not guaranteed. Other media/folder features depend on browser APIs.
+
+KEEPING DATA SAFE
+  * Close the app and its profile's browser processes before safely
+    ejecting the drive. Do not unplug it during writes.
+  * Keep regular exported backups on a separate drive. Clearing this
+    profile or losing the USB drive can lose all local records.
+  * Keep app/ and data/ together. Cross-machine, browser, operating-system,
+    or path changes are not covered by the portable restart test. Use
+    exported backups for transfers rather than relying solely on a moved
+    browser profile.
+  * A fast USB drive helps. Use a filesystem compatible with your computers
+    and file sizes; FAT32 cannot hold one file larger than 4 GiB.
+  * Do not keep live data in dist-portable/ on the build machine.
+    npm run build:portable deletes and recreates that directory, and the
+    portable E2E test also clears the generated data/ profile. Build first,
+    then copy the package to a separate working location.
