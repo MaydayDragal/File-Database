@@ -81,6 +81,41 @@ for (const [file, a, b] of copies) {
   eq(normText(`an em — dash and a${NBSP}space`), "an em — dash and a space", "em dashes survive normalization");
 }
 
+// ---------- version grouping ----------
+// A document's versions are one row, keyed by its number. The key used to be
+// the raw stored string, so a number pasted out of a new-format PDF (U+2011
+// hyphens, which render identically to ASCII) — or carrying stray whitespace,
+// or typed lowercase — keyed its own group and split the document into two
+// rows. The key is canonicalized now.
+{
+  console.log("\nversion grouping (li/index.html)");
+  const html = fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8");
+  const block = lift("li/index.html", "// ---------- LI extraction", "// OCR (lazy, from CDN");
+  const groupDocs = new Function(PRELUDE + block +
+    /function verNum\([\s\S]*?\n/.exec(html)[0] +
+    /  function groupDocs\(list\) \{[\s\S]*?\n  \}/.exec(html)[0] +
+    "; return groupDocs;")();
+
+  const LI = "LI54.21-P-080326";
+  const rows = groupDocs([
+    { id: "a5", li: `LI54.21${NB}P${NB}080326`, ver: "5" }, // pasted from a new-format PDF
+    { id: "a4", li: LI, ver: "4" },
+    { id: "a3", li: LI, ver: "3" },
+    { id: "a2", li: `  ${LI} `, ver: "2" },                 // stray whitespace
+    { id: "a1", li: LI.toLowerCase(), ver: "1" },           // typed lowercase
+  ]);
+  check(rows.length === 1, "all five versions group into one row", `got ${rows.length} rows`);
+  eq(rows[0].versions.length, 5, "the row carries every version");
+  eq(rows[0].key, "li:" + LI, "the group key is the canonical number");
+
+  // Different documents must still be different rows.
+  const two = groupDocs([{ id: "x", li: LI, ver: "1" }, { id: "y", li: "LI54.21-P-080327", ver: "1" }]);
+  eq(two.length, 2, "two different numbers stay two rows");
+  // A document with no number falls back to its own id, as before.
+  const none = groupDocs([{ id: "p", li: "", ver: "" }, { id: "q", li: "", ver: "" }]);
+  eq(none.length, 2, "documents with no number are not lumped together");
+}
+
 // ---------- the shell's intake router ----------
 {
   console.log("\nshell.js");
