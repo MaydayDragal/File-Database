@@ -7,7 +7,7 @@
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/test-static.mjs && node tools/test-backup-format.mjs && node tools/test-blob-integrity.mjs && node tools/run-e2e.mjs",
+    "test": "node tools/test-static.mjs && node tools/test-li-number.mjs && node tools/test-backup-format.mjs && node tools/test-blob-integrity.mjs && node tools/run-e2e.mjs",
     "test:vault": "node tools/e2e.mjs",
     "test:merge": "node tools/e2e-merge.mjs",
     "test:inventory": "node tools/e2e-inventory.mjs",
@@ -24,6 +24,7 @@
     "build:portable": "node tools/build-portable.mjs",
     "test:portable": "node tools/e2e-portable.mjs",
     "test:static": "node tools/test-static.mjs",
+    "test:li-number": "node tools/test-li-number.mjs",
     "test:backup": "node tools/test-backup-format.mjs",
     "test:integrity": "node tools/test-blob-integrity.mjs",
     "test:e2e": "node tools/run-e2e.mjs",

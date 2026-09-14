@@ -68,8 +68,12 @@
   // (DOCNUM in li/index.html). Those go to LI Documents; everything else to
   // Files. Detection is silent: no prompt, no per-drop choice.
   var LI_DOCNUM = /\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i;
+  // Newer XENTRY exports spell the number with U+2011 non-breaking hyphens
+  // and U+00A0 spaces; fold those to ASCII so a filename or a number pasted
+  // straight out of the PDF is still recognized as an LI document number.
+  function liNorm(s) { return String(s || "").replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ").replace(/[\u2010\u2011\u2012\u2212\ufe63\uff0d]/g, "-").replace(/[\u00ad\u200b\ufeff]/g, ""); }
   function isPdf(f) { return /pdf/i.test(f.type || "") || /\.pdf$/i.test(f.name || ""); }
-  function looksLikeLI(f) { return isPdf(f) && LI_DOCNUM.test(f.name || ""); }
+  function looksLikeLI(f) { return isPdf(f) && LI_DOCNUM.test(liNorm(f.name)); }
 
   // Load an app's iframe without switching to it, so a routed file's receiver
   // is live and ingests immediately (badges then catch up).
@@ -297,7 +301,7 @@
   var QO_TOOL = /^(\d{3})\s*(\d{3})\s*(\d{2})\s*(\d{2})\s*(\d{2})$/;
   var QO_VIN = /^[A-HJ-NPR-Z0-9]{17}$/i;
   function qoRows(q) {
-    var s = q.trim(), rows = [], m;
+    var s = liNorm(q).trim(), rows = [], m;
     if (!s) return rows;
     if (QO_LI.test(s)) {
       var li = s.toUpperCase();
