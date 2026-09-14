@@ -116,6 +116,56 @@ for (const [file, a, b] of copies) {
   eq(none.length, 2, "documents with no number are not lumped together");
 }
 
+// ---------- version diff: words broken across a line break ----------
+// A reissued document rewraps its text, so the same sentence breaks in a
+// different place. Fragments of one word must rejoin before the two versions
+// are compared, or unchanged text reads as a deletion plus an insertion.
+{
+  console.log("\nversion diff (li/index.html)");
+  const html = fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8");
+  const grab = (re) => re.exec(html)[0];
+  const F = new Function(
+    grab(/  var WRAP_HYPHEN[\s\S]*?\n  \}\n(?=  function paintWords)/) +
+    grab(/  function isStampLine\(txt\) \{[\s\S]*?\n  \}/) +
+    grab(/  function furnSigs\(list\) \{[\s\S]*?\n  \}/) +
+    grab(/  function isFurn\(furn, w\) \{[\s\S]*?\n  \}/) +
+    "; return { mergeHyphens, furnSigs, isFurn, isStampLine };")();
+  const W = (w, pg, lk, x = 0, ry = 0.5) => ({ w, pg, lk, x, ry });
+  const toks = (list) => F.mergeHyphens(list).map((t) => t.w);
+
+  // Verbatim from page 3 of LI83.70-P-080411, as PDF.js reads it:
+  //   lk=99  "…does it extend the vehicle’"
+  //   lk=90  "s warranty in any way."
+  eq(toks([W("the", 3, 99), W("vehicle\u2019", 3, 99), W("s", 3, 90), W("warranty", 3, 90)]).join(" "),
+    "the vehicle\u2019s warranty", "a word wrapped after an apostrophe rejoins");
+  eq(toks([W("the", 3, 99), W("vehicle\u2019s", 3, 99), W("warranty", 3, 99)]).join(" "),
+    "the vehicle\u2019s warranty", "the version that did not wrap yields the same tokens (so: no diff)");
+  eq(toks([W("don\u2019", 1, 9), W("t", 1, 5)]).join(" "), "don\u2019t", "contractions rejoin too");
+  eq(toks([W("Mercedes-", 2, 34), W("Benz", 2, 30)]).join(" "), "Mercedes-Benz", "hyphen wraps still rejoin");
+
+  // The rejoin must stay narrow — these are not broken words.
+  eq(toks([W("\u2018go\u2019", 1, 9), W("now", 1, 5)]).join(" "), "\u2018go\u2019 now", "a closing quote before an ordinary word is left alone");
+  eq(toks([W("vehicle\u2019", 1, 9), W("s", 1, 9)]).join(" "), "vehicle\u2019 s", "fragments on the same line are not merged");
+  eq(toks([W("owners\u2019", 1, 9), W("manual", 1, 5)]).join(" "), "owners\u2019 manual", "a plural possessive before a real word stays split");
+
+  // The export timestamp differs between any two versions, so the footer line
+  // carrying it has to be recognized as page furniture despite having no
+  // letters to build a signature from.
+  check(F.isStampLine("09-09-2026 22:30:49"), "a date+time line is recognized as a print stamp");
+  check(F.isStampLine("9/8/26 10:14 PM"), "so is a 12-hour stamp");
+  check(!F.isStampLine("167 290 465"), "a row of numbers is not a print stamp");
+  check(!F.isStampLine("D7MASALL Page 1 / 3"), "a footer with text is not a print stamp");
+
+  const footer = [];
+  for (const pg of [1, 2, 3]) {
+    footer.push(W("09-09-2026", pg, 10, 0, 0.95), W("22:30:49", pg, 10, 60, 0.95));
+    footer.push(W("167", pg, 14, 0, 0.6), W("290", pg, 14, 40, 0.6), W("465", pg, 14, 80, 0.6));
+  }
+  const furn = F.furnSigs(footer);
+  check(F.isFurn(furn, footer[0]), "the repeating print stamp sits out the diff");
+  check(!F.isFurn(furn, footer[2]), "a repeating row of numbers still takes part in the diff");
+}
+
 // ---------- the shell's intake router ----------
 {
   console.log("\nshell.js");
