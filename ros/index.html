@@ -613,6 +613,31 @@
     return (String(s).match(/[A-Z]/g) || []).length / letters.length;
   }
   function titleCase(s) { return String(s || "").toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); }
+  // Two or more real words, no label, no long number: a person or a company,
+  // not a row of OCR scrapings like "oR i re jg sl vi esi".
+  function nameLike(s) {
+    return (String(s || "").match(/[A-Za-z]{3,}/g) || []).length >= 2 &&
+      !LABEL_STOP.test(s) && !/\d{4,}/.test(s);
+  }
+  // The customer, when the "Name:" label itself did not survive the scan — a
+  // two-character cell on a form whose labels OCR loses readily, while the name
+  // beside it comes through fine. The block is printed Name / Address /
+  // City-ST-Zip, so whichever of those lower labels WAS read anchors the
+  // search: walk up from it to the nearest lines that read like a name.
+  function customerNearAddress(lines) {
+    var at = -1, i;
+    for (i = 0; i < lines.length; i++) {
+      if (/City\s*-?\s*ST\s*-?\s*Zip|\bAddress\s*[:#]/i.test(lines[i])) { at = i; break; }
+    }
+    if (at < 1) return "";
+    var found = [];
+    for (i = at - 1; i >= 0 && at - i <= 5; i--) {
+      if (nameLike(lines[i])) { found.unshift(squash(lines[i])); if (found.length === 2) break; }
+      else if (found.length) break;                  // the run ended
+      else if (LABEL_STOP.test(lines[i])) break;     // reached the field above without finding one
+    }
+    return found.join(", ").slice(0, 80);
+  }
   function cleanName(s) {
     var t = squash(String(s || "").replace(/[^A-Za-z,'.\- ]/g, " ")).replace(/\s*,\s*/, ", ").replace(/^[,.\- ]+|[,.\- ]+$/g, "");
     if (t.length < 2 || t.length > 60) return "";
@@ -1034,6 +1059,7 @@
     out.advisor = cleanName(cutAtColumn(labelValue(lines, /\bService\s*Advisor\s*/i, isName)));
     if (!out.advisor) { var sa = text.match(/\bSA\s*[:#]\s*(\d{2,6})\b/i); out.advisor = sa ? sa[1] : ""; }
     out.customer = cleanName(cutAtColumn(labelValue(lines, /\bName\s*/i, isName)));
+    if (!out.customer) out.customer = customerNearAddress(lines);
     // A phone cell is short enough that OCR often clips a digit off the front;
     // show what there is rather than nothing — it is quicker to correct than to
     // look up. Only the labelled cells are read loosely.
