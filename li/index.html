@@ -444,6 +444,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
 </script>
 
 <script src="../debug.js"></script>
+<script src="../ocr.js"></script>
 <script src="../bridge.js"></script>
 <script>
 /* ===== LI Document Database app ===== */
@@ -625,17 +626,37 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   function wakeSlot() { var f = tessWaiters.shift(); if (f) tessAcquire().then(f.res, f.rej); }
   function tessFreeAll() { var waiters = tessWaiters; tessWaiters = []; waiters.forEach(function (f) { try { f.rej(new Error("OCR cancelled")); } catch (e) {} }); var ws = tessAll; tessAll = []; tessIdle = []; tessReserved = 0; ws.forEach(function (w) { try { w.terminate(); } catch (e) {} }); }
   // Recognize the first pages of a doc with the given worker.
+  //
+  // Reading goes through ../ocr.js, which fixes two things the raw engine gets
+  // wrong on scanned documents: it defaults to treating a page as ONE block of
+  // text (losing most of a structured LI print-out), and it has no idea when a
+  // page was scanned sideways — it returns a handful of nonsense words rather
+  // than failing. So page 1 is read in document mode and, if no LI number came
+  // out of it, checked for which way up it is and read again; later pages
+  // follow page 1's answer.
   function ocrPages(doc, w) {
-    var pages = Math.min(doc.numPages, 2), text = "", lines = [], i = 1;
+    var pages = Math.min(doc.numPages, 2), text = "", lines = [], i = 1, angle = 0;
+    function collect(r) {
+      text += (r.text || "") + "\n";
+      var got = (r.data && r.data.lines) || [];
+      got.forEach(function (ln) { var s = (ln.text || "").replace(/\s+/g, " ").trim(); if (s) lines.push({ text: s, h: ln.bbox ? ln.bbox.y1 - ln.bbox.y0 : 0, y: ln.bbox ? ln.bbox.y0 : 0 }); });
+    }
     function step() {
       if (i > pages) return Promise.resolve({ text: text, lines: lines });
       return doc.getPage(i).then(function (page) {
         var vp = page.getViewport({ scale: 3 }); var c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
         var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
         return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-          return w.recognize(c).then(function (r) {
-            text += (r.data.text || "") + "\n";
-            (r.data.lines || []).forEach(function (ln) { var s = (ln.text || "").replace(/\s+/g, " ").trim(); if (s) lines.push({ text: s, h: ln.bbox ? ln.bbox.y1 - ln.bbox.y0 : 0, y: ln.bbox ? ln.bbox.y0 : 0 }); });
+          var orient = window.OcrOrient;
+          var opts = orient && { readEdge: function (s) { return Math.max(s.width, s.height); } };
+          var read = !orient
+            ? w.recognize(c).then(function (r) { return { text: (r.data && r.data.text) || "", data: r.data, angle: 0 }; })
+            : i === 1
+              ? orient.readSmart(w, c, Object.assign({ accept: function (t) { return !!(detectLI(t) || detectLIFuzzy(t)); } }, opts))
+              : orient.readAt(w, c, angle, opts);
+          return read.then(function (r) {
+            if (i === 1) angle = r.angle || 0;
+            collect(r);
             c.width = c.height = 0; // release the (large, scale-3) canvas promptly
             i++; return step();
           });
