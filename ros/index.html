@@ -889,10 +889,29 @@
       } else {
         desc = capsTail(r.text).text;
       }
-      if (desc.length >= 3) body.push({ text: desc, y0: r.y0, y1: r.y1, left: left });
+      if (desc.length >= 3) body.push({ text: desc, x0: r.x0, y0: r.y0, y1: r.y1, left: left });
     });
     body.sort(function (a, b) { return a.y0 - b.y0; });
     if (!body.length) return [];
+
+    // A word at the end of a row can come back as a fragment of its own — the
+    // "CHARGE" closing "…SERVICE WASH - CHARGE" arrives as a separate piece,
+    // and in the order the engine found it, which is not the order it is read
+    // in. Pieces that sit at the same height are one row of the table, so put
+    // them back left to right before any of them is joined to anything.
+    var rowed = [];
+    body.forEach(function (r) {
+      var prev = rowed[rowed.length - 1];
+      var share = prev ? (Math.min(prev.y1, r.y1) - Math.max(prev.y0, r.y0)) /
+        Math.max(1, Math.min(prev.y1 - prev.y0, r.y1 - r.y0)) : 0;
+      if (prev && share >= 0.5) {
+        if (r.x0 < prev.x0) { prev.text = joinWrap(r.text, prev.text); prev.x0 = r.x0; }
+        else prev.text = joinWrap(prev.text, r.text);
+        prev.y0 = Math.min(prev.y0, r.y0); prev.y1 = Math.max(prev.y1, r.y1);
+        prev.left = (prev.left || []).concat(r.left || []);
+      } else rowed.push(r);
+    });
+    body = rowed;
 
     var hs = body.map(function (r) { return Math.max(1, r.y1 - r.y0); }).sort(function (a, b) { return a - b; });
     var h = hs[Math.floor(hs.length / 2)] || hdrH;
