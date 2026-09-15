@@ -223,10 +223,13 @@ source file arbitrarily small.
 ## 7. Repair Orders
 
 [ros/index.html](ros/index.html) stores records in `repair-orders/ros` separately
-from Vault. Fields are RO number, vehicle text, VIN, collection association, story
-lines, and timestamps. Stories use independently removable textareas labelled
-Line A/B/etc.; editing is debounced by 400 ms. Older single-note records migrate
-into the first line. The list is ordered by last update.
+from Vault. Fields are RO number, vehicle text, VIN, tag, mileage in, colour, open
+date, customer, service advisor, phone, e-mail, collection association, story
+lines, and timestamps; a record created from a scan also keeps that scan's
+recognized text. Stories use independently removable textareas labelled
+Line A/B/etc., each with an operation-code box; editing is debounced by 400 ms.
+Older records migrate: a single note becomes the first line, and missing fields are
+backfilled as empty strings on load. The list is ordered by last update.
 
 Files live in Vault, associated by a single collection string: `RO <number>`, or
 an ID-derived fallback when there is no number. RO numbers are not unique database
@@ -243,10 +246,29 @@ keys, so repeated numbers can share the same attachment collection.
 | Rename | `vault-rename-collection` relayed by the shell moves the old collection's files |
 | Delete RO | Deletes the RO record, leaving Vault files |
 
+### Scanning a paper RO
+
+**📷** in the sidebar reads a printed RO into a new record. Sources are images and
+PDFs, up to four pages, all parsed as one document.
+
+| Stage | Implementation |
+| --- | --- |
+| Read | PDF text layer first (pdf.js from `vault/vendor/`, `isEvalSupported: false`), rebuilt into visual rows by text-item `y`; under 200 letters it is treated as a scan and pages render at scale 2.2 for OCR |
+| Recognize | Tesseract.js 5.1.1 from `cdn.jsdelivr.net`, overridable with `window.__TESS_LIB/_WORK/_CORE/_LANG`; one worker per scan, terminated on success and on failure |
+| Orientation | Each of 0°/90°/270°/180° is recognized at a 1100 px long edge and scored on repair-order keywords, real words, and a valid VIN; 0° scoring ≥ 30 short-circuits. Pages are then read at a 1600–3000 px long edge |
+| Parse | `parseScan(text)` — labelled values run until the next known label on the row, or fall to the row beneath; VIN uses the Vault's MB-WMI rules plus the same I→1 / O→0 OCR repair |
+| Lines | Dealer form: rows opening `# A`, `# B`… in letter order, wrapped continuations joined (a word-final hyphen closes the word, a standalone dash does not), then `<op code> <pay type>` split off the front. DISPATCH: `\d\) <letter> <skill> <status> <description>` with the numeric columns trimmed. Neither matching falls back to any line reading like a complaint |
+| Review | Nothing is written until **Create**; fields, op codes, and line text are editable, lines can be dropped or unticked, and the whole recognized text is shown. A note found under a dispatch print-out is offered unticked |
+| Existing RO | Same RO number switches to update: blank fields are filled, lines not already present (compared case- and space-insensitively) are appended, empty placeholder lines are dropped |
+| The scan itself | Inside the shell, the source files are added to the RO's Vault collection through the normal upload path |
+
+The platform service worker caches `cdn.jsdelivr.net` and
+`tessdata.projectnaptha.com` responses cache-first with background revalidation, so
+recognition keeps working offline after one successful download.
+
 File workflows require the shell. There is **no RO export/import or
 `platform-backup` handler**. Vault backups contain attached files and collection
-names, but not the separate RO stories/vehicle records. The current portable
-builder omits `ros/` even though the shell still shows its tab.
+names, but not the separate RO stories/vehicle records.
 
 ## 8. Backup formats and Extract
 
@@ -399,6 +421,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
 | `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
 | `e2e-portable.mjs` | Build, local-file shell/Vault/Inventory, catalog offer, same-path profile restart; clears generated data |
+| `e2e-ro-scan.mjs` | Scan parsing of both dealer layouts, text-layer PDF intake, the review step, updating an existing RO, and the orientation probe with a fake OCR engine |
 | `e2e-ros.mjs` | RO stories, persistence, attachments, Vault selection, VIN reconciliation, collection rename |
 | `e2e-shell.mjs` | Tabs, embedding, theme, hashes/legacy navigation, badges, Toolbox save |
 | `e2e-sync.mjs` | Vault folder sync with a mocked picker/directory, dedup, changed-file import, auto mode |
@@ -411,10 +434,11 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-vin-skip-video.mjs` | Video exclusion from scanning/detection UI |
 | `e2e-vin-wmi.mjs` | Mercedes-prefix validation and engine/non-Mercedes rejection |
 
-The portable suite does not validate RO packaging, real Windows/macOS launcher
-execution, moving a profile across machines/paths, or zero host traces. Mocked OCR
-and directory-picker tests do not prove live CDN availability or OS permission
-behavior. The PDF regression is not a comprehensive audit of every malformed PDF.
+The portable suite does not validate real Windows/macOS launcher execution, moving
+a profile across machines/paths, or zero host traces. Mocked OCR and
+directory-picker tests do not prove live CDN availability or OS permission
+behavior, and the scan suite proves the parser and the plumbing around it rather
+than how well a real photograph is recognized. The PDF regression is not a comprehensive audit of every malformed PDF.
 
 [qa.yml](.github/workflows/qa.yml) configures the Node 20 release checks and
 portable build. [zip-test.yml](.github/workflows/zip-test.yml) independently checks

@@ -1,7 +1,12 @@
 /* File Database platform shell service worker — offline shell + toolbox.
    The vault, LI and inventory apps register their own service workers for
    their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v16";
+const CACHE = "platform-shell-v17";
+// The text-recognition engine the Repair Orders scanner downloads on first use.
+const RUNTIME_CACHE = "platform-runtime-v1";
+// Hosts that engine comes from (see loadTess() in ros/index.html). Their files
+// are versioned and immutable, so cache-first is safe.
+const RUNTIME_HOSTS = ["cdn.jsdelivr.net", "tessdata.projectnaptha.com"];
 // The shell can't start without these…
 const CORE = [
   "./",
@@ -51,6 +56,26 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  // Keep the OCR engine once it has been fetched, so scanning an RO keeps
+  // working with no connection. An opaque cross-origin response can't be
+  // inspected, so cache it but revalidate in the background — a bad one that
+  // slipped in can never stick.
+  if (RUNTIME_HOSTS.includes(url.hostname)) {
+    e.respondWith(
+      caches.match(req).then((hit) => {
+        const net = fetch(req).then((res) => {
+          if (res && (res.ok || res.type === "opaque")) {
+            const copy = res.clone();
+            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        });
+        if (hit) { net.catch(() => {}); return hit; }
+        return net;
+      })
+    );
+    return;
+  }
   if (url.origin !== self.location.origin) return;
   // The embedded apps ship their own service workers — leave their assets alone.
   if (url.pathname.includes("/vault/") || url.pathname.includes("/li/") || url.pathname.includes("/inventory/")) return;
