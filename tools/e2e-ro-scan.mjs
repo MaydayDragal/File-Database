@@ -396,6 +396,45 @@ check(noisy.map((l) => l.op).join("|") === "MPI|||", "noisy op cells: an unreada
 check(/^RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE/.test(noisy[1].text),
   "noisy op cells: the noise stays out of the description too", noisy[1].text);
 
+// A second real form, where the engine read the heading row as "INSTRUCTIONS AND
+// DESCRIPTIONS" alone — no LINE or OP CODE beside it. That heading is CENTRED
+// over its column, so its own left edge sits a word or two inside every
+// description; taking it as the column edge ate the first word of every row
+// ("COMPLIMENTARY RBM…" became "RBM…"). With nothing to the left of the heading
+// to measure from, the descriptions are found by the other thing that separates
+// the two columns: the table SHOUTS and the small print does not.
+const centred = await page.evaluate(() => {
+  const row = (text, x0, y0, w, h) => {
+    let x = x0;
+    const words = text.split(" ").filter(Boolean).map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8, conf: 88 }; });
+    return { text, x0, y0, x1: x0 + w, y1: y0 + h, words };
+  };
+  return window.__ros.layoutLines([
+    // Centred heading, and nothing read to the left of it.
+    row("INSTRUCTIONS AND DESCRIPTIONS", 1100, 500, 420, 16),
+    row("Original Estimate: 0. oo afar dl 7 O00 Tl a HE mer eR CUSTOMER STATES THAT THE BATTERY WARNING", 81, 560, 1800, 18),
+    row("Client Advised of Completion ~~~ LIGHT WAS ON 12 VOLT CRITICAL", 81, 586, 1800, 18),
+    row("I hereby authorize the repair work set forth", 81, 620, 560, 17),
+    row("CUSTOMER STATES THAT THE ENGINE LIGHT WAS ON, OFF", 640, 646, 1200, 18),
+    row("NOW", 640, 672, 90, 16),
+    row("materials. I agree that RBM is not", 81, 700, 560, 17),
+    row("COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 640, 726, 1200, 18),
+    row("INSPECTION WHICH INCLUDES VIDEO", 640, 752, 800, 16),
+    row("or articles in the vehicle due to fire, theft,", 81, 780, 560, 17),
+    row("PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 640, 806, 1300, 18),
+    row("$19.95 TO SERVICE DEPARTMENT", 640, 832, 700, 16),
+  ]);
+});
+check(centred.length === 4, "centred heading: one line per table row", centred.length);
+check(centred[0].text === "CUSTOMER STATES THAT THE BATTERY WARNING LIGHT WAS ON 12 VOLT CRITICAL",
+  "centred heading: the description keeps its first word, and the noise in front of it is dropped", centred[0].text);
+check(centred[1].text === "CUSTOMER STATES THAT THE ENGINE LIGHT WAS ON, OFF NOW",
+  "centred heading: a one-word continuation row is kept", centred[1].text);
+check(centred[2].text === "COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+  "centred heading: no first word is eaten off either row", centred[2].text);
+check(!centred.some((l) => /hereby authorize|materials\. I agree|or articles/i.test(l.text)),
+  "centred heading: the small print beside the table stays out", centred.map((l) => l.text));
+
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
 check(await page.locator("#scan-modal.show").count() === 1, "the scan window opens");
