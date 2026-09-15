@@ -1025,6 +1025,11 @@
   // (chars 4-6) are the model series. Both become live links into the other
   // apps instead of dead strings.
   const LI_TAG_RE = /^[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}$/i;
+  // Newer XENTRY PDFs spell the number with U+2011 non-breaking hyphens and
+  // U+00A0 spaces, so a tag pasted straight out of one carries those. Fold
+  // them to ASCII before matching (and before handing the number to the LI
+  // app) or the tag stays a dead string instead of a cross-app link.
+  const liNorm = (t) => String(t || "").replace(/[\u00a0\u202f]/g, " ").replace(/[\u2010\u2011\u2012\u2212\uff0d]/g, "-").replace(/[\u00ad\u200b\ufeff]/g, "").trim();
   function seriesOfId(id) {
     const s = String(id || "");
     return s.length === 17 && /^\d{3}$/.test(s.slice(3, 6)) ? s.slice(3, 6) : "";
@@ -1039,8 +1044,8 @@
     const box = $("#d-related");
     box.innerHTML = "";
     const chips = [];
-    (rec.tags || []).filter((t) => LI_TAG_RE.test(t)).forEach((t) => {
-      const li = t.toUpperCase();
+    (rec.tags || []).filter((t) => LI_TAG_RE.test(liNorm(t))).forEach((t) => {
+      const li = liNorm(t).toUpperCase();
       chips.push({ label: "🗄️ " + li, title: "Open this document in LI Documents",
         go: () => crossNav("li", { type: "li-open", li }, "li/" + encodeURIComponent(li)) });
     });

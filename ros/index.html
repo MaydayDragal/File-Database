@@ -22,6 +22,7 @@
     --border:#272b38; --border-strong:#333949; --warn:#fbbf24; --warn-bg:#3a2e10; --shadow:0 6px 24px rgba(0,0,0,.5);
   }
   *{box-sizing:border-box}
+  [hidden]{display:none!important}   /* beats a component's own display rule */
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   button,input,textarea{font:inherit;color:inherit}
@@ -61,8 +62,10 @@
   .card h3 .grow{flex:1}
   .save-note{font-size:12px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0}
   /* Story lines */
-  .line{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start;margin-bottom:10px}
+  .line{display:grid;grid-template-columns:64px 78px 1fr auto;gap:10px;align-items:start;margin-bottom:10px}
   .line__label{font-weight:800;font-size:14px;padding-top:10px;color:var(--brand)}
+  .line__op{border:1px solid var(--border);background:var(--bg);border-radius:9px;padding:9px 8px;font-size:13px;font-weight:700;text-transform:uppercase;width:100%;outline:none}
+  .line__op:focus{border-color:var(--brand)}
   .line textarea{width:100%;min-height:64px;resize:vertical;border:1px solid var(--border);background:var(--bg);border-radius:10px;padding:10px 12px;font-size:14.5px;line-height:1.55;outline:none}
   .line textarea:focus{border-color:var(--brand)}
   .line__del{align-self:start;margin-top:6px}
@@ -102,13 +105,48 @@
   .mm-note{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:12px}
   .mm-file{display:flex;gap:8px;justify-content:space-between;padding:6px 2px;font-size:13px;border-bottom:1px solid var(--border)}
   .mm-file b{color:var(--warn)}
+  /* Scan an RO */
+  .modal--wide{width:720px}
+  .scan-drop{border:1.5px dashed var(--border-strong);border-radius:10px;padding:22px 16px;text-align:center;color:var(--text-dim);font-size:13px;cursor:pointer}
+  .scan-drop:hover,.scan-drop.drag{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 7%,transparent)}
+  .scan-drop b{display:block;color:var(--text);font-size:14px;margin-bottom:4px}
+  .scan-prog{margin-top:14px}
+  .scan-prog__track{height:8px;border-radius:999px;background:var(--bg-sunken);overflow:hidden}
+  .scan-prog__bar{height:100%;width:0;background:var(--brand);transition:width .25s}
+  .scan-prog__label{font-size:12.5px;color:var(--text-dim);margin-top:7px}
+  .scan-err{background:color-mix(in srgb,var(--danger) 10%,transparent);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);color:var(--danger);border-radius:9px;padding:10px 12px;font-size:13px;margin-top:12px}
+  .scan-hint{font-size:12.5px;color:var(--text-dim);margin:10px 2px 0}
+  .rv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .rv-field{display:flex;flex-direction:column;gap:4px}
+  .rv-field.wide{grid-column:1 / -1}
+  .rv-field label{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em}
+  .rv-field input{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:13.5px}
+  .rv-field input:focus{outline:none;border-color:var(--brand)}
+  .rv-field input.found{border-color:color-mix(in srgb,var(--brand) 45%,transparent)}
+  .rv-sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin:4px 0 9px;display:flex;align-items:center;gap:8px}
+  .rv-sec .grow{flex:1}
+  .rv-line{display:grid;grid-template-columns:22px 58px 74px 1fr auto;gap:8px;align-items:start;margin-bottom:8px}
+  .rv-line input[type=checkbox]{width:17px;height:17px;margin-top:11px}
+  .rv-line__label{font-weight:800;color:var(--brand);padding-top:9px;font-size:13px}
+  .rv-line textarea{width:100%;min-height:54px;resize:vertical;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:13.5px;line-height:1.5;outline:none}
+  .rv-line textarea:focus{border-color:var(--brand)}
+  .rv-line input[type=text]{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:8px;font-size:12.5px;font-weight:700;text-transform:uppercase;width:100%}
+  .rv-empty{color:var(--text-dim);font-size:12.5px;padding:2px 2px 10px}
+  .rv-raw{margin-top:6px}
+  .rv-raw summary{cursor:pointer;font-size:12.5px;color:var(--text-dim)}
+  .rv-raw textarea{width:100%;min-height:150px;margin-top:8px;border:1px solid var(--border);background:var(--bg);border-radius:9px;padding:9px 11px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+  .rv-dupe{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+  .rv-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);margin-right:auto}
+  .rv-check input{width:16px;height:16px}
   @media (max-width:760px){
     .app{grid-template-columns:1fr}
     .side{position:fixed;z-index:30;width:270px;height:100%;transform:translateX(-100%);transition:transform .18s}
     .side.show{transform:none}
     .fields{grid-template-columns:1fr}
     .side-toggle{display:grid}
-    .line{grid-template-columns:52px 1fr auto}
+    .line{grid-template-columns:52px 64px 1fr auto}
+    .rv-grid{grid-template-columns:1fr}
+    .rv-line{grid-template-columns:20px 44px 62px 1fr auto;gap:6px}
   }
 </style>
 </head>
@@ -117,6 +155,7 @@
   <aside class="side" id="side">
     <div class="side__head">
       <h1>🧾 Repair Orders</h1>
+      <button class="icon-btn" id="scan-btn" title="Scan a paper RO and fill one in automatically">📷</button>
       <button class="icon-btn" id="new-btn" title="New repair order">＋</button>
     </div>
     <div class="side__list" id="list"></div>
@@ -138,6 +177,44 @@
         <div class="field wide">
           <label for="ro-vin">VIN (files added here auto-fill this VIN when they don't have one)</label>
           <input id="ro-vin" placeholder="e.g. W1N0G8DB0MV000000" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🚗 Vehicle &amp; customer</h3>
+        <div class="fields" style="margin-bottom:0">
+          <div class="field">
+            <label for="ro-tag">Tag</label>
+            <input id="ro-tag" placeholder="e.g. T7910" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="ro-mileage">Mileage in</label>
+            <input id="ro-mileage" placeholder="e.g. 15258" autocomplete="off" spellcheck="false" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label for="ro-color">Color</label>
+            <input id="ro-color" placeholder="e.g. Silver" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="ro-opened">Opened</label>
+            <input id="ro-opened" placeholder="e.g. 08-31-26" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="ro-customer">Customer</label>
+            <input id="ro-customer" placeholder="e.g. Jill Blue" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="ro-advisor">Service advisor</label>
+            <input id="ro-advisor" placeholder="e.g. Johnson, Brandon" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="ro-phone">Phone</label>
+            <input id="ro-phone" placeholder="e.g. 678-979-7260" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="ro-email">E-mail</label>
+            <input id="ro-email" placeholder="e.g. name@example.com" autocomplete="off" spellcheck="false" />
+          </div>
         </div>
       </div>
 
@@ -167,6 +244,8 @@
       <div>
         <h2>No repair order open</h2>
         <p>Pick one on the left, or click ＋ to start a new repair order.</p>
+        <p><button class="btn btn--primary" id="scan-btn-empty">📷 Scan a paper RO</button></p>
+        <p style="font-size:12.5px;max-width:420px;margin:0 auto">Photograph or scan the printed repair order — the number, vehicle, VIN, customer and every line are read off it and filled in for you.</p>
       </div>
     </div>
   </main>
@@ -183,6 +262,60 @@
   <div class="modal__foot">
     <button class="btn btn--sm" id="mm-ignore">Ignore these</button>
     <button class="btn btn--sm btn--primary" id="mm-add">Add anyway</button>
+  </div>
+</div>
+
+<!-- Scan a paper RO -->
+<div class="scrim" id="scan-scrim"></div>
+<div class="modal modal--wide" id="scan-modal" role="dialog" aria-label="Scan a repair order">
+  <div class="modal__head"><h2 id="scan-title">📷 Scan a repair order</h2><button class="icon-btn" id="scan-close" title="Close">✕</button></div>
+  <div class="modal__body">
+    <!-- step 1: pick the scan -->
+    <div id="scan-pick">
+      <div class="scan-drop" id="scan-drop">
+        <b>Drop the scanned RO here, or click to browse</b>
+        A photo or scan (JPG / PNG) or a PDF. Pick every page of the same repair order at once — they're read together.
+      </div>
+      <input type="file" id="scan-input" accept="image/*,application/pdf,.pdf" multiple hidden />
+      <p class="scan-hint">Everything is read on this device. Sideways and upside-down scans are straightened automatically. The first scan downloads the text-recognition engine (needs internet once), then it works offline.</p>
+      <div class="scan-err" id="scan-err" hidden></div>
+    </div>
+    <!-- step 2: working -->
+    <div id="scan-work" hidden>
+      <div class="scan-prog">
+        <div class="scan-prog__track"><div class="scan-prog__bar" id="scan-bar"></div></div>
+        <div class="scan-prog__label" id="scan-label">Reading…</div>
+      </div>
+    </div>
+    <!-- step 3: review what was read -->
+    <div id="scan-review" hidden>
+      <div class="rv-dupe" id="rv-dupe" hidden></div>
+      <div class="rv-sec">Repair order</div>
+      <div class="rv-grid">
+        <div class="rv-field"><label for="rv-ro">RO number</label><input id="rv-ro" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-field"><label for="rv-tag">Tag</label><input id="rv-tag" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-field wide"><label for="rv-vehicle">Vehicle</label><input id="rv-vehicle" autocomplete="off" /></div>
+        <div class="rv-field wide"><label for="rv-vin">VIN</label><input id="rv-vin" autocomplete="off" spellcheck="false" autocapitalize="characters" /></div>
+        <div class="rv-field"><label for="rv-color">Color</label><input id="rv-color" autocomplete="off" /></div>
+        <div class="rv-field"><label for="rv-mileage">Mileage in</label><input id="rv-mileage" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-field"><label for="rv-opened">Opened</label><input id="rv-opened" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-field"><label for="rv-advisor">Service advisor</label><input id="rv-advisor" autocomplete="off" /></div>
+        <div class="rv-field"><label for="rv-customer">Customer</label><input id="rv-customer" autocomplete="off" /></div>
+        <div class="rv-field"><label for="rv-phone">Phone</label><input id="rv-phone" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-field wide"><label for="rv-email">E-mail</label><input id="rv-email" autocomplete="off" spellcheck="false" /></div>
+      </div>
+      <div class="rv-sec">Lines <span class="grow"></span><button class="btn btn--sm" id="rv-add-line">＋ Add line</button></div>
+      <div id="rv-lines"></div>
+      <details class="rv-raw">
+        <summary id="rv-raw-sum">Everything the scan read</summary>
+        <textarea id="rv-raw" spellcheck="false" readonly></textarea>
+      </details>
+    </div>
+  </div>
+  <div class="modal__foot" id="scan-foot" hidden>
+    <label class="rv-check" id="rv-file-wrap"><input type="checkbox" id="rv-file" checked /> Also file the scan under this RO</label>
+    <button class="btn btn--sm" id="rv-cancel">Cancel</button>
+    <button class="btn btn--sm btn--primary" id="rv-create">Create repair order</button>
   </div>
 </div>
 
@@ -236,6 +369,20 @@
   // ---------- state ----------
   var ros = [], current = null, saveT = null;
 
+  // Every plain text field on the screen, paired with the record key it holds.
+  // A scan fills these in; typing in any of them saves the same way.
+  var FIELDS = [
+    ["#ro-no", "ro"], ["#ro-vehicle", "vehicle"], ["#ro-vin", "vin"],
+    ["#ro-tag", "tag"], ["#ro-mileage", "mileage"], ["#ro-color", "color"],
+    ["#ro-opened", "opened"], ["#ro-customer", "customer"],
+    ["#ro-advisor", "advisor"], ["#ro-phone", "phone"], ["#ro-email", "email"]
+  ];
+
+  function blankRO() {
+    var rec = { id: uid(), lines: [], createdAt: Date.now(), updatedAt: Date.now() };
+    FIELDS.forEach(function (f) { rec[f[1]] = ""; });
+    return rec;
+  }
   function desiredCollection(rec) { var n = (rec.ro || "").trim(); return n ? ("RO " + n) : ("RO-" + rec.id.slice(0, 7)); }
   function fmtBytes(b) { if (!b) return "0 B"; var u = ["B", "KB", "MB", "GB"], i = Math.floor(Math.log(b) / Math.log(1024)); i = Math.min(i, u.length - 1); return (b / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + u[i]; }
   var GLYPH = { image: "🖼️", video: "🎬", audio: "🎵", pdf: "📕", document: "📄", spreadsheet: "📊", presentation: "📈", text: "📝", archive: "🗜️", other: "📎" };
@@ -260,9 +407,7 @@
     var has = !!current;
     $("#inner").hidden = !has; $("#empty-main").hidden = has;
     if (!has) return;
-    $("#ro-no").value = current.ro || "";
-    $("#ro-vehicle").value = current.vehicle || "";
-    $("#ro-vin").value = current.vin || "";
+    FIELDS.forEach(function (f) { $(f[0]).value = current[f[1]] || ""; });
     $("#save-note").textContent = "";
     $("#add-banner").hidden = embedded;
     renderLines();
@@ -275,12 +420,15 @@
     lines.forEach(function (ln, i) {
       var row = document.createElement("div"); row.className = "line";
       var lab = document.createElement("div"); lab.className = "line__label"; lab.textContent = "Line " + letter(i);
+      var op = document.createElement("input"); op.className = "line__op"; op.value = ln.op || "";
+      op.placeholder = "OP"; op.title = "Operation code"; op.spellcheck = false; op.maxLength = 10;
+      op.addEventListener("input", function () { ln.op = op.value.toUpperCase(); scheduleSave(); });
       var ta = document.createElement("textarea"); ta.value = ln.text || ""; ta.spellcheck = true;
       ta.placeholder = "What happened on line " + letter(i) + "… (complaint / cause / correction)";
       ta.addEventListener("input", function () { ln.text = ta.value; scheduleSave(); });
       var del = document.createElement("button"); del.className = "btn btn--sm btn--danger line__del"; del.textContent = "✕"; del.title = "Remove this line";
       del.onclick = function () { current.lines.splice(i, 1); renderLines(); scheduleSave(); };
-      row.append(lab, ta, del);
+      row.append(lab, op, ta, del);
       box.append(row);
     });
   }
@@ -308,7 +456,8 @@
 
   // ---------- CRUD ----------
   function newRO() {
-    var rec = { id: uid(), ro: "", vehicle: "", vin: "", lines: [{ id: uid(), text: "" }], createdAt: Date.now(), updatedAt: Date.now() };
+    var rec = blankRO();
+    rec.lines = [{ id: uid(), text: "", op: "" }];
     rec.collection = desiredCollection(rec);
     current = rec; ros.push(rec); roPut(rec);
     renderList(); paint(); $("#ro-no").focus();
@@ -318,9 +467,8 @@
   function commitSave() {
     if (!current) return;
     var oldColl = current.collection;
-    current.ro = $("#ro-no").value;
-    current.vehicle = $("#ro-vehicle").value;
-    current.vin = $("#ro-vin").value.trim().toUpperCase().replace(/\s+/g, "");
+    FIELDS.forEach(function (f) { current[f[1]] = $(f[0]).value; });
+    current.vin = (current.vin || "").trim().toUpperCase().replace(/\s+/g, "");
     current.updatedAt = Date.now();
     var newColl = desiredCollection(current);
     if (newColl !== oldColl) { current.collection = newColl; relay({ type: "vault-rename-collection", from: oldColl, to: newColl }); }
@@ -446,12 +594,592 @@
     });
   }
 
+  // ================= Scan a paper RO =================
+  // A photographed or scanned repair order is read entirely on this device —
+  // a PDF's own text layer when it has one, Tesseract OCR otherwise — then
+  // parsed into fields and lines, shown for review, and turned into an RO.
+
+  var MAX_SCAN_PAGES = 4;   // one RO's paperwork, not a whole day's stack
+  var QUICK_EDGE = 1100;    // long edge used for the which-way-up probe
+  var GOOD_SCORE = 30;      // an upright page scoring this well skips the probe
+
+  // ---------- small text helpers ----------
+  function squash(s) { return String(s || "").replace(/[ \t]+/g, " ").replace(/ {2,}/g, " ").trim(); }
+  function digitsOnly(s) { return String(s || "").replace(/\D/g, ""); }
+  function capsRatio(s) {
+    var letters = String(s || "").match(/[A-Za-z]/g);
+    if (!letters || !letters.length) return 0;
+    return (String(s).match(/[A-Z]/g) || []).length / letters.length;
+  }
+  function titleCase(s) { return String(s || "").toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); }
+  function cleanName(s) {
+    var t = squash(String(s || "").replace(/[^A-Za-z,'.\- ]/g, " ")).replace(/\s*,\s*/, ", ").replace(/^[,.\- ]+|[,.\- ]+$/g, "");
+    if (t.length < 2 || t.length > 60) return "";
+    return capsRatio(t) > 0.8 ? titleCase(t) : t;
+  }
+  function firstPhone(s, strict) {
+    var m = String(s || "").match(strict ? /\b(\d{3})[-.](\d{3})[-.](\d{4})\b/ : /\(?\b(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})\b/);
+    return m ? m[1] + "-" + m[2] + "-" + m[3] : "";
+  }
+  // "25" on a 2026 RO means 2025; a year more than one ahead is last century.
+  function fullYear(y) {
+    var n = parseInt(y, 10);
+    if (!isFinite(n)) return "";
+    if (n >= 1900 && n <= 2100) return String(n);
+    if (n >= 0 && n < 100) { var cut = (new Date().getFullYear() % 100) + 1; return String(n <= cut ? 2000 + n : 1900 + n); }
+    return "";
+  }
+
+  // ---------- VIN detection (same rules as the Vault's scanner) ----------
+  // A Mercedes VIN always opens with one of these world-manufacturer codes, so
+  // requiring one is the strongest single filter against OCR look-alikes.
+  var MB_WMI = { WDB: 1, WDD: 1, WDC: 1, W1K: 1, W1N: 1, WDF: 1, W1V: 1, W1W: 1, W1X: 1, W1Y: 1, WD3: 1, WD4: 1, WMX: 1, WME: 1, "4JG": 1, "55S": 1, "8AC": 1, "9BM": 1, MB1: 1 };
+  function looksLikeVin(v) {
+    if (!MB_WMI[v.slice(0, 3)]) return false;
+    var digits = (v.match(/\d/g) || []).length;
+    if (digits < 4 || 17 - digits < 2) return false;
+    if (/[A-Z]{7,}/.test(v)) return false;          // 7+ letters running => a word
+    var set = {}, n = 0;
+    for (var i = 0; i < v.length; i++) if (!set[v[i]]) { set[v[i]] = 1; n++; }
+    return n >= 6;                                   // too few distinct chars => a blank field
+  }
+  function findVinIn(text) {
+    var up = String(text || "").toUpperCase(), SEP = "[ \\t\\u00A0]{0,2}", hits = [];
+    function consider(t) {
+      var re = new RegExp("(?<![A-Z0-9])[A-HJ-NPR-Z0-9](?:" + SEP + "[A-HJ-NPR-Z0-9]){16}(?![A-Z0-9])", "g"), m;
+      while ((m = re.exec(t))) {
+        var v = m[0].replace(/[ \t ]/g, "");
+        if (v.length !== 17 || !looksLikeVin(v)) continue;
+        var before = t.slice(Math.max(0, m.index - 16), m.index).replace(/[^A-Z]/g, "");
+        hits.push({ vin: v, labelled: /VIN$/.test(before) });
+      }
+    }
+    consider(up);
+    // OCR reads 1 as I and 0 as O/Q — neither letter ever appears in a VIN. Only
+    // fix runs that already hold real digits, so prose can't become a VIN.
+    var runRe = new RegExp("(?<![A-Z0-9])[A-Z0-9](?:" + SEP + "[A-Z0-9]){16}(?![A-Z0-9])", "g");
+    consider(up.replace(runRe, function (run) {
+      return (run.match(/\d/g) || []).length < 2 ? run : run.replace(/I/g, "1").replace(/[OQ]/g, "0");
+    }));
+    for (var i = 0; i < hits.length; i++) if (hits[i].labelled) return hits[i].vin;
+    return hits.length ? hits[0].vin : "";
+  }
+
+  // ---------- parsing ----------
+  // Every field label the dealer forms and the DISPATCH screen print. A value
+  // runs until the next label on the same row, which is how the two-column
+  // header of an RO survives being flattened into lines of text.
+  var LABEL_WORDS = "R\\.?\\s?O\\.?\\s*(?:No|Number)?|Tag\\s*(?:No)?|Open\\s*Date|Mileage(?:\\s*In)?|Complete\\s*by\\s*Time|Pay\\s*Method|Service\\s*Advisor|Advisor|Name|Address|City\\s*-?\\s*ST\\s*-?\\s*Zip|Home\\s*Ph|Bus\\s*Ph|Cell\\s*Ph|E-?\\s?mail|Year|Model|VIN|Colou?r|Prod\\s*Date|Stock\\s*No|Selling\\s*Dlr|Warr\\s*Exp|Delivery|In\\s*Service|Cust|Options|DLR|Est\\s*Comp|Promised|Estimate|Status|Make|Remarks|Lot\\s*Loc|SDLR|APPT|WAIT|SPEC|RENT|VEH|LIC|MI|SA|P";
+  var LABEL_STOP = new RegExp("\\b(?:" + LABEL_WORDS + ")\\s*[:#]", "i");
+  function cutAtLabel(s) {
+    var m = String(s || "").match(LABEL_STOP);
+    if (!m) return squash(s);
+    return m.index === 0 ? "" : squash(String(s).slice(0, m.index));
+  }
+  // The value printed after `re`, on the same row — or, when that cell is empty,
+  // on the row under it (labels and values often land in separate table rows).
+  function labelValue(lines, re) {
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(re);
+      if (!m) continue;
+      var rest = cutAtLabel(lines[i].slice(m.index + m[0].length).replace(/^\s*[:#.·•\-–—]\s*/, ""));
+      if (rest) return rest;
+      for (var j = i + 1; j < Math.min(lines.length, i + 3); j++) {
+        if (LABEL_STOP.test(lines[j])) break;   // the next row is a different field
+        var nx = cutAtLabel(lines[j]);
+        if (nx) return nx;
+      }
+    }
+    return "";
+  }
+
+  var LETTERS = "ABCDEFGH";
+  // Only a hyphen hanging off the end of a WORD is a split word ("con-" +
+  // "trol"); a dash standing on its own is punctuation and keeps its spaces.
+  function joinWrap(a, b) { return /[A-Za-z][-‐‑]$/.test(a) ? a.replace(/[-‐‑]$/, "") + b : a + " " + b; }
+  // Pull the op code off the front of a row: the printed order is
+  // "<op code> <pay type> <description>", and the pay type is always present.
+  var PAY_TYPE = /^(CC|CP|CS|CW|WW|WC|IC|II|SC|C|W|I)$/;
+  var OP_CODE = /^[A-Z][A-Z0-9-]{0,5}$/;
+  function splitOp(line) {
+    var toks = line.text.split(" ");
+    if (toks.length > 2 && PAY_TYPE.test(toks[1]) && OP_CODE.test(toks[0])) { line.op = toks[0]; toks = toks.slice(2); }
+    else if (toks.length > 1 && PAY_TYPE.test(toks[0])) toks = toks.slice(1);
+    line.text = squash(toks.join(" "));
+    return line;
+  }
+  var LINE_FOOTER = /^(X$|TECH\s*COPY|MOBILE\s*SHOP\s*COPY|CLIENT\s*COPY|ESTIMATE\s*AND\s*AUTH|ORIGINAL\s*ESTIMATE|CLIENT\s*ADVISED|TOTAL\b|SIGNATURE)/i;
+  // The dealer RO's line table: rows open with "# A", "# B"… and a description
+  // can wrap onto the rows under it. Requiring the letters to run in order is
+  // what keeps stray prose out.
+  function formLines(lines) {
+    var start = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (/INSTRUCTIONS?\s*AND\s*DESCRIPTIONS?|OP\s*CODE/i.test(lines[i])) { start = i + 1; break; }
+    }
+    var out = [], cur = null, expect = 0;
+    for (var k = start; k < lines.length; k++) {
+      var ln = lines[k];
+      if (expect < LETTERS.length) {
+        var m = ln.match(new RegExp("^[#*+]?\\s*" + LETTERS.charAt(expect) + "(?![A-Za-z0-9])[\\s.):\\-]*(.+)$"));
+        if (m && squash(m[1]).length >= 3 && (/^[#*+]/.test(ln) || capsRatio(m[1]) >= 0.6)) {
+          cur = { text: squash(m[1]), op: "" };
+          out.push(cur); expect++;
+          continue;
+        }
+      }
+      if (cur && ln.length >= 3 && capsRatio(ln) >= 0.6 && !LINE_FOOTER.test(ln) && (ln.match(/[A-Za-z]{3,}/g) || []).length >= 2) {
+        cur.text = joinWrap(cur.text, ln);
+      }
+    }
+    return out.map(splitOp).filter(function (l) { return l.text.length >= 3; });
+  }
+  // The DISPATCH screen: "5) B P110 3R CUSTOMER STAT 5401 1.0 …" — line letter,
+  // skill, status, then a truncated description followed by numeric columns.
+  function dispatchLines(lines) {
+    var out = [];
+    lines.forEach(function (ln) {
+      var m = ln.match(/^\d{1,2}\)\s*([A-H])\s+(\S+)\s+(\S+)\s+(.+)$/);
+      if (!m) return;
+      var desc = squash(m[4].split(/\s+(?=\d{3,5}\s+-?\d+\.\d)/)[0].replace(/\s+-?\d+\.\d.*$/, "").replace(/\s+\d{3,5}$/, ""));
+      if (desc.length >= 3) out.push({ text: desc, op: "" });
+    });
+    return out;
+  }
+  // Nothing recognisable? Anything that reads like a complaint is still worth
+  // offering — a handwritten note on the scan usually says it plainly.
+  function looseComplaints(lines) {
+    return lines.filter(function (s) { return /CUSTOMER\s*STATE|C\/S\b|COMPLAIN|REQUESTS?\b/i.test(s) && s.length >= 8; })
+      .slice(0, 8).map(function (s) { return splitOp({ text: squash(s.replace(/^[#*+]?\s*[A-H][\s.):\-]+/, "")), op: "" }); });
+  }
+  // Loose text under the dispatch table — where a stuck-on note usually is.
+  function trailingNote(lines) {
+    var at = -1;
+    for (var i = 0; i < lines.length; i++) if (/END\s*OF\s*DISPLAY|^COMMAND\s*[:#]/i.test(lines[i])) at = i;
+    if (at < 0) return "";
+    return squash(lines.slice(at + 1).filter(function (s) {
+      return s.length > 3 && /[A-Za-z]{3}/.test(s) && !/^COMMAND/i.test(s);
+    }).join(" ")).slice(0, 400);
+  }
+
+  // Read one scan's text into the fields and lines of a repair order.
+  function parseScan(raw) {
+    var text = String(raw || "");
+    var lines = text.split(/\r?\n/).map(squash).filter(Boolean);
+    var dispatch = /\bD\s?I\s?S\s?P\s?A\s?T\s?C\s?H\b/.test(text.toUpperCase()) ||
+      (/\bTAG\s*[:#]/i.test(text) && /\bSA\s*[:#]/i.test(text));
+    var out = {
+      ro: "", tag: "", vehicle: "", vin: "", color: "", mileage: "", opened: "",
+      advisor: "", customer: "", phone: "", email: "", lines: [], note: "",
+      source: dispatch ? "dispatch" : "ro", text: text
+    };
+
+    out.ro = digitsOnly(labelValue(lines, /\bR\.?\s?O\.?\s*(?:No|Number|#)\s*/i));
+    if (!/^\d{4,9}$/.test(out.ro)) {
+      var rm = text.match(/\bR\.?\s?O\.?\s*(?:No|Number)?\s*[:#]\s*(\d{4,9})\b/i);
+      out.ro = rm ? rm[1] : "";
+    }
+
+    var tag = labelValue(lines, /\bTag\s*(?:No|#)?\s*/i).toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    if (!/^[A-Z]{0,2}\d{2,6}[A-Z]?$/.test(tag)) {
+      var tm = text.match(/\bTag\s*(?:No|#)?\s*[:#.]?\s*([A-Z]{0,2}\d{3,6})\b/i);
+      tag = tm ? tm[1].toUpperCase() : "";
+    }
+    out.tag = tag;
+
+    out.mileage = digitsOnly(labelValue(lines, /\bMileage\s*(?:In)?\s*/i)).slice(0, 7);
+    if (!out.mileage) { var mi = text.match(/\bMI\s*[:#]\s*([\d,]+)/i); out.mileage = mi ? digitsOnly(mi[1]).slice(0, 7) : ""; }
+
+    out.opened = squash(labelValue(lines, /\b(?:R\.?\s?O\.?\s*)?Open\s*Date\s*/i).replace(/[^\dA-Za-z\/.\- ]/g, "")).slice(0, 24);
+    out.advisor = cleanName(labelValue(lines, /\bService\s*Advisor\s*/i));
+    if (!out.advisor) { var sa = text.match(/\bSA\s*[:#]\s*(\d{2,6})\b/i); out.advisor = sa ? sa[1] : ""; }
+    out.customer = cleanName(labelValue(lines, /\bName\s*/i));
+    out.phone = firstPhone(labelValue(lines, /\bCell\s*Ph\.?\s*/i)) || firstPhone(labelValue(lines, /\bHome\s*Ph\.?\s*/i)) ||
+      firstPhone(labelValue(lines, /\bBus\s*Ph\.?\s*/i)) || firstPhone(text, true);
+    var em = text.match(/[A-Za-z0-9._%+-]+\s?@\s?[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    out.email = em ? em[0].replace(/\s/g, "").toLowerCase() : "";
+
+    var color = squash(labelValue(lines, /\bColou?r\s*/i).replace(/[^A-Za-z \-]/g, ""));
+    out.color = color && color.length <= 24 ? titleCase(color) : "";
+
+    out.vin = findVinIn(text);
+    if (!out.vin) { var vm = text.match(/\bVIN\s*[:#]?\s*([A-HJ-NPR-Z0-9]{17})\b/i); out.vin = vm ? vm[1].toUpperCase() : ""; }
+
+    var year = fullYear(digitsOnly(labelValue(lines, /\bYear\s*/i)).slice(0, 4));
+    var model = squash(labelValue(lines, /\bModel\s*/i).replace(/\bMERCEDES[\s-]*BENZ\b/i, "").replace(/\bMERCEDES\b/i, "").replace(/[^A-Za-z0-9 \-]/g, " "));
+    if (!year || !model) {
+      var veh = text.match(/\bVEH\s*[:#]\s*(\d{2,4})\s+([A-Z0-9][A-Z0-9\-]{1,9})/i);
+      if (veh) { year = year || fullYear(veh[1]); model = model || veh[2].toUpperCase(); }
+    }
+    out.vehicle = squash([year, model.slice(0, 40)].filter(Boolean).join(" "));
+
+    out.lines = dispatch ? dispatchLines(lines) : formLines(lines);
+    if (!out.lines.length) out.lines = dispatch ? formLines(lines) : dispatchLines(lines);
+    if (!out.lines.length) out.lines = looseComplaints(lines);
+    out.note = trailingNote(lines);
+    return out;
+  }
+
+  // ---------- recognition engines (loaded only when a scan runs) ----------
+  var T_V = "5.1.1", T_CV = "5.1.0", T_CDN = "https://cdn.jsdelivr.net/npm";
+  var T_LIB = window.__TESS_LIB || (T_CDN + "/tesseract.js@" + T_V + "/dist/tesseract.min.js");
+  var T_WORK = window.__TESS_WORK || (T_CDN + "/tesseract.js@" + T_V + "/dist/worker.min.js");
+  var T_CORE = window.__TESS_CORE || (T_CDN + "/tesseract.js-core@" + T_CV + "/tesseract-core-simd.wasm.js");
+  var T_LANG = window.__TESS_LANG || "https://tessdata.projectnaptha.com/4.0.0";
+  var tessLibP = null;
+  function loadTess() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (tessLibP) return tessLibP;
+    tessLibP = new Promise(function (res, rej) {
+      var s = document.createElement("script"); s.src = T_LIB;
+      s.onload = function () { window.Tesseract ? res(window.Tesseract) : rej(new Error("The text-recognition engine didn't start.")); };
+      s.onerror = function () { tessLibP = null; rej(new Error("Couldn't download the text-recognition engine — it needs an internet connection the first time.")); };
+      document.head.appendChild(s);
+    });
+    return tessLibP;
+  }
+  var PDF_SRC = window.__PDFJS_SRC || "../vault/vendor/pdf.min.js";
+  var PDF_WORKER = window.__PDFJS_WORKER || "../vault/vendor/pdf.worker.min.js";
+  var pdfLibP = null;
+  function loadPdfjs() {
+    if (pdfLibP) return pdfLibP;
+    pdfLibP = new Promise(function (res, rej) {
+      var s = document.createElement("script"); s.src = PDF_SRC;
+      s.onload = function () {
+        Promise.resolve(window.pdfjsLibPromise || window.pdfjsLib).then(function (lib) {
+          lib = lib || window.pdfjsLib;
+          if (!lib) { rej(new Error("The PDF reader didn't start.")); return; }
+          try { lib.GlobalWorkerOptions.workerSrc = PDF_WORKER; } catch (e) {}
+          res(lib);
+        }).catch(rej);
+      };
+      s.onerror = function () { pdfLibP = null; rej(new Error("Couldn't load the PDF reader.")); };
+      document.head.appendChild(s);
+    });
+    return pdfLibP;
+  }
+
+  function isPdf(f) { return /pdf/i.test(f.type || "") || /\.pdf$/i.test(f.name || ""); }
+  function bitmapOf(file) {
+    var viaImg = function () {
+      return new Promise(function (res, rej) {
+        var url = URL.createObjectURL(file), im = new Image();
+        im.onload = function () { URL.revokeObjectURL(url); res(im); };
+        im.onerror = function () { URL.revokeObjectURL(url); rej(new Error("Couldn't open “" + file.name + "”.")); };
+        im.src = url;
+      });
+    };
+    if (!window.createImageBitmap) return viaImg();
+    return createImageBitmap(file).catch(viaImg);
+  }
+  function srcSize(src) { return { w: src.width || src.naturalWidth || 1, h: src.height || src.naturalHeight || 1 }; }
+  // Draw a source turned by `angle`, scaled so its long edge is `longEdge`.
+  function rotated(src, angle, longEdge) {
+    var sz = srcSize(src), scale = longEdge / Math.max(sz.w, sz.h);
+    var w = Math.max(1, Math.round(sz.w * scale)), h = Math.max(1, Math.round(sz.h * scale));
+    var swap = angle === 90 || angle === 270;
+    var c = document.createElement("canvas");
+    c.width = swap ? h : w; c.height = swap ? w : h;
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);   // scans are opaque paper
+    ctx.translate(c.width / 2, c.height / 2);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.drawImage(src, -w / 2, -h / 2, w, h);
+    return c;
+  }
+  // Small scans are worth enlarging for OCR; huge ones only cost time.
+  function fullEdge(src) { var sz = srcSize(src); return Math.max(1600, Math.min(3000, Math.max(sz.w, sz.h))); }
+
+  // Rebuild visual rows from a PDF's text layer — a form only parses if the
+  // label and the value it belongs to stay on the same line.
+  function itemsToText(items) {
+    var rows = {};
+    (items || []).forEach(function (it) {
+      if (!it.str || !it.str.trim()) return;
+      var y = Math.round(((it.transform && it.transform[5]) || 0) / 3);
+      if (!rows[y]) rows[y] = [];
+      rows[y].push({ x: (it.transform && it.transform[4]) || 0, s: it.str });
+    });
+    return Object.keys(rows).map(Number).sort(function (a, b) { return b - a; })
+      .map(function (y) {
+        return squash(rows[y].sort(function (a, b) { return a.x - b.x; }).map(function (p) { return p.s; }).join(" "));
+      }).filter(Boolean).join("\n");
+  }
+  function pdfDoc(file) {
+    return loadPdfjs().then(function (lib) {
+      return file.arrayBuffer().then(function (buf) {
+        return lib.getDocument({ data: buf, isEvalSupported: false, disableAutoFetch: true, disableStream: true }).promise;
+      });
+    });
+  }
+  // A born-digital RO carries its own text; a scanned one carries almost none,
+  // and its pages come back as canvases for OCR instead.
+  function readPdf(file, status) {
+    return pdfDoc(file).then(function (doc) {
+      var n = Math.min(doc.numPages, MAX_SCAN_PAGES), texts = [], i = 1;
+      function textStep() {
+        if (i > n) return Promise.resolve();
+        return doc.getPage(i).then(function (page) {
+          return page.getTextContent().then(function (tc) { texts.push(itemsToText(tc.items)); i++; return textStep(); });
+        });
+      }
+      return textStep().then(function () {
+        var text = texts.join("\n");
+        if ((text.match(/[A-Za-z]/g) || []).length >= 200) { try { doc.destroy(); } catch (e) {} return { text: text, sources: [] }; }
+        var sources = [], k = 1;
+        function renderStep() {
+          if (k > n) return Promise.resolve();
+          status("Rendering page " + k + " of " + n + "…");
+          return doc.getPage(k).then(function (page) {
+            var vp = page.getViewport({ scale: 2.2 });
+            var c = document.createElement("canvas");
+            c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+            var ctx = c.getContext("2d");
+            ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+            return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { sources.push(c); k++; return renderStep(); });
+          });
+        }
+        return renderStep().then(function () { try { doc.destroy(); } catch (e) {} return { text: text, sources: sources }; });
+      });
+    });
+  }
+
+  // How much a page of OCR output reads like an actual repair order — used to
+  // work out which way up the scan was fed through.
+  var ORIENT_HINTS = [/\bR\.?O\.?\b/, /\bVIN\b/, /MILEAGE/, /ADVISOR/, /CUSTOMER/, /INSTRUCTION/, /DISPATCH/, /OP\s*CODE/, /\bTAG\b/, /\bMODEL\b/, /ESTIMATE/, /\bTECH\b/, /WARRANT/, /SERVICE/];
+  function orientScore(text) {
+    if (!text) return 0;
+    var up = text.toUpperCase(), score = 0;
+    ORIENT_HINTS.forEach(function (re) { if (re.test(up)) score += 6; });
+    score += Math.min(40, (up.match(/\b[A-Z]{3,}\b/g) || []).length);
+    if (findVinIn(up)) score += 15;
+    return score;
+  }
+  function detectAngle(worker, src, status) {
+    var angles = [0, 90, 270, 180], best = { score: -1, angle: 0 }, i = 0;
+    function step() {
+      if (i >= angles.length) return Promise.resolve(best.angle);
+      var a = angles[i++];
+      status(i === 1 ? "Checking which way up the scan is…" : "Trying " + a + "°…");
+      return worker.recognize(rotated(src, a, QUICK_EDGE)).then(function (r) {
+        var sc = orientScore((r && r.data && r.data.text) || "");
+        if (sc > best.score) best = { score: sc, angle: a };
+        if (a === 0 && sc >= GOOD_SCORE) return 0;   // already upright — don't pay for the rest
+        return step();
+      });
+    }
+    return step();
+  }
+  function ocrSources(sources, status, progress, cancelled) {
+    if (!sources.length) return Promise.resolve("");
+    return loadTess().then(function (Tesseract) {
+      return Tesseract.createWorker("eng", 1, {
+        workerPath: T_WORK, corePath: T_CORE, langPath: T_LANG,
+        logger: function (m) { if (m && m.status === "recognizing text" && progress) progress(m.progress || 0); }
+      });
+    }).then(function (worker) {
+      var texts = [];
+      return detectAngle(worker, sources[0], status).then(function (angle) {
+        var i = 0;
+        function step() {
+          if (i >= sources.length || (cancelled && cancelled())) return Promise.resolve();
+          status("Reading page " + (i + 1) + " of " + sources.length + "…");
+          return worker.recognize(rotated(sources[i], angle, fullEdge(sources[i]))).then(function (r) {
+            texts.push((r && r.data && r.data.text) || ""); i++; return step();
+          });
+        }
+        return step();
+      }).then(function () {
+        try { worker.terminate(); } catch (e) {}
+        return texts.join("\n");
+      }, function (e) { try { worker.terminate(); } catch (x) {} throw e; });
+    });
+  }
+
+  // ---------- the scan flow ----------
+  var scanFiles = [], review = null, scanning = false, scanDropped = false;
+  var RV = [["#rv-ro", "ro"], ["#rv-tag", "tag"], ["#rv-vehicle", "vehicle"], ["#rv-vin", "vin"], ["#rv-color", "color"],
+    ["#rv-mileage", "mileage"], ["#rv-opened", "opened"], ["#rv-advisor", "advisor"], ["#rv-customer", "customer"],
+    ["#rv-phone", "phone"], ["#rv-email", "email"]];
+
+  function scanStep(step) {
+    $("#scan-pick").hidden = step !== "pick";
+    $("#scan-work").hidden = step !== "work";
+    $("#scan-review").hidden = step !== "review";
+    $("#scan-foot").hidden = step !== "review";
+    $("#scan-title").textContent = step === "review" ? "📷 Check what the scan says" : "📷 Scan a repair order";
+  }
+  function openScan() {
+    scanFiles = []; review = null; scanDropped = false;
+    $("#scan-err").hidden = true; $("#scan-input").value = "";
+    scanStep("pick");
+    $("#scan-scrim").classList.add("show"); $("#scan-modal").classList.add("show");
+  }
+  function closeScan() {
+    // Closing mid-read walks away from it: the pages still being recognized are
+    // dropped as they finish, and the worker is shut down at the end either way.
+    if (scanning) scanDropped = true;
+    $("#scan-scrim").classList.remove("show"); $("#scan-modal").classList.remove("show");
+    scanFiles = []; review = null;
+  }
+  function closeModals() { closeScan(); }
+  function scanError(msg) {
+    scanStep("pick");
+    var el = $("#scan-err"); el.textContent = msg; el.hidden = false;
+  }
+  function scanProgress(frac, label) {
+    $("#scan-bar").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+    if (label != null) $("#scan-label").textContent = label;
+  }
+
+  function startScan(fileList) {
+    var files = Array.prototype.slice.call(fileList || []).filter(Boolean)
+      .filter(function (f) { return isPdf(f) || /^image\//.test(f.type || "") || /\.(jpe?g|png|webp|bmp|gif|tiff?)$/i.test(f.name || ""); });
+    if (!files.length) { scanError("Pick a photo, a scan (JPG / PNG) or a PDF of the repair order."); return; }
+    scanFiles = files.slice(0, MAX_SCAN_PAGES);
+    scanning = true; scanDropped = false;
+    scanStep("work");
+    scanProgress(0.04, "Opening the scan…");
+
+    var texts = [], sources = [], i = 0;
+    var status = function (m) { $("#scan-label").textContent = m; };
+
+    function gather() {
+      if (scanDropped || i >= scanFiles.length) return Promise.resolve();
+      var f = scanFiles[i++];
+      scanProgress(0.05 + 0.15 * (i / scanFiles.length), "Opening " + f.name + "…");
+      if (isPdf(f)) {
+        return readPdf(f, status).then(function (r) {
+          if (r.text) texts.push(r.text);
+          r.sources.forEach(function (c) { sources.push(c); });
+          return gather();
+        });
+      }
+      return bitmapOf(f).then(function (b) { sources.push(b); return gather(); });
+    }
+
+    gather().then(function () {
+      if (!sources.length) { scanProgress(0.9, "Reading the text…"); return texts.join("\n"); }
+      scanProgress(0.25, "Starting the text recognizer…");
+      return ocrSources(sources, status, function (p) { scanProgress(0.45 + 0.5 * p); }, function () { return scanDropped; })
+        .then(function (ocr) { return texts.concat([ocr]).join("\n"); });
+    }).then(function (text) {
+      scanProgress(1, "Done.");
+      scanning = false;
+      if (scanDropped) return;
+      var parsed = parseScan(text);
+      if (!parsed.ro && !parsed.vin && !parsed.lines.length) {
+        scanError("Nothing on that scan reads like a repair order. Try a sharper, straighter photo of the whole page.");
+        return;
+      }
+      showReview(parsed);
+    }).catch(function (e) {
+      scanning = false;
+      if (scanDropped) return;
+      console.error(e);
+      scanError((e && e.message) || "Couldn't read that scan.");
+    });
+  }
+
+  function showReview(parsed) {
+    review = parsed;
+    review.lines = (parsed.lines || []).map(function (l) { return { text: l.text, op: l.op || "", pick: true }; });
+    if (parsed.note) review.lines.push({ text: parsed.note, op: "", pick: false, note: true });
+    RV.forEach(function (f) {
+      var el = $(f[0]);
+      el.value = parsed[f[1]] || "";
+      el.classList.toggle("found", !!parsed[f[1]]);
+    });
+    $("#rv-raw").value = parsed.text || "";
+    $("#rv-file-wrap").hidden = !embedded;
+    renderReviewLines();
+    refreshDupe();
+    scanStep("review");
+  }
+  function refreshDupe() {
+    var no = $("#rv-ro").value.trim();
+    var hit = no ? ros.filter(function (r) { return (r.ro || "").trim() === no; })[0] : null;
+    var box = $("#rv-dupe");
+    box.hidden = !hit;
+    if (hit) box.textContent = "RO " + no + " is already on the list — creating it again would fill in anything it's missing and add any new lines.";
+    $("#rv-create").textContent = hit ? "Update RO " + no : "Create repair order";
+  }
+  function renderReviewLines() {
+    var box = $("#rv-lines"); box.innerHTML = "";
+    if (!review.lines.length) { box.innerHTML = '<div class="rv-empty">No lines were read off this scan — add them by hand once the RO exists.</div>'; return; }
+    var seen = 0;
+    review.lines.forEach(function (ln, i) {
+      var row = document.createElement("div"); row.className = "rv-line";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!ln.pick;
+      cb.title = "Put this on the repair order";
+      cb.onchange = function () { ln.pick = cb.checked; renderReviewLines(); };
+      var lab = document.createElement("div"); lab.className = "rv-line__label";
+      lab.textContent = ln.pick ? "Line " + letter(seen++) : (ln.note ? "note" : "—");
+      var op = document.createElement("input"); op.type = "text"; op.value = ln.op || ""; op.placeholder = "OP";
+      op.spellcheck = false; op.maxLength = 10;
+      op.addEventListener("input", function () { ln.op = op.value.toUpperCase(); });
+      var ta = document.createElement("textarea"); ta.value = ln.text || ""; ta.spellcheck = true;
+      ta.addEventListener("input", function () { ln.text = ta.value; });
+      var del = document.createElement("button"); del.className = "btn btn--sm btn--danger"; del.textContent = "✕"; del.title = "Drop this line";
+      del.onclick = function () { review.lines.splice(i, 1); renderReviewLines(); };
+      row.append(cb, lab, op, ta, del);
+      box.append(row);
+    });
+  }
+
+  function createFromReview() {
+    if (!review) return;
+    var vals = {};
+    RV.forEach(function (f) { vals[f[1]] = squash($(f[0]).value); });
+    vals.vin = vals.vin.toUpperCase().replace(/\s+/g, "");
+    var picked = review.lines.filter(function (l) { return l.pick; })
+      .map(function (l) { return { id: uid(), text: squash(l.text), op: squash(l.op).toUpperCase() }; })
+      .filter(function (l) { return l.text || l.op; });
+    var norm = function (s) { return squash(s).toUpperCase(); };
+    var existing = vals.ro ? ros.filter(function (r) { return (r.ro || "").trim() === vals.ro; })[0] : null;
+    var rec, added = 0;
+
+    if (existing) {
+      // Filling a gap is safe; overwriting what someone typed is not.
+      FIELDS.forEach(function (f) { if (!squash(existing[f[1]]) && vals[f[1]]) existing[f[1]] = vals[f[1]]; });
+      existing.lines = existing.lines || [];
+      var have = existing.lines.map(function (l) { return norm(l.text); });
+      picked.forEach(function (l) { if (have.indexOf(norm(l.text)) === -1) { existing.lines.push(l); have.push(norm(l.text)); added++; } });
+      // A blank starter line just gets in the way once real ones arrive.
+      existing.lines = existing.lines.filter(function (l) { return squash(l.text) || squash(l.op); });
+      existing.scanText = review.text || existing.scanText || "";
+      existing.updatedAt = Date.now();
+      rec = existing;
+    } else {
+      rec = blankRO();
+      FIELDS.forEach(function (f) { rec[f[1]] = vals[f[1]] || ""; });
+      rec.lines = picked.length ? picked : [{ id: uid(), text: "", op: "" }];
+      rec.scanText = review.text || "";
+      rec.collection = desiredCollection(rec);
+      ros.push(rec);
+      added = picked.length;
+    }
+
+    var attach = embedded && $("#rv-file").checked ? scanFiles.slice() : [];
+    roPut(rec).then(function () {
+      current = rec;
+      renderList(); paint();
+      toast(existing
+        ? "RO " + (rec.ro || "") + " updated from the scan — " + added + " new line" + (added === 1 ? "" : "s") + "."
+        : "Repair order created from the scan — " + added + " line" + (added === 1 ? "" : "s") + ".");
+      closeScan();
+      if (attach.length) addFiles(attach);
+    });
+  }
+
   // ---------- wire ----------
   function wire() {
     $("#new-btn").onclick = newRO;
+    $("#scan-btn").onclick = openScan;
+    $("#scan-btn-empty").onclick = openScan;
     $("#side-toggle").onclick = function () { $("#side").classList.toggle("show"); };
-    ["#ro-no", "#ro-vehicle", "#ro-vin"].forEach(function (sel) { $(sel).addEventListener("input", scheduleSave); });
-    $("#add-line-btn").onclick = function () { if (!current) return; (current.lines = current.lines || []).push({ id: uid(), text: "" }); renderLines(); scheduleSave(); var tas = document.querySelectorAll("#lines textarea"); if (tas.length) tas[tas.length - 1].focus(); };
+    FIELDS.forEach(function (f) { $(f[0]).addEventListener("input", scheduleSave); });
+    $("#add-line-btn").onclick = function () { if (!current) return; (current.lines = current.lines || []).push({ id: uid(), text: "", op: "" }); renderLines(); scheduleSave(); var tas = document.querySelectorAll("#lines textarea"); if (tas.length) tas[tas.length - 1].focus(); };
     $("#delete-btn").onclick = deleteRO;
     $("#add-btn").onclick = function () { $("#file-input").click(); };
     $("#file-input").addEventListener("change", function (e) { addFiles(e.target.files); e.target.value = ""; });
@@ -462,9 +1190,22 @@
     ["dragenter", "dragover"].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); }); });
     ["dragleave", "drop"].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); }); });
     dz.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+    // Scan modal
+    $("#scan-close").onclick = closeScan;
+    $("#scan-scrim").onclick = closeScan;
+    $("#rv-cancel").onclick = closeScan;
+    $("#rv-create").onclick = createFromReview;
+    $("#rv-ro").addEventListener("input", refreshDupe);
+    $("#rv-add-line").onclick = function () { if (!review) return; review.lines.push({ text: "", op: "", pick: true }); renderReviewLines(); };
+    var sd = $("#scan-drop");
+    sd.onclick = function () { $("#scan-input").click(); };
+    $("#scan-input").addEventListener("change", function (e) { startScan(e.target.files); e.target.value = ""; });
+    ["dragenter", "dragover"].forEach(function (ev) { sd.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); sd.classList.add("drag"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { sd.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); sd.classList.remove("drag"); }); });
+    sd.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) startScan(e.dataTransfer.files); });
     document.addEventListener("focusin", function (e) { var t = e.target; if (t.tagName === "TEXTAREA") t.spellcheck = true; });
     window.addEventListener("focus", refreshFiles);
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePicker(); } });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModals(); });
   }
 
   // ---------- platform embedding ----------
@@ -489,6 +1230,7 @@
         if (!r.collection) r.collection = desiredCollection(r);
         // migrate the old single notes field into the first story line
         if (!r.lines) r.lines = (r.notes && r.notes.trim()) ? [{ id: uid(), text: r.notes }] : [];
+        FIELDS.forEach(function (f) { if (typeof r[f[1]] !== "string") r[f[1]] = ""; });
         roPut(r);
       });
       renderList();
@@ -498,7 +1240,14 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 
-  window.__ros = { count: function () { return ros.length; }, get current() { return current; }, refreshFiles: refreshFiles };
+  window.__ros = {
+    count: function () { return ros.length; },
+    get current() { return current; },
+    refreshFiles: refreshFiles,
+    // Exposed so the scan parser can be exercised on raw text (E2E suite).
+    parseScan: parseScan,
+    reviewText: function (t) { openScan(); showReview(parseScan(t)); }
+  };
 })();
 </script>
 </body>

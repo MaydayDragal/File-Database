@@ -28,6 +28,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Static checks
         run: npm run test:static
+      - name: LI document-number checks
+        run: npm run test:li-number
       - name: Backup-format checks
         run: npm run test:backup
       - name: Blob-integrity checks

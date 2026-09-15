@@ -488,13 +488,43 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
 
   // ---------- LI extraction (text layer, structure, OCR) ----------
   var DOCNUM = /\b([A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7})\b/;
+  // XENTRY's newer LI PDFs typeset the document number with NON-BREAKING
+  // punctuation - a U+2011 non-breaking hyphen between the groups, U+00A0
+  // no-break spaces around the field labels - so "LI83.70\u2011P\u2011080411"
+  // never matched the ASCII-hyphen pattern above and the LI number came back
+  // empty. Fold the no-break/typographic variants back to ASCII before any
+  // matching. En/em dashes are deliberately left alone so prose keeps its
+  // typography; only hyphen-shaped characters fold.
+  // normChars() is 1:1 so it is safe where character offsets matter (the
+  // viewer's word index); normText() also drops invisibles and is what the
+  // extractors use.
+  var NORM_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/g;
+  var NORM_HYPHEN = /[\u2010\u2011\u2012\u2212\ufe58\ufe63\uff0d]/g;
+  var NORM_DROP = /[\u00ad\u200b\u200c\u200d\ufeff]/g;
+  function normChars(s) { return String(s == null ? "" : s).replace(NORM_SPACE, " ").replace(NORM_HYPHEN, "-"); }
+  function normText(s) { return normChars(s).replace(NORM_DROP, ""); }
+  // Detection only (never the stored text): also accept en/em dashes, which
+  // some exports substitute for the hyphen inside the number itself.
+  var NORM_DASH = /[\u2013\u2014\u2015]/g;
+  function normLI(s) { return normText(s).replace(NORM_DASH, "-"); }
+  // Canonical form of a document number, and the key that decides which
+  // version rows belong to the same document. XENTRY's newer PDFs spell the
+  // number with U+2011 hyphens and U+00A0 spaces, which render identically to
+  // ASCII — so a number pasted out of one into the Document number field
+  // produced a string that LOOKED like the others but was not equal to them,
+  // and that document's versions split into a second row. Stray whitespace and
+  // a lowercase prefix did the same. Group on the folded, trimmed, upper-cased
+  // form so those all land in one group.
+  function canonLI(s) { var v = normLI(s).replace(/\s+/g, " ").trim(); return DOCNUM.test(v.toUpperCase()) ? v.toUpperCase() : v; }
+  function liKey(li) { return "li:" + canonLI(li).toUpperCase(); }
   function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-  function detectLI(hay) { var m = hay.match(DOCNUM); return m ? m[1] : ""; }
+  function detectLI(hay) { var m = normLI(hay).match(DOCNUM); return m ? m[1] : ""; }
   var FUZZY = /([A-Za-z0-9]{2})\s?([0-9OoIlSsBbGgZ]{2})[.,]([0-9OoIlSsBbGgZ]{2})\s?[-–—~]\s?([A-Za-z0-9])\s?[-–—~]\s?([0-9OoIlSsBbGgZ]{5,7})/;
   function toDigits(s) { return s.replace(/[OoQ]/g, "0").replace(/[Il]/g, "1").replace(/[Ss]/g, "5").replace(/[Bb]/g, "8").replace(/Z/g, "2").replace(/[Gg]/g, "6"); }
   function toAlpha(s) { return s.replace(/0/g, "O").replace(/1/g, "I").replace(/5/g, "S").replace(/8/g, "B").replace(/6/g, "G").replace(/2/g, "Z").toUpperCase(); }
-  function detectLIFuzzy(hay) { var f = hay.match(FUZZY); if (!f || !/[A-Za-z]/.test(f[1])) return ""; var o = toAlpha(f[1]) + toDigits(f[2]) + "." + toDigits(f[3]) + "-" + toAlpha(f[4]) + "-" + toDigits(f[5]); return DOCNUM.test(o) ? o : ""; }
+  function detectLIFuzzy(hay) { var f = normLI(hay).match(FUZZY); if (!f || !/[A-Za-z]/.test(f[1])) return ""; var o = toAlpha(f[1]) + toDigits(f[2]) + "." + toDigits(f[3]) + "-" + toAlpha(f[4]) + "-" + toDigits(f[5]); return DOCNUM.test(o) ? o : ""; }
   function detectVersion(hay, li) {
+    hay = normText(hay);
     var pats = [];
     if (li) pats.push(new RegExp(reEsc(li) + "\\s*[_/ ]\\s*(?:V|Ver\\.?|Version|Rev\\.?|Revision)?\\s*(\\d{1,3})\\b(?![.\\-\\/]?\\d)", "i"));
     pats.push(/\b(?:Version|Revision|Rev\.?|Stand|Ausgabe)\s*[:.]?\s*(\d{1,3})\b(?![.\-\/]?\d)/i);
@@ -504,7 +534,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   function itemsToLines(items) {
     var rows = {};
     items.forEach(function (it) {
-      var s = it.str; if (!s || !s.trim()) return;
+      var s = normText(it.str); if (!s || !s.trim()) return;
       var y = Math.round((it.transform && it.transform[5]) || 0), h = Math.abs((it.transform && it.transform[3]) || 0), key = Math.round(y / 3);
       if (!rows[key]) rows[key] = { y: y, h: h, parts: [] };
       rows[key].parts.push({ x: (it.transform && it.transform[4]) || 0, s: s, w: it.width || 0 });
@@ -664,7 +694,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
         var pages = Math.min(doc.numPages, 10), text = "", page1Lines = [], allLines = [], i = 1;
         function pg() {
           if (i > pages) return Promise.resolve();
-          return doc.getPage(i).then(function (page) { return page.getTextContent().then(function (tc) { tc.items.forEach(function (it) { text += (it.str || "") + " "; }); var pl = itemsToLines(tc.items); if (i === 1) page1Lines = pl; allLines = allLines.concat(pl); if (i < pages) allLines.push({ text: "\f" }); text += "\n"; i++; return pg(); }); });
+          return doc.getPage(i).then(function (page) { return page.getTextContent().then(function (tc) { tc.items.forEach(function (it) { text += normText(it.str) + " "; }); var pl = itemsToLines(tc.items); if (i === 1) page1Lines = pl; allLines = allLines.concat(pl); if (i < pages) allLines.push({ text: "\f" }); text += "\n"; i++; return pg(); }); });
         }
         return pg().then(function () {
           // A real text layer? use it. Otherwise (no text / a stamp-or-watermark
@@ -785,7 +815,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   var starOnly = false;
   function groupDocs(list) {
     var map = {}, order = [];
-    list.forEach(function (d) { var key = d.li ? "li:" + d.li : "id:" + d.id; if (!map[key]) { map[key] = { key: key, li: d.li, versions: [] }; order.push(key); } map[key].versions.push(d); });
+    list.forEach(function (d) { var key = d.li ? liKey(d.li) : "id:" + d.id; if (!map[key]) { map[key] = { key: key, li: d.li, versions: [] }; order.push(key); } map[key].versions.push(d); });
     order.forEach(function (k) { map[k].versions.sort(function (a, b) { return verNum(b) - verNum(a); }); });
     return order.map(function (k) { return map[k]; });
   }
@@ -938,7 +968,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   // Other LI documents cited in this one's text/reason — shown as chips that
   // jump to that document if it's in the library.
   function findRefs(d) {
-    var hay = (d.reason || "") + "\n" + (d.text || "");
+    var hay = normText((d.reason || "") + "\n" + (d.text || ""));
     var re = /\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/g, m, seen = {}, out = [], self = (d.li || "").toUpperCase();
     while ((m = re.exec(hay))) { var x = m[0].toUpperCase(); if (x === self || seen[x]) continue; seen[x] = 1; out.push(x); }
     return out;
@@ -948,12 +978,12 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     chips.innerHTML = "";
     if (!refs.length) { box.style.display = "none"; return; }
     refs.forEach(function (li) {
-      var have = !!groupsByKey["li:" + li];
+      var have = !!groupsByKey[liKey(li)];
       var el = document.createElement("span");
       el.className = "refchip " + (have ? "have" : "miss");
       el.textContent = li;
       el.title = have ? "Open " + li : li + " — not in your library";
-      if (have) el.addEventListener("click", function () { openRef("li:" + li); });
+      if (have) el.addEventListener("click", function () { openRef(liKey(li)); });
       chips.appendChild(el);
     });
     box.style.display = "block";
@@ -1001,7 +1031,10 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     box.style.display = (grp || models.length) ? "block" : "none";
   }
   $("dVerSel").addEventListener("change", function () { loadVersion(+this.value); });
-  function collectDetail() { return { li: $("dLi").value, ver: $("dVer").value, title: $("dTitleIn").value, reason: $("dReason").value, fgroup: $("dFg").value, date: $("dDate").value, validity: $("dValid").value }; }
+  // Fold/trim the document number as it is saved, so a value pasted out of a
+  // PDF is stored in the same shape the extractor produces (and the record id
+  // derived from it matches on re-import).
+  function collectDetail() { return { li: canonLI($("dLi").value), ver: $("dVer").value, title: $("dTitleIn").value, reason: $("dReason").value, fgroup: $("dFg").value, date: $("dDate").value, validity: $("dValid").value }; }
   function updNewName() { $("dNewName").textContent = rlName(collectDetail()); }
   ["dLi", "dVer", "dTitleIn"].forEach(function (id) { $(id).addEventListener("input", updNewName); });
   ["dLi", "dVer", "dTitleIn", "dReason", "dFg", "dDate", "dValid"].forEach(function (id) { $(id).addEventListener("input", function () { dDirty = true; }); });
@@ -1028,7 +1061,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
       dDirty = false;
       setHash(curDoc.li || ""); // keep the permalink pointing at the new LI
       applyView(); updateStore();
-      var key = curDoc.li ? "li:" + curDoc.li : "id:" + curDoc.id;
+      var key = curDoc.li ? liKey(curDoc.li) : "id:" + curDoc.id;
       curGroup = groupsByKey[key] || curGroup;
       var idx = curGroup.versions.indexOf(curDoc); if (idx < 0) idx = 0;
       var sel = $("dVerSel"); sel.innerHTML = "";
@@ -1450,7 +1483,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
         return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { return page.getTextContent(); }).then(function (tc) {
           if (seq !== vSeq) return out;
           tc.items.forEach(function (it) {
-            var s = it.str; if (!s || !s.trim()) return;
+            var s = normChars(it.str); if (!s || !s.trim()) return;
             var t = pdfjsLib.Util.transform(vp.transform, it.transform);
             var fh = Math.hypot(t[2], t[3]) || 10, wpx = (it.width || 0) * vp.scale;
             // Position words inside the run by measured glyph widths (with the
@@ -1617,11 +1650,11 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   function openFromHash() {
     var h = (location.hash || "").replace(/^#/, ""); if (!h) return;
     try { h = decodeURIComponent(h); } catch (e) {}
-    if (!groupsByKey["li:" + h] || (curGroup && curGroup.key === "li:" + h)) return;
+    if (!groupsByKey[liKey(h)] || (curGroup && curGroup.key === liKey(h))) return;
     // Don't silently discard unsaved edits when a link is pasted mid-edit.
     if (dDirty && !confirm("Discard unsaved changes to this document?")) { setHash(curGroup ? (curGroup.li || "") : ""); return; }
     dDirty = false; navStack = [];
-    openDetail("li:" + h);
+    openDetail(liKey(h));
   }
   // React to a link pasted/opened while the app is already running. Our own
   // URL updates use replaceState, which doesn't fire this — so no loop.
@@ -2151,10 +2184,10 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     } else if (d.type === "li-restore" && d.file) {
       restoreBackupFile(d.file);
     } else if (d.type === "li-open" && d.li) {
-      if (groupsByKey["li:" + d.li]) {
+      if (groupsByKey[liKey(d.li)]) {
         if (dDirty && !confirm("Discard unsaved changes to this document?")) return;
         dDirty = false; navStack = [];
-        openDetail("li:" + d.li);
+        openDetail(liKey(d.li));
       } else {
         resetViewFilters();
         $("search").value = d.li;
