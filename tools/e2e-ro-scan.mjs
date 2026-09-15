@@ -421,7 +421,10 @@ const centred = await page.evaluate(() => {
     row("COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 640, 726, 1200, 18),
     row("INSPECTION WHICH INCLUDES VIDEO", 640, 752, 800, 16),
     row("or articles in the vehicle due to fire, theft,", 81, 780, 560, 17),
-    row("PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 640, 806, 1300, 18),
+    // The engine split "CHARGE" off the end of this row into a fragment of its
+    // own, and returned it first — it sits at the same height, further right.
+    row("CHARGH", 1850, 804, 90, 17),
+    row("PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH -", 640, 806, 1300, 18),
     row("$19.95 TO SERVICE DEPARTMENT", 640, 832, 700, 16),
   ]);
 });
@@ -434,6 +437,8 @@ check(centred[2].text === "COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTIO
   "centred heading: no first word is eaten off either row", centred[2].text);
 check(!centred.some((l) => /hereby authorize|materials\. I agree|or articles/i.test(l.text)),
   "centred heading: the small print beside the table stays out", centred.map((l) => l.text));
+check(centred[3].text === "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH $19.95 TO SERVICE DEPARTMENT",
+  "a word split off the end of a row goes back where it was read, not in front", centred[3].text);
 
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
