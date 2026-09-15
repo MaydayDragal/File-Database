@@ -72,6 +72,67 @@ const FORM_TEXT = [
   "TECH COPY MOBILE SHOP COPY",
 ].join("\n");
 
+// A REAL read of that form, copied verbatim from a 300 dpi scan of the printed
+// RO. This is what OCR actually hands over, and every way it differs from the
+// tidy version above is a defect the parser has to survive: the two columns of
+// the form flattened into each other, "Tag #T7910" read as "Tag #17910", the
+// Year and Model labels lost entirely, "Color:" reduced to a "*", a digit
+// clipped off the phone number, and the "# B"/"# C"/"# D" cells turned to noise.
+const REAL_SCAN = [
+  "RBM",
+  "",
+  "Options: RO # 935943 éN",
+  "es Cust # 510459",
+  "",
+  "Tag #17910 Mercedes-Benz",
+  "",
+  "of ALPHARETTA",
+  "",
+  "345 McFarland Pkwy",
+  "Alpharetta, GA 30004",
+  "",
+  "Service Advisor:",
+  "",
+  "JOHNSON, BRANDON S L Name: : 25",
+  "Jill Blue : MERCEDES BENZ GLC300",
+  "",
+  "TRONo: 935943 Address: 12 CASCADE WAY * WINKM4GB9SF382775",
+  "Tag No: T7910 City-ST-Zip: CANTON, GA 30114 * SILVER",
+  "RO Open Date: 08-31-26 Home Ph:",
+  "Mileage In: 15258 Bus Ph: Prod Date: ppATE!",
+  "Complete by Time: (08-31-26 18:00 Cell Ph: 78 979-7260 Mibanr Exp § Stock No:",
+  "",
+  "wary 01-05-95 hiiGiDiR",
+  "Pay Method: CASH E-mail: jillblue628@gmail.com| HOME Delivery ¢ selinglic {71s",
+  "In Service : 01-01-25",
+  "",
+  "ESTIMATE AND AUTHORIZATION | | INE | OP CODE INSTRUCTIONS AND DESCRIPTIONS",
+  "",
+  "Original Estimate: # A | MPI (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT",
+  "Client Advised of Completion ~~ INSPECTION WHICH INCLUDES VIDEO",
+  "",
+  "ph pn Ya RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER",
+  "",
+  "to be done along with the necessary RECENT SERVICE; CHECK AND ADVISE",
+  "",
+  "materials. I agree that RBM is not",
+  "",
+  "responsible for loss or damage to vehicle",
+  "",
+  "i sat tbc I HE COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -",
+  "",
+  "¥ ie HERRON 4 200 eS0OTAIR Bray CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+  "",
+  "loss due to delays in returning my vehicle",
+  "",
+  "lieing] 0 fadibfaiis Riot, 888 | 0 PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH",
+  "",
+  "roadtesting and/or inspection. An express = 19.95 TO SERVICE DEPARTMENT",
+  "",
+  "repairs of this work order.",
+  "MOBILE SHOP COPY",
+].join("\n");
+
 // The green-screen DISPATCH print-out, with a note stuck under it.
 const DISPATCH_TEXT = [
   "D I S P A T C H",
@@ -217,6 +278,23 @@ check(form.lines[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFT
 check(form.lines[2].text === "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", "dealer RO: a dash at a line break is not treated as a split word", form.lines[2].text);
 check(!/TECH COPY/i.test(form.lines[3].text), "dealer RO: page footers stay out of the lines", form.lines[3].text);
 
+// ---------- Phase A2: the same form as OCR really reads it ----------
+const real = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN);
+check(real.ro === "935943", "real scan: RO number", real.ro);
+check(real.tag === "T7910", "real scan: the tag that looks like a tag wins over the mangled one", real.tag);
+check(real.vin === VIN, "real scan: VIN, with OCR's I-for-1 corrected", real.vin);
+check(real.vehicle === "2025 GLC300", "real scan: vehicle, with the year taken from the VIN when the Year cell is lost", real.vehicle);
+check(real.color === "Silver", "real scan: colour found by name when its label is lost — and not from “Jill Blue”", real.color);
+check(real.mileage === "15258", "real scan: mileage", real.mileage);
+check(real.opened === "08-31-26", "real scan: open date", real.opened);
+check(real.advisor === "Johnson, Brandon S L", "real scan: advisor, cut off the next field on the same row", real.advisor);
+check(real.customer === "Jill Blue", "real scan: customer, taken from the row below its own empty cell", real.customer);
+check(real.phone === "78-979-7260", "real scan: the clipped phone number is shown rather than dropped", real.phone);
+check(real.email === "jillblue628@gmail.com", "real scan: e-mail", real.email);
+check(real.lines.length >= 4, "real scan: the flat text still yields the line descriptions", real.lines.length);
+check(real.lines.some((l) => /CUSTOMER STATES SCREEN CONTINUES TO GLITCH/.test(l.text)), "real scan: the customer's complaint survives", real.lines.map((l) => l.text));
+check(!real.lines.some((l) => /hereby authorize|responsible for loss/i.test(l.text)), "real scan: the legal small print stays out of the lines", real.lines.map((l) => l.text));
+
 const disp = await page.evaluate((t) => window.__ros.parseScan(t), DISPATCH_TEXT);
 check(disp.source === "dispatch", "dispatch: recognised as a dispatch screen", disp.source);
 check(disp.ro === "934687", "dispatch: reads the RO number", disp.ro);
@@ -227,6 +305,38 @@ check(disp.vehicle === "2026 E53E", "dispatch: reads the vehicle", disp.vehicle)
 check(disp.mileage === "1499", "dispatch: reads the mileage", disp.mileage);
 check(disp.lines.map((l) => l.text).join("|") === "MPI-RBM OF AL|CUSTOMER STAT|COMPLIMENTARY|CLIENT DECLIN", "dispatch: reads all four lines without their number columns", disp.lines.map((l) => l.text));
 check(/MBUX Display Goes Blank/.test(disp.note), "dispatch: keeps the note written under the print-out", disp.note);
+
+// ---------- Phase A3: the line table read from where things sat on the page ----------
+// Two columns, as the form really prints: legal small print on the left, the
+// line table on the right, and the engine reading each table row as one line.
+const laid = await page.evaluate(() => {
+  const row = (text, x0, y0, w, h) => ({ text, x0, y0, x1: x0 + w, y1: y0 + h });
+  return window.__ros.layoutLines([
+    row("ESTIMATE AND AUTHORIZATION", 80, 500, 300, 18),
+    row("LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", 668, 529, 1228, 16),
+    row("Original Estimate:", 81, 575, 220, 17),
+    row("#A MPI CC (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 640, 572, 1100, 19),
+    row("INSPECTION WHICH INCLUDES VIDEO", 930, 600, 600, 16),
+    row("I hereby authorize the repair work set forth to be done", 81, 647, 560, 17),
+    row("#B CC RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 640, 644, 1100, 19),
+    row("RECENT SERVICE; CHECK AND ADVISE", 930, 672, 600, 16),
+    row("responsible for loss or damage to vehicle or articles in the", 81, 695, 560, 17),
+    row("#C CV CC COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 640, 716, 1100, 19),
+    row("CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 930, 744, 600, 16),
+    row("control. I agree that RBM is not responsible for any loss due", 81, 741, 560, 17),
+    row("#D CW CC PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 640, 788, 1100, 19),
+    row("$19.95 TO SERVICE DEPARTMENT", 930, 816, 600, 16),
+    row("TECH COPY MOBILE SHOP COPY", 80, 1003, 400, 13),
+  ]);
+});
+check(laid.length === 4, "layout: four lines, one per table row", laid.length);
+check(laid.map((l) => l.op).join("|") === "MPI||CV|CW", "layout: the OP CODE cell comes off the front of each row", laid.map((l) => l.op));
+check(laid[0].text === "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+  "layout: a wrapped description is joined to the row it belongs to", laid[0].text);
+check(laid[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",
+  "layout: the line with no op code keeps its whole description", laid[1].text);
+check(!laid.some((l) => /hereby authorize|responsible for loss|TECH COPY/i.test(l.text)),
+  "layout: the neighbouring column of small print is left out entirely", laid.map((l) => l.text));
 
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
