@@ -133,6 +133,38 @@ const REAL_SCAN = [
   "MOBILE SHOP COPY",
 ].join("\n");
 
+// A second real scan, where the "Name:" label itself did not survive — the name
+// beside it did. Also: the Year cell read as a bare "2", and the VIN row, the
+// mileage and the open date dissolved altogether, so those stay empty.
+const REAL_SCAN_2 = [
+  "REM",
+  "RO # 934230 EN",
+  "Cust # 501550",
+  "Tag # T6885 Mercedes-Benz",
+  "of ALPHARETTA",
+  "345 McFarland Pkwy",
+  "Alpharetta, GA 30004",
+  "Service Advisor:",
+  "COREY,JEFF L",
+  "2",
+  "Model: MERCEDES BENZ S500 4",
+  "SEA DOMINON EXPRESS INC",
+  "JUSTIN LEE",
+  "oR i re jg sl vi esi",
+  "Tag No: T6885 City-ST-Zip: JOHNS CREEK, GA 30022-7125\" in i, WHITE",
+  "RO Open Date: Home Ph: / C 9% ne ee",
+  "Mileage In: Bus Ph: 13",
+  "Stock No:",
+  "SellingDIr: 17114",
+  "Warr Exp :",
+  "Delivery : 01-01-22",
+  "01-01-22",
+  "INSTRUCTIONS AND DESCRIPTIONS",
+  "Cell Ph: 567 455-3843",
+  "E-mail: JUSTINWLEE89@GMAIL.COM | HOME",
+  "In Service :",
+].join("\n");
+
 // The green-screen DISPATCH print-out, with a note stuck under it.
 const DISPATCH_TEXT = [
   "D I S P A T C H",
@@ -294,6 +326,18 @@ check(real.email === "jillblue628@gmail.com", "real scan: e-mail", real.email);
 check(real.lines.length >= 4, "real scan: the flat text still yields the line descriptions", real.lines.length);
 check(real.lines.some((l) => /CUSTOMER STATES SCREEN CONTINUES TO GLITCH/.test(l.text)), "real scan: the customer's complaint survives", real.lines.map((l) => l.text));
 check(!real.lines.some((l) => /hereby authorize|responsible for loss/i.test(l.text)), "real scan: the legal small print stays out of the lines", real.lines.map((l) => l.text));
+
+const real2 = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN_2);
+check(real2.ro === "934230", "second real scan: RO number", real2.ro);
+check(real2.tag === "T6885", "second real scan: tag", real2.tag);
+check(real2.color === "White", "second real scan: colour", real2.color);
+check(real2.advisor === "Corey, Jeff L", "second real scan: advisor", real2.advisor);
+check(real2.customer === "SEA DOMINON EXPRESS INC, JUSTIN LEE",
+  "second real scan: the customer is found from the address block when its own label is lost", real2.customer);
+check(real2.vehicle === "S500 4", "second real scan: the model, with no year to be had", real2.vehicle);
+check(real2.vin === "" && real2.mileage === "" && real2.opened === "",
+  "second real scan: fields the scan destroyed stay empty rather than being guessed",
+  { vin: real2.vin, mileage: real2.mileage, opened: real2.opened });
 
 const disp = await page.evaluate((t) => window.__ros.parseScan(t), DISPATCH_TEXT);
 check(disp.source === "dispatch", "dispatch: recognised as a dispatch screen", disp.source);
