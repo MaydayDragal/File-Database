@@ -310,27 +310,54 @@ check(/MBUX Display Goes Blank/.test(disp.note), "dispatch: keeps the note writt
 // Two columns, as the form really prints: legal small print on the left, the
 // line table on the right, and the engine reading each table row as one line.
 const laid = await page.evaluate(() => {
-  const row = (text, x0, y0, w, h) => ({ text, x0, y0, x1: x0 + w, y1: y0 + h });
+  // Rows carry their words, because that is what the engine returns and what
+  // makes a two-column row cuttable.
+  const row = (text, x0, y0, w, h) => {
+    const parts = text.split(" ");
+    let x = x0;
+    const words = parts.map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8 }; });
+    return { text, x0, y0, x1: x0 + w, y1: y0 + h, words };
+  };
+  // One row holding the legal column, the LINE/OP cells and the description.
+  const merged = (legal, lx, mid, mx, desc, dx, y0, h) => {
+    const words = [];
+    let x = lx;
+    legal.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
+    x = mx;
+    mid.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
+    x = dx;
+    desc.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
+    const text = [legal, mid, desc].filter(Boolean).join(" ");
+    return { text, x0: lx, y0, x1: x, y1: y0 + h, words };
+  };
   return window.__ros.layoutLines([
     row("ESTIMATE AND AUTHORIZATION", 80, 500, 300, 18),
-    row("LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", 668, 529, 1228, 16),
-    row("Original Estimate:", 81, 575, 220, 17),
-    row("#A MPI CC (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 640, 572, 1100, 19),
-    row("INSPECTION WHICH INCLUDES VIDEO", 930, 600, 600, 16),
-    row("I hereby authorize the repair work set forth to be done", 81, 647, 560, 17),
-    row("#B CC RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 640, 644, 1100, 19),
-    row("RECENT SERVICE; CHECK AND ADVISE", 930, 672, 600, 16),
-    row("responsible for loss or damage to vehicle or articles in the", 81, 695, 560, 17),
-    row("#C CV CC COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 640, 716, 1100, 19),
-    row("CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 930, 744, 600, 16),
-    row("control. I agree that RBM is not responsible for any loss due", 81, 741, 560, 17),
-    row("#D CW CC PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 640, 788, 1100, 19),
-    row("$19.95 TO SERVICE DEPARTMENT", 930, 816, 600, 16),
+    // The heading is centred over a wide column: "INSTRUCTIONS" starts at 1483,
+    // far right of where the descriptions actually begin.
+    { text: "LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", x0: 630, y0: 529, x1: 1877, y1: 545, words: [
+      { text: "LINE", x0: 630, x1: 678 }, { text: "OP", x0: 748, x1: 779 }, { text: "CODE", x0: 787, x1: 847 },
+      { text: "INSTRUCTIONS", x0: 1483, x1: 1648 }, { text: "AND", x0: 1656, x1: 1705 }, { text: "DESCRIPTIONS", x0: 1714, x1: 1877 },
+    ] },
+    // Rows the engine merged ACROSS the two columns — the legal small print, the
+    // LINE and OP CODE cells and the description all in one row, which is what
+    // a real scan of this form comes back as.
+    merged("Original Estimate:", 81, "# A | MPI", 602, "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 900, 572, 19),
+    merged("Client Advised of Completion ~~", 81, "", 0, "INSPECTION WHICH INCLUDES VIDEO", 900, 600, 16),
+    row("I hereby authorize the repair work set forth to be done", 81, 624, 560, 17),
+    merged("materials. I agree that RBM is not", 81, "# B", 602, "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 900, 644, 19),
+    merged("responsible for loss or damage to vehicle", 81, "", 0, "RECENT SERVICE; CHECK AND ADVISE", 900, 672, 16),
+    row("or articles in the vehicle due to fire, theft,", 81, 696, 560, 17),
+    merged("i sat tbc I HE", 81, "# C | CV", 602, "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 900, 716, 19),
+    merged("loss due to delays in returning my vehicle", 81, "", 0, "CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 900, 744, 16),
+    row("to me by the time specified. I authorize", 81, 768, 560, 17),
+    merged("lieing] 0 fadibfaiis Riot, 888", 81, "# D | CW", 602, "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 900, 788, 19),
+    merged("roadtesting and/or inspection. An express =", 81, "", 0, "$19.95 TO SERVICE DEPARTMENT", 900, 816, 16),
+    row("mechanic's lien is hereby acknowledged on this vehicle", 81, 840, 560, 17),
     row("TECH COPY MOBILE SHOP COPY", 80, 1003, 400, 13),
   ]);
 });
-check(laid.length === 4, "layout: four lines, one per table row", laid.length);
-check(laid.map((l) => l.op).join("|") === "MPI||CV|CW", "layout: the OP CODE cell comes off the front of each row", laid.map((l) => l.op));
+check(laid.length === 4, "layout: four lines, one per table row, out of rows that merged the columns", laid.length);
+check(laid.map((l) => l.op).join("|") === "MPI||CV|CW", "layout: the op code is read from the cell beside the description", laid.map((l) => l.op));
 check(laid[0].text === "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
   "layout: a wrapped description is joined to the row it belongs to", laid[0].text);
 check(laid[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",

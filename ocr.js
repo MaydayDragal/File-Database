@@ -47,6 +47,7 @@
   var MIN_GOOD = 20;                // confident words that make a rotation a clear winner
   var MIN_CONF = 70;                // ...together with the page confidence
   var READ_CONF = 60;               // ...and the softer bar for "this page was read at all"
+  var MIN_TURN = 10;                // ...and the bar for turning the page at all (see finish())
   var PSM_AUTO = "3";               // automatic page segmentation — for reading
   var PSM_BLOCK = "6";              // one uniform block — for the orientation probe only
 
@@ -179,8 +180,9 @@
    * Work out which way up `src` is, using `worker` (an existing Tesseract
    * worker). Returns the rotation in degrees to apply before reading it.
    * Options: onStatus(message), cancelled() -> bool, angles, probeEdge, band.
-   * Nothing legible at any rotation -> 0, because rotating an unreadable page
-   * helps nobody.
+   * Nothing legible at any rotation -> 0, and so is anything the winner cannot
+   * clearly justify: rotating a page on the strength of one stray word is worse
+   * than leaving it alone (see finish()).
    */
   function bestAngle(worker, src, opts) {
     opts = opts || {};
@@ -215,7 +217,19 @@
       });
     }
     function finish() {
-      var out = best.good > 0 ? best.angle : 0;
+      // Turning the page has to be EARNED, not merely preferred. On a sparse or
+      // poor scan every rotation can score near zero while one of them picks up
+      // a stray word, and "best" would then be noise — enough, under a bare
+      // `good > 0`, to throw away a usable upright read and re-read the page
+      // sideways. Measured, the two cases do not overlap: a rotation the engine
+      // can really read scores 47-126 confident words at 75-90% page
+      // confidence, while a wrong one scores 0-14 at 30-46%. So a rotation is
+      // only taken when it clears both bars; anything less keeps the page as it
+      // came in.
+      var out = 0;
+      if (best.angle !== 0 && best.good >= (opts.minTurn || MIN_TURN) && best.conf >= (opts.minReadConf || READ_CONF)) {
+        out = best.angle;
+      }
       if (opts.onDone) { try { opts.onDone({ angle: out, tried: tried }); } catch (e) {} }
       return Promise.resolve(out);
     }
