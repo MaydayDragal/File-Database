@@ -119,6 +119,24 @@ const upright = await page.evaluate(async () => {
 });
 check(upright.angle === 0 && upright.probes === 1, "an upright page is settled by a single probe", upright);
 
+// A page that reads as almost nothing everywhere must not be turned on the
+// strength of one stray word — doing so throws away a usable upright read.
+const straggler = await page.evaluate(async () => {
+  const m = window.__mk(({ probeIndex }) => (probeIndex === 2 ? { good: 1, conf: 31 } : { good: 0, conf: 12 }));
+  const angle = await OcrOrient.bestAngle(m.worker, window.__src, {});
+  return { angle, probes: m.calls.length };
+});
+check(straggler.angle === 0, "one stray word at a rotation is not enough to turn the page", straggler);
+
+// ...but a rotation the engine can genuinely read still wins, even against a
+// page that read as nothing the way it came in.
+const genuine = await page.evaluate(async () => {
+  const m = window.__mk(({ probeIndex }) => (probeIndex === 3 ? { good: 47, conf: 75 } : { good: 11, conf: 43 }));
+  const angle = await OcrOrient.bestAngle(m.worker, window.__src, {});
+  return { angle };
+});
+check(genuine.angle === 270, "a rotation the engine really reads is still taken", genuine);
+
 const unreadable = await page.evaluate(async () => {
   const m = window.__mk(() => ({ good: 0, conf: 8 }));
   const angle = await OcrOrient.bestAngle(m.worker, window.__src, {});
