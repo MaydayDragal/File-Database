@@ -123,6 +123,7 @@
   .rv-field input{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:13.5px}
   .rv-field input:focus{outline:none;border-color:var(--brand)}
   .rv-field input.found{border-color:color-mix(in srgb,var(--brand) 45%,transparent)}
+  .rv-warn{font-size:12px;color:var(--warn);margin-top:4px}
   .rv-sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin:4px 0 9px;display:flex;align-items:center;gap:8px}
   .rv-sec .grow{flex:1}
   .rv-line{display:grid;grid-template-columns:22px 58px 74px 1fr auto;gap:8px;align-items:start;margin-bottom:8px}
@@ -295,7 +296,7 @@
         <div class="rv-field"><label for="rv-ro">RO number</label><input id="rv-ro" autocomplete="off" spellcheck="false" /></div>
         <div class="rv-field"><label for="rv-tag">Tag</label><input id="rv-tag" autocomplete="off" spellcheck="false" /></div>
         <div class="rv-field wide"><label for="rv-vehicle">Vehicle</label><input id="rv-vehicle" autocomplete="off" /></div>
-        <div class="rv-field wide"><label for="rv-vin">VIN</label><input id="rv-vin" autocomplete="off" spellcheck="false" autocapitalize="characters" /></div>
+        <div class="rv-field wide"><label for="rv-vin">VIN</label><input id="rv-vin" autocomplete="off" spellcheck="false" autocapitalize="characters" /><div class="rv-warn" id="rv-vin-warn" hidden>This VIN doesn't pass its own check digit — the scan probably misread a character. Worth checking against the car.</div></div>
         <div class="rv-field"><label for="rv-color">Color</label><input id="rv-color" autocomplete="off" /></div>
         <div class="rv-field"><label for="rv-mileage">Mileage in</label><input id="rv-mileage" autocomplete="off" spellcheck="false" /></div>
         <div class="rv-field"><label for="rv-opened">Opened</label><input id="rv-opened" autocomplete="off" spellcheck="false" /></div>
@@ -669,6 +670,32 @@
     for (var i = 0; i < v.length; i++) if (!set[v[i]]) { set[v[i]] = 1; n++; }
     return n >= 6;                                   // too few distinct chars => a blank field
   }
+  /*
+   * ISO 3779 puts a check digit at character 9, computed over the whole number.
+   * A misread almost never survives it — of the readings a marginal scan gave
+   * for one real VIN, "W1NKM4GB9SF382775" checks out and "W1NKMAGB9SF382775",
+   * "W1NKM4GB0SF382775" and "W1NKMAGB1SF382775" do not. That makes it the one
+   * way to tell a good reading from a plausible-looking wrong one.
+   *
+   * It is used to PREFER a reading, never to reject the only one there is: a
+   * vehicle built for a market that does not compute the digit would fail it
+   * while being perfectly correct.
+   */
+  var VIN_VALUE = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
+  var VIN_WEIGHT = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  function vinCheckOk(v) {
+    if (!v || v.length !== 17) return false;
+    var sum = 0;
+    for (var i = 0; i < 17; i++) {
+      var c = v.charAt(i);
+      var n = /[0-9]/.test(c) ? +c : VIN_VALUE[c];
+      if (n == null) return false;
+      sum += n * VIN_WEIGHT[i];
+    }
+    var r = sum % 11;
+    return v.charAt(8) === (r === 10 ? "X" : String(r));
+  }
+
   function findVinIn(text) {
     var up = String(text || "").toUpperCase(), SEP = "[ \\t\\u00A0]{0,2}", hits = [];
     function consider(t) {
@@ -687,7 +714,10 @@
     consider(up.replace(runRe, function (run) {
       return (run.match(/\d/g) || []).length < 2 ? run : run.replace(/I/g, "1").replace(/[OQ]/g, "0");
     }));
-    for (var i = 0; i < hits.length; i++) if (hits[i].labelled) return hits[i].vin;
+    var i;
+    for (i = 0; i < hits.length; i++) if (hits[i].labelled && vinCheckOk(hits[i].vin)) return hits[i].vin;
+    for (i = 0; i < hits.length; i++) if (vinCheckOk(hits[i].vin)) return hits[i].vin;
+    for (i = 0; i < hits.length; i++) if (hits[i].labelled) return hits[i].vin;
     return hits.length ? hits[0].vin : "";
   }
 
@@ -1026,7 +1056,7 @@
   // Read one scan into the fields and lines of a repair order. `pages` is the
   // optional per-page layout (rows with their position on the page), which is
   // what makes a two-column form's line table readable.
-  function parseScan(raw, pages) {
+  function parseScan(raw, pages, hints) {
     var text = String(raw || "");
     var lines = text.split(/\r?\n/).map(squash).filter(Boolean);
     var dispatch = /\bD\s?I\s?S\s?P\s?A\s?T\s?C\s?H\b/.test(text.toUpperCase()) ||
@@ -1072,7 +1102,10 @@
     if (!color || color.length > 24) color = colorInHeader(lines);
     out.color = color ? titleCase(color) : "";
 
-    out.vin = findVinIn(text);
+    // A VIN read on its own (see refineVin) beats one picked out of the whole
+    // page: it was read larger and spelled with a VIN's own alphabet.
+    var pageVin = findVinIn(text), hintVin = (hints && hints.vin) || "";
+    out.vin = hintVin && (vinCheckOk(hintVin) || !vinCheckOk(pageVin)) ? hintVin : (pageVin || hintVin);
     if (!out.vin) { var vm = text.match(/\bVIN\s*[:#]?\s*([A-HJ-NPR-Z0-9]{17})\b/i); out.vin = vm ? vm[1].toUpperCase() : ""; }
 
     var year = fullYear(digitsOnly(labelValue(lines, /\bYear\s*/i, function (v) { return /^\D*\d{2,4}\D*$/.test(v); })).slice(0, 4));
@@ -1245,6 +1278,86 @@
     });
   }
 
+  /*
+   * A VIN read again, on its own terms.
+   *
+   * It is the densest thing on the page — 17 characters, no word shape for the
+   * engine to lean on, in the smallest print on the form — so it is the first
+   * thing a tired scan loses. Reading the whole page at once, a washed-out copy
+   * gives "W1NKMAGB1SF382775" for "W1NKM4GB9SF382775" (4 read as A, 9 as 1), and
+   * a worse one gives nothing at all.
+   *
+   * So once the page has been read, the row the VIN sits on is read a second
+   * time by itself: cropped out, enlarged, and with the engine told two things
+   * it cannot work out for itself — that this is a single line, and that a VIN
+   * is spelled without I, O or Q. The result only wins if it actually looks
+   * like a VIN.
+   */
+  var VIN_ALPHABET = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+  function refineVin(worker, src, angle, rows) {
+    var row = null, i;
+    for (i = 0; i < rows.length; i++) if (/\bV\s?I\s?N\b/.test(rows[i].text.toUpperCase())) { row = rows[i]; break; }
+    if (!row) for (i = 0; i < rows.length; i++) if (findVinIn(rows[i].text)) { row = rows[i]; break; }
+    if (!row || row.y1 <= row.y0) return Promise.resolve("");
+
+    var page = OcrOrient.render(src, angle, fullEdge(src), 0);
+    var pad = Math.round((row.y1 - row.y0) * 0.4);
+    var y0 = Math.max(0, row.y0 - pad);
+    var h = Math.min(page.height - y0, (row.y1 - row.y0) + pad * 2);
+    if (h < 4) { page.width = page.height = 0; return Promise.resolve(""); }
+    // Enlarge the strip: the engine reads small type better at a comfortable
+    // size, even though blowing it up adds no detail that was not already there.
+    // At which size is not predictable — on one marginal scan the same strip
+    // read correctly at 2x and 4x and wrongly at 3x — so it is read at each and
+    // the check digit picks the winner.
+    function readAtZoom(zoom) {
+      var band = document.createElement("canvas");
+      band.width = Math.round(page.width * zoom); band.height = Math.round(h * zoom);
+      var ctx = band.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, band.width, band.height);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(page, 0, y0, page.width, h, 0, 0, band.width, band.height);
+      return worker.recognize(band).then(function (r) {
+        band.width = band.height = 0;
+        return findVinIn((r && r.data && r.data.text) || "");
+      }, function () { band.width = band.height = 0; return ""; });
+    }
+    var found = [], zooms = [2, 3, 4], zi = 0;
+    function step() {
+      if (zi >= zooms.length) return Promise.resolve();
+      return readAtZoom(zooms[zi++]).then(function (v) {
+        if (v) { found.push(v); if (vinCheckOk(v)) return; }   // a reading that checks out ends it
+        return step();
+      });
+    }
+    return OcrOrient.prepare(worker, "7")                       // one line of text
+      .then(function () { return worker.setParameters({ tessedit_char_whitelist: VIN_ALPHABET }); })
+      .then(step)
+      .then(function () {
+        page.width = page.height = 0;
+        return restore().then(function () { return pickVin(found); });
+      }, function () {
+        page.width = page.height = 0;
+        return restore().then(function () { return pickVin(found); });
+      });
+
+    function restore() {
+      return Promise.resolve(worker.setParameters({ tessedit_char_whitelist: "" }))
+        .then(function () { return OcrOrient.prepare(worker, OcrOrient.PSM_AUTO); })
+        .catch(function () {});
+    }
+  }
+  // One that checks out, else the reading the most attempts agreed on.
+  function pickVin(found) {
+    var i, counts = {}, best = "", n = 0;
+    for (i = 0; i < found.length; i++) if (vinCheckOk(found[i])) return found[i];
+    for (i = 0; i < found.length; i++) {
+      counts[found[i]] = (counts[found[i]] || 0) + 1;
+      if (counts[found[i]] > n) { n = counts[found[i]]; best = found[i]; }
+    }
+    return best;
+  }
+
   // Read every page. The first page decides which way up the batch is (pages of
   // one RO go through the scanner the same way), and the rest follow it — the
   // probe is the expensive part, so it is paid once.
@@ -1287,8 +1400,12 @@
         });
       }
       return readOne().then(function () {
+        if (cancelled && cancelled()) return "";
+        status("Taking a closer look at the VIN…");
+        return refineVin(worker, sources[0], angle, rows[0] || []).catch(function () { return ""; });
+      }).then(function (vin) {
         try { worker.terminate(); } catch (e) {}
-        return { text: texts.join("\n"), rows: rows };
+        return { text: texts.join("\n"), rows: rows, vin: vin };
       }, function (e) { try { worker.terminate(); } catch (x) {} throw e; });
     });
   }
@@ -1338,7 +1455,7 @@
     scanStep("work");
     scanProgress(0.04, "Opening the scan…");
 
-    var texts = [], pages = [], sources = [], i = 0;
+    var texts = [], pages = [], sources = [], hints = {}, i = 0;
     var status = function (m) { $("#scan-label").textContent = m; };
 
     function gather() {
@@ -1362,13 +1479,14 @@
       return ocrSources(sources, status, function (p) { scanProgress(0.45 + 0.5 * p); }, function () { return scanDropped; })
         .then(function (ocr) {
           (ocr.rows || []).forEach(function (rows) { pages.push(rows); });
+          if (ocr.vin) hints.vin = ocr.vin;
           return texts.concat([ocr.text]).join("\n");
         });
     }).then(function (text) {
       scanProgress(1, "Done.");
       scanning = false;
       if (scanDropped) return;
-      var parsed = parseScan(text, pages);
+      var parsed = parseScan(text, pages, hints);
       if (!parsed.ro && !parsed.vin && !parsed.lines.length) {
         scanError("Nothing on that scan reads like a repair order. Try a sharper, straighter photo of the whole page.");
         return;
@@ -1392,10 +1510,17 @@
       el.classList.toggle("found", !!parsed[f[1]]);
     });
     $("#rv-raw").value = parsed.text || "";
+    refreshVinWarn();
     $("#rv-file-wrap").hidden = !embedded;
     renderReviewLines();
     refreshDupe();
     scanStep("review");
+  }
+  // A VIN carries its own checksum, so a misread can be pointed out rather than
+  // handed over as if it were certain.
+  function refreshVinWarn() {
+    var v = $("#rv-vin").value.trim().toUpperCase().replace(/\s+/g, "");
+    $("#rv-vin-warn").hidden = !(v.length === 17 && !vinCheckOk(v));
   }
   function refreshDupe() {
     var no = $("#rv-ro").value.trim();
@@ -1497,6 +1622,7 @@
     $("#rv-cancel").onclick = closeScan;
     $("#rv-create").onclick = createFromReview;
     $("#rv-ro").addEventListener("input", refreshDupe);
+    $("#rv-vin").addEventListener("input", refreshVinWarn);
     $("#rv-add-line").onclick = function () { if (!review) return; review.lines.push({ text: "", op: "", pick: true }); renderReviewLines(); };
     var sd = $("#scan-drop");
     sd.onclick = function () { $("#scan-input").click(); };
@@ -1548,6 +1674,7 @@
     // Exposed so the scan parser can be exercised on raw text (E2E suite).
     parseScan: parseScan,
     layoutLines: layoutLines,
+    vinCheckOk: vinCheckOk,
     reviewText: function (t) { openScan(); showReview(parseScan(t)); },
     // What the which-way-up probe decided on the last scan {angle, tried}.
     get lastScan() { return lastScan; }

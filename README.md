@@ -134,6 +134,11 @@ once and they are read together (up to four). Reading happens on this device.
   noise — so every row is cut at the column boundary, the descriptions are taken
   on their own, and they are split into lines on the gaps between table rows.
   This holds whether the engine returned the two columns as one row or as two.
+- **The VIN is read twice** — once with the page, then again on its own: the row
+  it sits on is cropped out, enlarged, and read with the engine restricted to a
+  VIN's alphabet. A VIN carries a check digit at character 9, so the two readings
+  can be judged rather than guessed between; if neither passes, the review says
+  so instead of presenting a misread as fact.
 - Fields OCR commonly mangles have a second route: the model year is decoded from
   the VIN when the `Year` cell is lost, the model from the printed make and model,
   the colour from the colour word itself when its label is reduced to a stray line,

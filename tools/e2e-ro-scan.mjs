@@ -310,6 +310,39 @@ check(form.lines[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFT
 check(form.lines[2].text === "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", "dealer RO: a dash at a line break is not treated as a split word", form.lines[2].text);
 check(!/TECH COPY/i.test(form.lines[3].text), "dealer RO: page footers stay out of the lines", form.lines[3].text);
 
+// ---------- Phase A1b: the VIN's own check digit ----------
+// Character 9 is computed over the whole number, so a misread almost never
+// survives it — which is how a good reading is told from a plausible wrong one.
+const vinChecks = await page.evaluate(() => ({
+  real1: window.__ros.vinCheckOk("W1NKM4GB9SF382775"),
+  real2: window.__ros.vinCheckOk("W1K6G6DB5NA078138"),
+  real3: window.__ros.vinCheckOk("4JGFB4GB9SB387878"),
+  misread1: window.__ros.vinCheckOk("W1NKMAGB9SF382775"),   // 4 read as A
+  misread2: window.__ros.vinCheckOk("W1NKM4GB0SF382775"),   // 9 read as 0
+  misread3: window.__ros.vinCheckOk("W1NKMAGB1SF382775"),   // both
+  short: window.__ros.vinCheckOk("W1NKM4GB9SF38277"),
+}));
+check(vinChecks.real1 && vinChecks.real2 && vinChecks.real3, "check digit: real VINs pass", vinChecks);
+check(!vinChecks.misread1 && !vinChecks.misread2 && !vinChecks.misread3,
+  "check digit: the readings a marginal scan gave for one of them all fail", vinChecks);
+check(!vinChecks.short, "check digit: something that isn't 17 characters fails", vinChecks.short);
+
+const vinPick = await page.evaluate(() => window.__ros.parseScan(
+  "Tag No: T7910 VIN: W1NKMAGB9SF382775 Color: SILVER",
+  null,
+  { vin: "W1NKM4GB9SF382775" }
+).vin);
+check(vinPick === "W1NKM4GB9SF382775",
+  "check digit: a close read of the VIN row beats the whole-page read when it checks out", vinPick);
+
+const vinKeep = await page.evaluate(() => window.__ros.parseScan(
+  "Tag No: T7910 VIN: W1NKM4GB9SF382775 Color: SILVER",
+  null,
+  { vin: "W1NKMAGB9SF382775" }
+).vin);
+check(vinKeep === "W1NKM4GB9SF382775",
+  "check digit: ...and loses to it when the page's own reading is the one that checks out", vinKeep);
+
 // ---------- Phase A2: the same form as OCR really reads it ----------
 const real = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN);
 check(real.ro === "935943", "real scan: RO number", real.ro);
