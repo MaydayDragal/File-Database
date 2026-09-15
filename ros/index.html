@@ -766,6 +766,50 @@
     return { text: (tail.match(/[A-Za-z]{2,}/g) || []).length >= 2 ? tail : "", whole: false };
   }
   var LINE_FOOTER = /^(X$|TECH\s*COPY|MOBILE\s*SHOP\s*COPY|CLIENT\s*COPY|ESTIMATE\s*AND\s*AUTH|ORIGINAL\s*ESTIMATE|CLIENT\s*ADVISED|TOTAL\b|SIGNATURE)/i;
+  /*
+   * The op code for a line, out of whatever the engine read in the cells to the
+   * left of its description.
+   *
+   * A wrong op code is worse than none: the box is two characters, and a blank
+   * one is obviously to be filled in while "RIOT" looks like it means something.
+   * On a scanned RO these two cells are often illegible while the description
+   * beside them comes through fine, so this returns nothing rather than the
+   * nearest code-shaped scrap.
+   *
+   * What separates a real cell from a misread is the LINE cell next to it. The
+   * two are printed together, so if the line letter came through, the engine was
+   * reading that part of the row and the token beside it is the op code
+   * ("# C  cv"). If it did not, whatever is there is noise off the neighbouring
+   * column ("ph pn Ya", "i sat tbc I HE") and none of it can be trusted.
+   *
+   * Two things that look like they would help and do not. Case: the engine reads
+   * a printed "CV" as "cv" about as often as not. Confidence: it rated a
+   * correctly read "cw" at 18% on a clean scan, so a confidence bar drops real
+   * op codes. Once the line letter has vouched for the cell, the token beside it
+   * is shown for what it is — a blank box would claim the form had no op code,
+   * which is a worse lie than a shaky reading of one the reviewer can see.
+   */
+  function opCodeFrom(left) {
+    var words = (left || []).filter(function (w) { return /[A-Za-z0-9]/.test(w.text); });
+    if (!words.length || words.length > 2) return "";       // a cell holds a token or two, not prose
+    var marked = false, i, raw;
+    for (i = 0; i < words.length; i++) {
+      raw = words[i].text.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+      if (/^\d?[A-H]$/.test(raw)) marked = true;             // the line letter was read
+    }
+    if (!marked) return "";
+    var sorted = words.slice().sort(function (a, b) { return b.x0 - a.x0; });
+    for (i = 0; i < sorted.length; i++) {
+      var code = sorted[i].text.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+      // Skip the line letter and the pay-type cell. Only "CC" counts as a pay
+      // type: CW and CV are op codes on these ROs (a complimentary wash IS
+      // "CW"), and rejecting them would throw away the code we came for.
+      if (!code || /^\d?[A-H]$/.test(code) || code === "CC") continue;
+      if (OP_CODE.test(code)) return code;
+    }
+    return "";
+  }
+
   // The dealer RO's line table, read from where things sat on the PAGE.
   //
   // Flat OCR text interleaves the columns of a two-column form: the left-hand
@@ -852,20 +896,7 @@
     });
 
     return groups.filter(function (g) { return g.text.length >= 3; }).map(function (g) {
-      // The op code is the last thing printed before the description — so of
-      // whatever lies to the left on that row, take the rightmost token that
-      // reads like a code, never the line letter or the pay type.
-      var line = { text: g.text, op: "" };
-      var left = (g.left || []).slice().sort(function (a, b) { return b.x0 - a.x0; });
-      for (var k = 0; k < left.length; k++) {
-        var code = left[k].text.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
-        // Skip the line letter and the pay-type cell. Only "CC" is treated as a
-        // pay type here: codes like CW and CV are printed in the OP CODE column
-        // on these ROs (a complimentary wash IS "CW"), and rejecting them as pay
-        // types would throw away the op code we came for.
-        if (!code || /^\d?[A-H]$/.test(code) || code === "CC") continue;
-        if (OP_CODE.test(code)) { line.op = code; break; }
-      }
+      var line = { text: g.text, op: opCodeFrom(g.left) };
       // A merged row can still carry the LINE cell at the front of the text.
       line.text = squash(line.text.replace(/^[#*+]\s*\d?\s*[A-H](?![A-Za-z0-9])[\s.):\-|]*/, ""));
       if (!line.op) return splitOp(line);
@@ -1101,7 +1132,7 @@
         return {
           text: squash(parts.map(function (p) { return p.s; }).join(" ")),
           x0: r.x0, x1: r.x1, y0: -r.y, y1: -r.y + r.h,     // flip so y counts down the page
-          words: parts.map(function (p) { return { text: squash(p.s), x0: p.x, x1: p.x }; }).filter(function (w) { return w.text; })
+          words: parts.map(function (p) { return { text: squash(p.s), x0: p.x, x1: p.x, conf: 100 }; }).filter(function (w) { return w.text; })
         };
       }).filter(function (r) { return r.text; });
   }
@@ -1117,7 +1148,7 @@
         // cuttable at the column boundary rather than trusted as a whole.
         words: (ln.words || []).map(function (w) {
           var wb = w.bbox || {};
-          return { text: squash(w.text || ""), x0: wb.x0 || 0, x1: wb.x1 || 0 };
+          return { text: squash(w.text || ""), x0: wb.x0 || 0, x1: wb.x1 || 0, conf: w.confidence == null ? 100 : w.confidence };
         }).filter(function (w) { return w.text; })
       };
     }).filter(function (r) { return r.text; });
