@@ -315,20 +315,18 @@ const laid = await page.evaluate(() => {
   const row = (text, x0, y0, w, h) => {
     const parts = text.split(" ");
     let x = x0;
-    const words = parts.map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8 }; });
+    const words = parts.map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8, conf: 90 }; });
     return { text, x0, y0, x1: x0 + w, y1: y0 + h, words };
   };
   // One row holding the legal column, the LINE/OP cells and the description.
-  const merged = (legal, lx, mid, mx, desc, dx, y0, h) => {
+  const merged = (legal, lx, mid, mx, desc, dx, y0, h, midConf) => {
     const words = [];
-    let x = lx;
-    legal.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
-    x = mx;
-    mid.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
-    x = dx;
-    desc.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11 }); x += t.length * 11 + 8; });
+    const run = (s, from, conf) => { let x = from; s.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11, conf }); x += t.length * 11 + 8; }); return x; };
+    run(legal, lx, 85);
+    run(mid, mx, midConf == null ? 92 : midConf);
+    const end = run(desc, dx, 90);
     const text = [legal, mid, desc].filter(Boolean).join(" ");
-    return { text, x0: lx, y0, x1: x, y1: y0 + h, words };
+    return { text, x0: lx, y0, x1: end, y1: y0 + h, words };
   };
   return window.__ros.layoutLines([
     row("ESTIMATE AND AUTHORIZATION", 80, 500, 300, 18),
@@ -364,6 +362,39 @@ check(laid[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER REC
   "layout: the line with no op code keeps its whole description", laid[1].text);
 check(!laid.some((l) => /hereby authorize|responsible for loss|TECH COPY/i.test(l.text)),
   "layout: the neighbouring column of small print is left out entirely", laid.map((l) => l.text));
+
+// The same table, but with the LINE and OP CODE cells read as the noise a real
+// scan produces — "ph pn Ya", "i sat tbc I HE", "lieing] 0 fadibfaiis Riot, 888".
+// A wrong op code is worse than none, so those must come back empty while the
+// descriptions still arrive intact.
+const noisy = await page.evaluate(() => {
+  const merged = (legal, lx, mid, mx, desc, dx, y0, h, midConf) => {
+    const words = [];
+    const run = (s, from, conf) => { let x = from; s.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11, conf }); x += t.length * 11 + 8; }); return x; };
+    run(legal, lx, 85);
+    run(mid, mx, midConf == null ? 92 : midConf);
+    const end = run(desc, dx, 90);
+    return { text: [legal, mid, desc].filter(Boolean).join(" "), x0: lx, y0, x1: end, y1: y0 + h, words };
+  };
+  return window.__ros.layoutLines([
+    { text: "LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", x0: 630, y0: 529, x1: 1877, y1: 545, words: [
+      { text: "LINE", x0: 630, x1: 678, conf: 95 }, { text: "OP", x0: 748, x1: 779, conf: 95 }, { text: "CODE", x0: 787, x1: 847, conf: 95 },
+      { text: "INSTRUCTIONS", x0: 1483, x1: 1648, conf: 95 }, { text: "AND", x0: 1656, x1: 1705, conf: 95 }, { text: "DESCRIPTIONS", x0: 1714, x1: 1877, conf: 95 },
+    ] },
+    merged("Original Estimate:", 81, "# A MPI", 602, "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 900, 572, 19),
+    merged("Client Advised of Completion", 81, "", 0, "INSPECTION WHICH INCLUDES VIDEO", 900, 600, 16),
+    merged("ph pn", 81, "Ya", 700, "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 900, 644, 19, 46),
+    merged("materials. I agree", 81, "", 0, "RECENT SERVICE; CHECK AND ADVISE", 900, 672, 16),
+    merged("i sat tbc", 81, "I HE", 690, "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 900, 716, 19, 51),
+    merged("loss due to delays", 81, "", 0, "CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 900, 744, 16),
+    merged("lieing] 0", 81, "fadibfaiis Riot, 888", 640, "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 900, 788, 19, 38),
+    merged("roadtesting and/or", 81, "", 0, "$19.95 TO SERVICE DEPARTMENT", 900, 816, 16),
+  ]);
+});
+check(noisy.length === 4, "noisy op cells: the four descriptions still come through", noisy.length);
+check(noisy.map((l) => l.op).join("|") === "MPI|||", "noisy op cells: an unreadable op code is left blank, never guessed", noisy.map((l) => l.op));
+check(/^RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE/.test(noisy[1].text),
+  "noisy op cells: the noise stays out of the description too", noisy[1].text);
 
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
