@@ -139,6 +139,25 @@ once and they are read together (up to four). Reading happens on this device.
   VIN's alphabet. A VIN carries a check digit at character 9, so the two readings
   can be judged rather than guessed between; if neither passes, the review says
   so instead of presenting a misread as fact.
+  When a scan is far enough gone that neither the number nor its own `VIN` label
+  survives the first read, there is no row to go back to, so the likely header
+  rows are tried in turn and only a reading that passes its own check digit is
+  believed.
+- **The faint header cells are read close up.** `Mileage In` and `RO Open Date`
+  are printed into inch-wide boxes in the same tired dot-matrix as the VIN, and a
+  worn copy loses them while keeping the printed label beside them — a whole page
+  reads `Mileage In: Bus Ph: 13`, the label followed by the *next* label. The
+  label's own word boxes say where its cell starts and the next label says where
+  it stops, so that box is cropped out on its own, thresholded against the paper
+  around it rather than against the whole page, stripped of the form's printed
+  rules, despeckled, and read over just the characters that cell can contain.
+  A value found that way is flagged in the review: unlike a VIN it has no check
+  digit, so it is worth a glance against the paper.
+- **A cell stops where its value stops.** When a worn copy loses a small printed
+  label, the value beside it runs into its neighbour's — `RO Open Date:` reads
+  back as `08-31-26 678.979.7260`. The mileage and the open date are taken as the
+  first thing in the cell shaped like what belongs there, not as everything after
+  the label.
 - Fields OCR commonly mangles have a second route: the model year is decoded from
   the VIN when the `Year` cell is lost, the model from the printed make and model,
   the colour from the colour word itself when its label is reduced to a stray line,

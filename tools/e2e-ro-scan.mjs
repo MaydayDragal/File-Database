@@ -343,6 +343,79 @@ const vinKeep = await page.evaluate(() => window.__ros.parseScan(
 check(vinKeep === "W1NKM4GB9SF382775",
   "check digit: ...and loses to it when the page's own reading is the one that checks out", vinKeep);
 
+// ---------- Phase A1c: the small header cells, read again ----------
+// On RO 934230 the whole-page read gave "Mileage In: Bus Ph: 13" — the label,
+// then the NEXT label, with nothing where the number should be. The label's own
+// word boxes are the handle: the cell is what lies between the end of the label
+// and the start of whatever labels the column after it.
+const spans = await page.evaluate(() => {
+  // x0/x1 as the engine reports them for that row, at 300 dpi.
+  const row = (words, y0 = 100, y1 = 118) => ({
+    text: words.map((w) => w[0]).join(" "), x0: words[0][1], x1: words[words.length - 1][2], y0, y1,
+    words: words.map(([text, x0, x1]) => ({ text, x0, x1, conf: 90 })),
+  });
+  const mileage = row([["Mileage", 60, 150], ["In:", 155, 185], ["Bus", 520, 565], ["Ph:", 570, 600], ["13", 610, 635]]);
+  const opened = row([["RO", 60, 85], ["Open", 90, 140], ["Date:", 145, 195], ["Home", 520, 580], ["Ph:", 585, 615]]);
+  const filled = row([["Mileage", 60, 150], ["In:", 155, 185], ["66997", 200, 290], ["Bus", 520, 565], ["Ph:", 570, 600]]);
+  const noCell = row([["Mileage", 60, 150], ["In:", 155, 185], ["Bus", 190, 235], ["Ph:", 240, 270]]);
+  const MI = /\bMileage\s*(?:In)?\s*/i, OD = /\b(?:R\.?\s?O\.?\s*)?Open\s*Date\s*/i;
+  return {
+    mileage: window.__ros.cellSpan(mileage, MI),
+    opened: window.__ros.cellSpan(opened, OD),
+    filled: window.__ros.cellSpan(filled, MI),
+    noCell: window.__ros.cellSpan(noCell, MI),
+    absent: window.__ros.cellSpan(mileage, OD),
+  };
+});
+check(spans.mileage && spans.mileage.x0 === 185 && spans.mileage.x1 === 520,
+  "cell span: the mileage box runs from the end of its label to the start of \"Bus Ph:\"", spans.mileage);
+check(spans.opened && spans.opened.x0 === 195 && spans.opened.x1 === 520,
+  "cell span: the open-date box stops at \"Home Ph:\", not at the colon after it", spans.opened);
+check(spans.filled && spans.filled.x0 === 185 && spans.filled.x1 === 520,
+  "cell span: a cell the page did read spans the same box", spans.filled);
+check(spans.noCell === null,
+  "cell span: a label with the next label hard against it has no cell to read", spans.noCell);
+check(spans.absent === null, "cell span: a label that isn't on the row gives nothing", spans.absent);
+
+const cellHints = await page.evaluate(() => ({
+  fills: window.__ros.parseScan("Mileage In: Bus Ph: 13\nRO Open Date: Home Ph: /", null,
+    { mileage: "66997", opened: "08-12-26" }),
+  keeps: window.__ros.parseScan("Mileage In: 66997 Bus Ph:\nRO Open Date: 08-12-26 Home Ph:", null,
+    { mileage: "13", opened: "01-01-22" }),
+}));
+check(cellHints.fills.mileage === "66997" && cellHints.fills.opened === "08-12-26",
+  "cell re-read: fills the cells the whole-page read left empty", [cellHints.fills.mileage, cellHints.fills.opened]);
+check(cellHints.keeps.mileage === "66997" && cellHints.keeps.opened === "08-12-26",
+  "cell re-read: leaves alone the cells the page did read", [cellHints.keeps.mileage, cellHints.keeps.opened]);
+check(cellHints.fills.refined.join() === "mileage,opened" && cellHints.keeps.refined.length === 0,
+  "cell re-read: the review is told which cells came off the second pass, and only those",
+  [cellHints.fills.refined, cellHints.keeps.refined]);
+
+// A worn copy loses the small printed labels before it loses the values beside
+// them, and then a cell reads as its own value run together with its
+// neighbour's. Verbatim from a 150 dpi washed-out read of the same form.
+const bleed = await page.evaluate(() => window.__ros.parseScan([
+  "RO Open Date: 08-31-26 678.979.7260 Color: SILVER",
+  "Mileage In: 15258 jilblues28@amail com Stock No: SellingDir: 17114",
+].join("\n")));
+check(bleed.mileage === "15258", "column bleed: the mileage stops at the mileage", bleed.mileage);
+check(bleed.opened === "08-31-26", "column bleed: the open date does not take the phone number with it", bleed.opened);
+
+// A VIN the page lost outright leaves no row to go back to, so the likely rows
+// are swept instead — the header half, on rows wide enough to hold a VIN.
+const swept = await page.evaluate(() => {
+  const page1 = { width: 2550, height: 3300 };
+  const row = (text, x0, x1, y0) => ({ text, x0, x1, y0, y1: y0 + 20, words: [] });
+  return window.__ros.sweepRows(page1, [
+    row("oR i re jg sl vi esi", 300, 1400, 600),        // the VIN row, unread
+    row("short", 300, 360, 700),                        // too narrow
+    row("Tag No: T6885 City-ST-Zip: JOHNS CREEK", 300, 1800, 800),
+    row("INSTRUCTIONS AND DESCRIPTIONS", 300, 1900, 2500),  // below the header half
+  ]).map((r) => r.text);
+});
+check(swept.length === 2 && swept[0].startsWith("oR i re"),
+  "VIN sweep: the header rows wide enough to hold a VIN, and only those", swept);
+
 // ---------- Phase A2: the same form as OCR really reads it ----------
 const real = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN);
 check(real.ro === "935943", "real scan: RO number", real.ro);
