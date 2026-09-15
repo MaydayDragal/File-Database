@@ -124,7 +124,8 @@ Detection is heuristic, not a guarantee of recall or validity for every vehicle.
 
 The scan is cancellable and incremental (`vinScan`); Shift-click requests a full
 rescan. OCR uses up to four worker lanes by default, based on available cores,
-with load/recognition timeouts. Files needing unavailable OCR remain eligible for
+with load/recognition timeouts. A page that yields no VIN is checked for which
+way up it is and read again ([ocr.js](ocr.js)); a page that yielded one is not. Files needing unavailable OCR remain eligible for
 retry. `__VIN_OCR_WORKERS` and `__VIN_OCR_*` globals support controlled overrides.
 
 ### Folder sync
@@ -254,8 +255,8 @@ PDFs, up to four pages, all parsed as one document.
 | Stage | Implementation |
 | --- | --- |
 | Read | PDF text layer first (pdf.js from `vault/vendor/`, `isEvalSupported: false`), rebuilt into visual rows by text-item `y`; under 200 letters it is treated as a scan and pages render at scale 2.2 for OCR |
-| Recognize | Tesseract.js 5.1.1 from `cdn.jsdelivr.net`, overridable with `window.__TESS_LIB/_WORK/_CORE/_LANG`; one worker per scan, terminated on success and on failure |
-| Orientation | Each of 0°/90°/270°/180° is recognized at a 1100 px long edge and scored on repair-order keywords, real words, and a valid VIN; 0° scoring ≥ 30 short-circuits. Pages are then read at a 1600–3000 px long edge |
+| Recognize | Tesseract.js 5.1.1 from `cdn.jsdelivr.net`, overridable with `window.__TESS_LIB/_WORK/_CORE/_LANG`; one worker per scan, terminated on success and on failure. Reads go through [ocr.js](ocr.js) in page-segmentation mode 3 at a 2200–3300 px long edge |
+| Orientation | [ocr.js](ocr.js) `readUpright`: page 1 of each scan is probed, later pages follow its answer. A scan is a deliberate action, so it always pays for the probe rather than settling for a first read |
 | Parse | `parseScan(text)` — labelled values run until the next known label on the row, or fall to the row beneath; VIN uses the Vault's MB-WMI rules plus the same I→1 / O→0 OCR repair |
 | Lines | Dealer form: rows opening `# A`, `# B`… in letter order, wrapped continuations joined (a word-final hyphen closes the word, a standalone dash does not), then `<op code> <pay type>` split off the front. DISPATCH: `\d\) <letter> <skill> <status> <description>` with the numeric columns trimmed. Neither matching falls back to any line reading like a complaint |
 | Review | Nothing is written until **Create**; fields, op codes, and line text are editable, lines can be dropped or unticked, and the whole recognized text is shown. A note found under a dispatch print-out is offered unticked |
@@ -269,6 +270,43 @@ recognition keeps working offline after one successful download.
 File workflows require the shell. There is **no RO export/import or
 `platform-backup` handler**. Vault backups contain attached files and collection
 names, but not the separate RO stories/vehicle records.
+
+### Reading a scan (shared by every app)
+
+[ocr.js](ocr.js) is loaded by Vault, LI, Toolbox and Repair Orders (and inlined
+into the standalone LI build) so all four read scans the same way. It exists
+because the engine is wrong twice by default on workshop paperwork, and neither
+failure is reported — both come back as a thin, plausible-looking read.
+
+| Problem | What ocr.js does |
+| --- | --- |
+| Tesseract.js defaults to page-segmentation mode 6, "one uniform block of text", which drops most of a form | `prepare()` sets mode 3 (automatic) once per worker before any read. On a 300 dpi repair order this moves 4 of 16 expected fields to 14 of 16, and the whole vehicle/customer table reappears |
+| A page fed through the scanner sideways is not an error to the engine — it returns a handful of low-confidence words | `bestAngle()` recognizes a band of the page at 0°/90°/270°/180° and counts the words the engine rated ≥ 60% confident. On the same order the right way up scores 47–73 such words and every other rotation 0–14 |
+
+Mechanics that matter:
+
+- The probe runs at a **2200 px long edge**. At 1100 px nothing is legible at any
+  rotation (every angle scored 0–5), so a cheap small probe decides nothing and
+  silently picks 0° — which is how a sideways scan used to read as almost
+  nothing.
+- The probe measures in **mode 6**, not mode 3. Mode 3 partly reads a sideways
+  page, which is what you want when reading and useless for telling which way up
+  it is.
+- It reads a **band** of the inked area, not the page: ~3× cheaper and just as
+  decisive. `inkBox()` finds the marked region on a 240 px thumbnail first,
+  because a band across the middle of a half-empty page is blank paper. A bad
+  ink box only mis-aims the probe — the read itself is never cropped.
+- A rotation that reads well stops the probe, so an upright page costs one band.
+  If no rotation reads at all, 0° is kept rather than turning an unreadable page.
+
+| Caller | Strategy |
+| --- | --- |
+| Repair Orders scan | `readUpright` — always probe (user-initiated, once per job) |
+| Vault VIN scan | `readSmart` with `accept` = a VIN was found; a page that yielded one never pays for the probe |
+| LI import, Toolbox LI rename | `readSmart` with `accept` = a document number was found; later pages reuse page 1's angle |
+| Toolbox Image to Text | `readUpright` — one image at a time, so accuracy over speed |
+
+Every app degrades to a plain read if `ocr.js` is missing from the cache.
 
 ## 8. Backup formats and Extract
 
@@ -376,9 +414,9 @@ menu entries. It cannot capture errors that occur before it is loaded.
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| Platform root | [sw.js](sw.js) | `platform-shell-v16` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
-| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v29` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
-| LI | [li/sw.js](li/sw.js) | `li-db-shell-v2`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
+| Platform root | [sw.js](sw.js) | `platform-shell-v18`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
+| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v30` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
+| LI | [li/sw.js](li/sw.js) | `li-db-shell-v3`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
 | Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v9` | App-shell precache; network-first navigation; cache-first assets |
 
 Workers prune their own cache prefixes; the root also removes old pre-platform
@@ -387,11 +425,12 @@ Tolerant precaching means an install can succeed with an optional asset missing.
 Open required apps/features online and verify offline before relying on them.
 Toolbox/RO/Extract have no independent worker registration for a first standalone visit.
 
-OCR is the optional external runtime dependency in Vault, LI, and Toolbox:
+OCR is the optional external runtime dependency in Vault, LI, Toolbox and
+Repair Orders:
 Tesseract.js 5.1.1, core 5.1.0, and language data from jsDelivr/Project Naptha.
 `__TESS_LIB`, `__TESS_WORK`, `__TESS_CORE`, and `__TESS_LANG` override resource paths;
-they do not themselves package the resources for offline use. LI's worker caches
-OCR hosts, but full offline OCR is not guaranteed across apps. The Inventory
+they do not themselves package the resources for offline use. The LI and platform
+workers cache the OCR hosts, but full offline OCR is not guaranteed across apps. The Inventory
 catalog probe is a same-origin fetch. Clicking Toolbox's EXIF GPS link sends the
 coordinates to OpenStreetMap. There is no application file-upload backend.
 
@@ -421,6 +460,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
 | `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
 | `e2e-portable.mjs` | Build, local-file shell/Vault/Inventory, catalog offer, same-path profile restart; clears generated data |
+| `e2e-ocr-orient.mjs` | ocr.js itself: render geometry, ink box, which rotation is chosen and when probing stops, document mode for reads and block mode for probes, and probing only when the caller's test fails |
 | `e2e-ro-scan.mjs` | Scan parsing of both dealer layouts, text-layer PDF intake, the review step, updating an existing RO, and the orientation probe with a fake OCR engine |
 | `e2e-ros.mjs` | RO stories, persistence, attachments, Vault selection, VIN reconciliation, collection rename |
 | `e2e-shell.mjs` | Tabs, embedding, theme, hashes/legacy navigation, badges, Toolbox save |
@@ -429,6 +469,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-viewer.mjs` | Backup extraction and ZIP validation using Python's independent ZIP reader |
 | `e2e-vin.mjs` | VIN search/grouping/persistence, incremental scan, unavailable OCR |
 | `e2e-vin-datacard.mjs` | VIN/FIN separation and false-positive rejection |
+| `e2e-vin-orient.mjs` | A sideways photo whose VIN only appears once the page is turned, using a scripted engine |
 | `e2e-vin-parallel.mjs` | Worker concurrency using a fake OCR engine |
 | `e2e-vin-recall.mjs` | Space-split VINs, PDF text and mocked OCR fallback |
 | `e2e-vin-skip-video.mjs` | Video exclusion from scanning/detection UI |

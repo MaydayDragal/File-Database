@@ -166,17 +166,27 @@ let failures = 0;
 const check = (c, l, extra) => { console.log((c ? "  ✓ " : "  ✗ ") + l + (c || extra === undefined ? "" : " — got " + JSON.stringify(extra))); if (!c) failures++; };
 const waitFor = async (fn, ms = 15000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(120); } return false; };
 
-// Stub the OCR engine: it returns the RO text only for a canvas that is taller
-// than it is wide, i.e. only once the sideways photo has been turned upright.
+// A scripted OCR engine stands in for the real one (which is a CDN download).
+// It plays a page that was fed through the scanner sideways: the which-way-up
+// probe — which runs in single-block mode, so every recognize() carries the
+// mode in force — only reads well on its third rotation (270°), and the read
+// that follows returns the repair order. ocr.js's own decisions are covered
+// directly in e2e-ocr-orient.mjs; this is the app wired to them.
 await page.addInitScript((roText) => {
   window.__ocrCalls = [];
+  const words = (n, conf) => Array.from({ length: n }, (_, i) => ({ text: "w" + i, confidence: conf }));
   window.Tesseract = {
     createWorker: function () {
+      let psm = null;
       return Promise.resolve({
+        setParameters: function (p) { psm = String(p.tessedit_pageseg_mode); return Promise.resolve(); },
         recognize: function (canvas) {
-          const upright = canvas.height > canvas.width;
-          window.__ocrCalls.push({ w: canvas.width, h: canvas.height, upright: upright });
-          return Promise.resolve({ data: { text: upright ? roText : "mmm wvvv nnnn" } });
+          const probe = psm === "6";
+          const probeIndex = probe ? window.__ocrCalls.filter((c) => c.probe).length + 1 : 0;
+          window.__ocrCalls.push({ psm: psm, probe: probe, probeIndex: probeIndex, w: canvas.width, h: canvas.height });
+          const good = probe ? (probeIndex === 3 ? 60 : 1) : 60;
+          const conf = probe ? (probeIndex === 3 ? 88 : 22) : 90;
+          return Promise.resolve({ data: { text: probe ? "" : roText, confidence: conf, words: words(good, Math.max(60, conf)) } });
         },
         terminate: function () { window.__ocrTerminated = (window.__ocrTerminated || 0) + 1; return Promise.resolve(); },
       });
@@ -277,10 +287,13 @@ await page.click("#scan-btn");
 await page.setInputFiles("#scan-input", pngPath);
 check(await waitFor(async () => (await page.locator("#scan-review:not([hidden])").count()) === 1), "an image is read by the OCR engine");
 const calls = await page.evaluate(() => window.__ocrCalls);
-check(calls.length > 1, "the scan is probed for which way up it is", calls.length);
-check(calls[calls.length - 1].upright, "the page it finally reads is the one turned upright", calls[calls.length - 1]);
+const scan = await page.evaluate(() => window.__ros.lastScan);
+check(calls.some((c) => c.probe), "the scan is probed for which way up it is", calls.map((c) => c.psm));
+check(scan && scan.angle === 270, "the rotation the engine could read is the one used", scan);
+check(calls.filter((c) => c.probe).length === 3, "probing stops as soon as a rotation reads well", calls.filter((c) => c.probe).length);
+check(calls[calls.length - 1].psm === "3", "the page itself is read in document mode, not the engine's one-block default", calls[calls.length - 1]);
 check((await page.evaluate(() => window.__ocrTerminated || 0)) >= 1, "the OCR worker is shut down when the read finishes");
-check((await page.inputValue("#rv-ro")) === "935943", "the OCR'd photo fills the review in too");
+check((await page.inputValue("#rv-ro")) === "935943", "the sideways photo fills the review in as if it had been the right way up");
 await page.keyboard.press("Escape");
 check(await waitFor(async () => (await page.locator("#scan-modal.show").count()) === 0), "Escape closes the scan window");
 

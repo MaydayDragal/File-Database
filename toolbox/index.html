@@ -2668,6 +2668,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (state.outUrl) { URL.revokeObjectURL(state.outUrl); state.outUrl = null; }
   }
 
+  // Decode the picked file so it can be turned and measured before reading.
+  function bitmapOfFile(file) {
+    var viaImg = function () {
+      return new Promise(function (res, rej) {
+        var url = URL.createObjectURL(file), im = new Image();
+        im.onload = function () { URL.revokeObjectURL(url); res(im); };
+        im.onerror = function () { URL.revokeObjectURL(url); rej(new Error("Couldn't open that image.")); };
+        im.src = url;
+      });
+    };
+    if (!window.createImageBitmap) return viaImg();
+    return createImageBitmap(file).catch(viaImg);
+  }
+
   // Lazily inject the Tesseract.js library on first use.
   var libPromise = null;
   function loadTesseract() {
@@ -2705,9 +2719,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }).then(function (w) {
       worker = w;
       setProgress(0.35, "Recognizing text…");
-      return worker.recognize(state.file);
+      // Straighten first. The engine reads only horizontal text but never says
+      // so — a photo taken sideways comes back as a few scraps of nonsense —
+      // and it defaults to treating the image as one block, which loses most of
+      // a form. ../ocr.js settles both; without it, read the image as-is.
+      if (!window.OcrOrient) return worker.recognize(state.file).then(function (r) { return { text: (r && r.data && r.data.text) || "" }; });
+      return bitmapOfFile(state.file).then(function (src) {
+        return OcrOrient.readUpright(worker, src, {
+          onStatus: function (m) { setProgress(0.4, m); }
+        });
+      }, function () { return worker.recognize(state.file).then(function (r) { return { text: (r && r.data && r.data.text) || "" }; }); });
     }).then(function (res) {
-      var text = (res && res.data && res.data.text) ? res.data.text.replace(/\n{3,}/g, "\n\n").trim() : "";
+      var text = (res && res.text) ? res.text.replace(/\n{3,}/g, "\n\n").trim() : "";
       showResult(text);
       if (worker) worker.terminate();
       hideProgress();
@@ -4200,7 +4223,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function ocrPdf(doc, onStatus) {
     return loadTess().then(function (Tesseract) {
       return Tesseract.createWorker("eng", 1, { workerPath: T_WORK, corePath: T_CORE, langPath: T_LANG }).then(function (worker) {
-        var pages = Math.min(doc.numPages, 2), text = "", items = [], i = 1;
+        var pages = Math.min(doc.numPages, 2), text = "", items = [], i = 1, angle = 0;
         function step() {
           if (i > pages) return worker.terminate().then(function () { return { text: text, lines: items }; });
           return doc.getPage(i).then(function (page) {
@@ -4209,9 +4232,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
             return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
               if (onStatus) onStatus("Running OCR on page " + i + "…");
-              return worker.recognize(c).then(function (r) {
-                text += (r.data.text || "") + "\n";
-                (r.data.lines || []).forEach(function (ln) { var s = (ln.text || "").replace(/\s+/g, " ").trim(); if (s) items.push({ text: s, h: ln.bbox ? (ln.bbox.y1 - ln.bbox.y0) : 0, y: ln.bbox ? ln.bbox.y0 : 0 }); });
+              // See ../ocr.js: document mode instead of the engine's one-block
+              // default, and a which-way-up check when page 1 yields no
+              // document number (a sideways scan otherwise reads as noise).
+              var orient = window.OcrOrient;
+              var opts = orient && { readEdge: function (s) { return Math.max(s.width, s.height); } };
+              var read = !orient
+                ? worker.recognize(c).then(function (r) { return { text: (r.data && r.data.text) || "", data: r.data, angle: 0 }; })
+                : i === 1
+                  ? orient.readSmart(worker, c, Object.assign({ accept: function (t) { return !!(detectLI(t) || detectLIFuzzy(t)); } }, opts))
+                  : orient.readAt(worker, c, angle, opts);
+              return read.then(function (r) {
+                if (i === 1) angle = r.angle || 0;
+                text += (r.text || "") + "\n";
+                ((r.data && r.data.lines) || []).forEach(function (ln) { var s = (ln.text || "").replace(/\s+/g, " ").trim(); if (s) items.push({ text: s, h: ln.bbox ? (ln.bbox.y1 - ln.bbox.y0) : 0, y: ln.bbox ? ln.bbox.y0 : 0 }); });
+                c.width = c.height = 0;
                 i++; return step();
               });
             });
@@ -4434,6 +4469,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </script>
 
 <script src="../debug.js"></script>
+<script src="../ocr.js"></script>
 <script src="../bridge.js"></script>
 <script>
 /* ===== File Database platform integration ===== */

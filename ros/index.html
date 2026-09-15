@@ -321,6 +321,7 @@
 
 <div id="toast"></div>
 
+<script src="../ocr.js"></script>
 <script>
 (function () {
   "use strict";
@@ -873,22 +874,9 @@
     return createImageBitmap(file).catch(viaImg);
   }
   function srcSize(src) { return { w: src.width || src.naturalWidth || 1, h: src.height || src.naturalHeight || 1 }; }
-  // Draw a source turned by `angle`, scaled so its long edge is `longEdge`.
-  function rotated(src, angle, longEdge) {
-    var sz = srcSize(src), scale = longEdge / Math.max(sz.w, sz.h);
-    var w = Math.max(1, Math.round(sz.w * scale)), h = Math.max(1, Math.round(sz.h * scale));
-    var swap = angle === 90 || angle === 270;
-    var c = document.createElement("canvas");
-    c.width = swap ? h : w; c.height = swap ? w : h;
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);   // scans are opaque paper
-    ctx.translate(c.width / 2, c.height / 2);
-    ctx.rotate(angle * Math.PI / 180);
-    ctx.drawImage(src, -w / 2, -h / 2, w, h);
-    return c;
-  }
-  // Small scans are worth enlarging for OCR; huge ones only cost time.
-  function fullEdge(src) { var sz = srcSize(src); return Math.max(1600, Math.min(3000, Math.max(sz.w, sz.h))); }
+  // A letter page needs ~200 DPI before small print is legible, so nothing is
+  // ever read below a 2200px long edge; past 3300 it is only cost.
+  function fullEdge(src) { var sz = srcSize(src); return Math.max(2200, Math.min(3300, Math.max(sz.w, sz.h))); }
 
   // Rebuild visual rows from a PDF's text layer — a form only parses if the
   // label and the value it belongs to stay on the same line.
@@ -944,32 +932,9 @@
     });
   }
 
-  // How much a page of OCR output reads like an actual repair order — used to
-  // work out which way up the scan was fed through.
-  var ORIENT_HINTS = [/\bR\.?O\.?\b/, /\bVIN\b/, /MILEAGE/, /ADVISOR/, /CUSTOMER/, /INSTRUCTION/, /DISPATCH/, /OP\s*CODE/, /\bTAG\b/, /\bMODEL\b/, /ESTIMATE/, /\bTECH\b/, /WARRANT/, /SERVICE/];
-  function orientScore(text) {
-    if (!text) return 0;
-    var up = text.toUpperCase(), score = 0;
-    ORIENT_HINTS.forEach(function (re) { if (re.test(up)) score += 6; });
-    score += Math.min(40, (up.match(/\b[A-Z]{3,}\b/g) || []).length);
-    if (findVinIn(up)) score += 15;
-    return score;
-  }
-  function detectAngle(worker, src, status) {
-    var angles = [0, 90, 270, 180], best = { score: -1, angle: 0 }, i = 0;
-    function step() {
-      if (i >= angles.length) return Promise.resolve(best.angle);
-      var a = angles[i++];
-      status(i === 1 ? "Checking which way up the scan is…" : "Trying " + a + "°…");
-      return worker.recognize(rotated(src, a, QUICK_EDGE)).then(function (r) {
-        var sc = orientScore((r && r.data && r.data.text) || "");
-        if (sc > best.score) best = { score: sc, angle: a };
-        if (a === 0 && sc >= GOOD_SCORE) return 0;   // already upright — don't pay for the rest
-        return step();
-      });
-    }
-    return step();
-  }
+  // Read every page. The first page decides which way up the batch is (pages of
+  // one RO go through the scanner the same way), and the rest follow it — the
+  // probe is the expensive part, so it is paid once.
   function ocrSources(sources, status, progress, cancelled) {
     if (!sources.length) return Promise.resolve("");
     return loadTess().then(function (Tesseract) {
@@ -978,18 +943,35 @@
         logger: function (m) { if (m && m.status === "recognizing text" && progress) progress(m.progress || 0); }
       });
     }).then(function (worker) {
-      var texts = [];
-      return detectAngle(worker, sources[0], status).then(function (angle) {
-        var i = 0;
-        function step() {
-          if (i >= sources.length || (cancelled && cancelled())) return Promise.resolve();
-          status("Reading page " + (i + 1) + " of " + sources.length + "…");
-          return worker.recognize(rotated(sources[i], angle, fullEdge(sources[i]))).then(function (r) {
-            texts.push((r && r.data && r.data.text) || ""); i++; return step();
-          });
-        }
-        return step();
-      }).then(function () {
+      var texts = [], angle = 0, i = 0;
+      function readOne() {
+        if (i >= sources.length || (cancelled && cancelled())) return Promise.resolve();
+        var src = sources[i], n = i + 1;
+        var label = sources.length > 1 ? " (page " + n + " of " + sources.length + ")" : "";
+        var opts = {
+          readEdge: fullEdge,
+          onStatus: function (m) { status(m.replace(/…$/, "") + label + "…"); },
+          cancelled: cancelled,
+          onDone: function (d) { lastScan = d; }
+        };
+        // Page 1 works out which way up the batch is; the rest follow it.
+        // Scanning an RO is a deliberate, once-per-job action, so it always
+        // pays for the probe rather than settling for whatever a first read
+        // gives: an upright page costs one extra band read (the probe stops as
+        // soon as a rotation reads well), a sideways one two or three.
+        var orient = window.OcrOrient;
+        var p = !orient
+          ? (status("Reading the page" + label + "…"),
+             worker.recognize(src).then(function (r) { return { text: (r && r.data && r.data.text) || "", angle: 0 }; }))
+          : i === 0 ? orient.readUpright(worker, src, opts)
+            : orient.readAt(worker, src, angle, opts);
+        return p.then(function (res) {
+          if (i === 0) angle = res.angle;
+          texts.push(res.text); i++;
+          return readOne();
+        });
+      }
+      return readOne().then(function () {
         try { worker.terminate(); } catch (e) {}
         return texts.join("\n");
       }, function (e) { try { worker.terminate(); } catch (x) {} throw e; });
@@ -997,7 +979,7 @@
   }
 
   // ---------- the scan flow ----------
-  var scanFiles = [], review = null, scanning = false, scanDropped = false;
+  var scanFiles = [], review = null, scanning = false, scanDropped = false, lastScan = null;
   var RV = [["#rv-ro", "ro"], ["#rv-tag", "tag"], ["#rv-vehicle", "vehicle"], ["#rv-vin", "vin"], ["#rv-color", "color"],
     ["#rv-mileage", "mileage"], ["#rv-opened", "opened"], ["#rv-advisor", "advisor"], ["#rv-customer", "customer"],
     ["#rv-phone", "phone"], ["#rv-email", "email"]];
@@ -1246,7 +1228,9 @@
     refreshFiles: refreshFiles,
     // Exposed so the scan parser can be exercised on raw text (E2E suite).
     parseScan: parseScan,
-    reviewText: function (t) { openScan(); showReview(parseScan(t)); }
+    reviewText: function (t) { openScan(); showReview(parseScan(t)); },
+    // What the which-way-up probe decided on the last scan {angle, tried}.
+    get lastScan() { return lastScan; }
   };
 })();
 </script>
