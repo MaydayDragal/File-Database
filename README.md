@@ -16,13 +16,14 @@ contracts, service workers, and test coverage.
 | LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | [li/index.html](li/index.html) |
 | Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | [inventory/index.html](inventory/index.html) |
 | Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | [toolbox/index.html](toolbox/index.html) |
-| Repair Orders | Keep an RO number, vehicle, VIN, and multiple story lines; associate files stored in the Vault | [ros/index.html](ros/index.html) |
+| Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, and associate files stored in the Vault | [ros/index.html](ros/index.html) |
 | Extract | Open `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | [viewer.html](viewer.html) |
 
 The shell loads each app on first use and keeps it open when you switch tabs.
 Vault, LI Documents, and Tool Inventory have their own PWA manifests and service
 workers. Toolbox, Repair Orders, and Extract use the platform's service worker.
-Repair Order notes work standalone; its file workflows require the platform shell.
+Repair Order notes and RO scanning work standalone; its file workflows require the
+platform shell.
 
 ## Getting started
 
@@ -105,7 +106,35 @@ many VINs, including North American formats, do not provide this value.
 ### Repair Orders
 
 Create an RO, enter its vehicle/VIN, and write separate **Line A**, **Line B**, and
-subsequent stories. Edits save automatically after a short delay.
+subsequent stories. Each line also has a short **OP** box for its operation code.
+A second card holds the tag, mileage in, colour, open date, customer, service
+advisor, phone, and e-mail. Edits save automatically after a short delay.
+
+#### Scan a paper RO
+
+**📷** in the Repair Orders sidebar reads a printed repair order and fills a new one
+in. Drop in a photo or scan (JPG/PNG) or a PDF; select every page of the same RO at
+once and they are read together (up to four). Reading happens on this device.
+
+- A PDF that carries its own text layer is read directly. Anything else — a photo,
+  a scanned PDF — is recognized with Tesseract.js, downloaded from a CDN on first
+  use and then cached by the platform service worker for offline use.
+- A page fed in sideways or upside-down is straightened first: the scanner reads a
+  small copy at each rotation and keeps whichever one reads like a repair order.
+- Both dealer layouts are understood — the printed RO form (`RO No`, `Tag No`,
+  `VIN`, `Year`/`Model`, and the `# A`/`# B` line table with its op codes) and the
+  green-screen **DISPATCH** print-out (`TAG:`, `RO:`, `VEH:`, and its numbered line
+  rows). Text written under a dispatch print-out is offered as an extra line.
+- Nothing is created until you say so: the fields and lines that were read are
+  shown for review first, with every line individually editable, droppable, or
+  excluded, and the full recognized text underneath in case something was missed.
+- Scanning an RO number that already exists offers to **update** it instead: blank
+  fields are filled in and genuinely new lines are appended; anything already typed
+  is left alone.
+- Inside the platform shell, the scan itself is filed into the Vault under the RO.
+
+Recognition quality decides how much comes across. Check the review step before
+creating — a poor photo produces poor fields, and handwriting is rarely read well.
 
 - **Add files** uploads through the shell while keeping the RO tab open. The
   shell's normal filename routing still applies: LI-named PDFs go to LI Documents,
@@ -225,9 +254,10 @@ USB drive and use **Start File Database.bat** (Windows) or
 Edge or Chrome and use a separate profile in the package's `data/` folder, with
 `--allow-file-access-from-files` for the local app pages. No local server is started.
 
-**Current packaging limitation:** the builder includes the shell, Vault, LI,
-Inventory, Toolbox, and Extract, but omits `ros/`. The Repair Orders tab is still
-visible and cannot load in an unmodified portable build.
+The builder includes the shell, Vault, LI, Inventory, Toolbox, Repair Orders, and
+Extract. A portable build has no network, so the RO scanner reads PDFs that carry
+their own text layer but cannot download the recognition engine for photos unless
+the browser profile already cached it.
 
 Keep `app/` and `data/` together, close the app before ejecting the drive, and keep
 exports separate from the browser profile. Moving the profile between machines,
