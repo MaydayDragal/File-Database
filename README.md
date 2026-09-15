@@ -128,6 +128,15 @@ once and they are read together (up to four). Reading happens on this device.
   `VIN`, `Year`/`Model`, and the `# A`/`# B` line table with its op codes) and the
   green-screen **DISPATCH** print-out (`TAG:`, `RO:`, `VEH:`, and its numbered line
   rows). Text written under a dispatch print-out is offered as an extra line.
+- The line table is read from **where things sat on the page**, not from the flat
+  text. On a two-column form the flattened text interleaves the legal small print
+  with the line descriptions, and the `# B`/`# C` cells often come back as noise —
+  so the column of descriptions is taken on its own and cut into lines on the gaps
+  between table rows.
+- Fields OCR commonly mangles have a second route: the model year is decoded from
+  the VIN when the `Year` cell is lost, the model from the printed make and model,
+  the colour from the colour word itself when its label is reduced to a stray line,
+  and the tag from whichever of its two printings actually looks like a tag.
 - Nothing is created until you say so: the fields and lines that were read are
   shown for review first, with every line individually editable, droppable, or
   excluded, and the full recognized text underneath in case something was missed.
