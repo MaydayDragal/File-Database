@@ -1527,14 +1527,29 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     }
     return step();
   }
-  // Words hyphenated across a line break ("equip-" / "ment.") reflow into one
-  // word when the other version wraps differently — merge them into a single
-  // comparison token that highlights both fragments if it really changed.
+  // Words broken across a line break reflow into one word when the other
+  // version wraps differently — merge the fragments into a single comparison
+  // token that highlights both halves if it really changed.
+  //
+  // Two shapes of break occur. A hyphen ("equip-" / "ment."), and — in
+  // XENTRY's newer exports — a break straight after a typographic apostrophe
+  // ("…extend the vehicle’" / "s warranty in any way."). The second used to
+  // leave "vehicle’" and "s" as separate tokens against the other version's
+  // whole "vehicle’s", reporting a deletion and an insertion of text nobody
+  // touched. Rejoin it only when what follows is an English possessive or
+  // contraction suffix, so a line that genuinely ends on a closing quote is
+  // left alone.
+  var WRAP_HYPHEN = /[-‐‑­]$/;
+  var WRAP_APOS = /['’ʼ′]$/;
+  var APOS_SUFFIX = /^(?:s|t|d|m|ll|re|ve)\b/i;
+  function wrapsInto(txt, next) {
+    return WRAP_HYPHEN.test(txt) || (WRAP_APOS.test(txt) && APOS_SUFFIX.test(next.w));
+  }
   function mergeHyphens(list) {
     var toks = [];
     for (var i = 0; i < list.length; i++) {
       var txt = list[i].w, rs = [list[i]];
-      while (/[-‐‑­]$/.test(txt) && i + 1 < list.length && (list[i].pg !== list[i + 1].pg || list[i].lk !== list[i + 1].lk)) {
+      while (i + 1 < list.length && (list[i].pg !== list[i + 1].pg || list[i].lk !== list[i + 1].lk) && wrapsInto(txt, list[i + 1])) {
         i++; txt += list[i].w; rs.push(list[i]);
       }
       toks.push({ w: txt, rs: rs });
@@ -1553,14 +1568,30 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   // numbers, print dates) reflow across page breaks between versions and would
   // show as false differences — tag each word with its line signature (digits
   // normalized) and collect the repeating ones so they can sit out the diff.
+  // "09-09-2026 22:30:49", "9/8/26 10:14 PM" — a line made only of a date
+  // and/or a clock time, with nothing else on it.
+  function isStampLine(txt) {
+    var rest = String(txt)
+      .replace(/\d{1,4}[-.\/]\d{1,2}[-.\/]\d{1,4}/g, "")
+      .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, "")
+      .replace(/\b[AP]\.?M\.?\b/gi, "")
+      .replace(/[\s,]+/g, "");
+    return rest === "" && /\d/.test(txt);
+  }
   function furnSigs(list) {
     var lines = {};
     list.forEach(function (w) { var k = w.pg + "|" + w.lk; (lines[k] = lines[k] || []).push(w); });
     var pages = {};
     Object.keys(lines).forEach(function (k) {
       var ws = lines[k].sort(function (a, b) { return a.x - b.x; });
-      var sig = ws.map(function (w) { return w.w; }).join(" ").toLowerCase().replace(/\d+/g, "#");
-      if (sig.replace(/[^a-z]/g, "").length < 4) sig = "";
+      var raw = ws.map(function (w) { return w.w; }).join(" ");
+      var sig = raw.toLowerCase().replace(/\d+/g, "#");
+      // A signature needs some letters to be worth trusting — except for the
+      // print stamp, a footer line that is nothing but a date and/or time and
+      // so has no letters at all. Without this it never qualified as
+      // furniture, and since two versions are exported at different moments it
+      // reported a change on every page of every comparison.
+      if (sig.replace(/[^a-z]/g, "").length < 4 && !isStampLine(raw)) sig = "";
       ws.forEach(function (w) { w.sig = sig; });
       var band = Math.round(ws[0].ry * 40);
       ws.forEach(function (w) { w.band = band; });
