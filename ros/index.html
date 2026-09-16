@@ -300,6 +300,7 @@
         <div class="rv-field"><label for="rv-color">Color</label><input id="rv-color" autocomplete="off" /></div>
         <div class="rv-field"><label for="rv-mileage">Mileage in</label><input id="rv-mileage" autocomplete="off" spellcheck="false" /></div>
         <div class="rv-field"><label for="rv-opened">Opened</label><input id="rv-opened" autocomplete="off" spellcheck="false" /></div>
+        <div class="rv-warn rv-field wide" id="rv-cell-warn" hidden></div>
         <div class="rv-field"><label for="rv-advisor">Service advisor</label><input id="rv-advisor" autocomplete="off" /></div>
         <div class="rv-field"><label for="rv-customer">Customer</label><input id="rv-customer" autocomplete="off" /></div>
         <div class="rv-field"><label for="rv-phone">Phone</label><input id="rv-phone" autocomplete="off" spellcheck="false" /></div>
@@ -778,6 +779,18 @@
     return ok ? "" : (all[0] || "");
   }
 
+  // A degraded scan loses the small printed labels ("Cell Ph:", "E-mail:")
+  // before it loses the values beside them, and then a cell reads as its own
+  // value followed by its neighbour's — "08-31-26 678.979.7260". So these two
+  // cells are not read as "whatever came after the label" but as the first
+  // thing in there shaped like what belongs in them.
+  function mileageOf(v) { var m = String(v || "").match(/\d[\d,]{1,8}/); return m ? digitsOnly(m[0]).slice(0, 7) : ""; }
+  function dateOf(v) {
+    var s = squash(String(v || ""));
+    var m = s.match(/\d{1,4}\s?[\/.\-]\s?\d{1,2}\s?[\/.\-]\s?\d{1,4}/) || s.match(/\d{1,2}\s?[A-Za-z]{3}\s?\d{2,4}/);
+    return m ? m[0].replace(/\s/g, "") : "";
+  }
+
   function stripMake(v) {
     return squash(String(v || "").replace(/\bMERCEDES[\s-]*BENZ\b/i, "").replace(/\bMERCEDES\b/i, "").replace(/[^A-Za-z0-9 \-]/g, " "));
   }
@@ -1064,6 +1077,10 @@
     var out = {
       ro: "", tag: "", vehicle: "", vin: "", color: "", mileage: "", opened: "",
       advisor: "", customer: "", phone: "", email: "", lines: [], note: "",
+      // Which fields the whole-page read missed and a second, closer look
+      // recovered — the review flags them, because they are the readings with
+      // the least behind them.
+      refined: [],
       source: dispatch ? "dispatch" : "ro", text: text
     };
 
@@ -1081,10 +1098,16 @@
       .filter(function (v) { return /^[A-Z]{0,2}\d{2,6}[A-Z]?$/.test(v); });
     out.tag = tagAll.filter(function (v) { return /^[A-Z]{1,2}\d{3,6}$/.test(v); })[0] || tagAll[0] || "";
 
-    out.mileage = digitsOnly(labelValue(lines, /\bMileage\s*(?:In)?\s*/i)).slice(0, 7);
+    var hasMileage = function (v) { return !!mileageOf(v); };
+    out.mileage = mileageOf(labelValue(lines, /\bMileage\s*(?:In)?\s*/i, hasMileage));
     if (!out.mileage) { var mi = text.match(/\bMI\s*[:#]\s*([\d,]+)/i); out.mileage = mi ? digitsOnly(mi[1]).slice(0, 7) : ""; }
+    // Read a second time out of its own cell (see refineCells), for the scans
+    // where the whole-page read came back with the label and nothing beside it.
+    if (!out.mileage && hints && hints.mileage) { out.mileage = mileageOf(hints.mileage); if (out.mileage) out.refined.push("mileage"); }
 
-    out.opened = squash(labelValue(lines, /\b(?:R\.?\s?O\.?\s*)?Open\s*Date\s*/i).replace(/[^\dA-Za-z\/.\- ]/g, "")).slice(0, 24);
+    var hasDate = function (v) { return !!dateOf(v); };
+    out.opened = dateOf(labelValue(lines, /\b(?:R\.?\s?O\.?\s*)?Open\s*Date\s*/i, hasDate));
+    if (!out.opened && hints && hints.opened) { out.opened = dateOf(hints.opened); if (out.opened) out.refined.push("opened"); }
     var isName = function (v) { return !!cleanName(cutAtColumn(v)); };
     out.advisor = cleanName(cutAtColumn(labelValue(lines, /\bService\s*Advisor\s*/i, isName)));
     if (!out.advisor) { var sa = text.match(/\bSA\s*[:#]\s*(\d{2,6})\b/i); out.advisor = sa ? sa[1] : ""; }
@@ -1298,58 +1321,239 @@
    * like a VIN.
    */
   var VIN_ALPHABET = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
-  function refineVin(worker, src, angle, rows) {
-    var row = null, i;
-    for (i = 0; i < rows.length; i++) if (/\bV\s?I\s?N\b/.test(rows[i].text.toUpperCase())) { row = rows[i]; break; }
-    if (!row) for (i = 0; i < rows.length; i++) if (findVinIn(rows[i].text)) { row = rows[i]; break; }
-    if (!row || row.y1 <= row.y0) return Promise.resolve("");
 
-    var page = OcrOrient.render(src, angle, fullEdge(src), 0);
-    var pad = Math.round((row.y1 - row.y0) * 0.4);
-    var y0 = Math.max(0, row.y0 - pad);
-    var h = Math.min(page.height - y0, (row.y1 - row.y0) + pad * 2);
-    if (h < 4) { page.width = page.height = 0; return Promise.resolve(""); }
-    // Enlarge the strip: the engine reads small type better at a comfortable
-    // size, even though blowing it up adds no detail that was not already there.
-    // At which size is not predictable — on one marginal scan the same strip
-    // read correctly at 2x and 4x and wrongly at 3x — so it is read at each and
-    // the check digit picks the winner.
-    function readAtZoom(zoom) {
-      var band = document.createElement("canvas");
-      band.width = Math.round(page.width * zoom); band.height = Math.round(h * zoom);
-      var ctx = band.getContext("2d");
-      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, band.width, band.height);
-      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(page, 0, y0, page.width, h, 0, 0, band.width, band.height);
-      return worker.recognize(band).then(function (r) {
-        band.width = band.height = 0;
-        return findVinIn((r && r.data && r.data.text) || "");
-      }, function () { band.width = band.height = 0; return ""; });
+  // Crop a box out of the upright page, enlarge it, and read it as one line.
+  // Enlarging adds no detail that was not already there, but the engine reads
+  // small type better at a comfortable size, and at which size is not
+  // predictable — on one marginal scan the same strip read correctly at 2x and
+  // 4x and wrongly at 3x — so a caller reads at several and judges the results.
+  function readBand(worker, page, box, zoom, stretch) {
+    var band = document.createElement("canvas");
+    band.width = Math.max(1, Math.round(box.w * zoom));
+    band.height = Math.max(1, Math.round(box.h * zoom));
+    var ctx = band.getContext("2d", { willReadFrequently: !!stretch });
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, band.width, band.height);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(page, box.x, box.y, box.w, box.h, 0, 0, band.width, band.height);
+    var read = band;
+    if (stretch) {
+      stretchInk(ctx, band.width, band.height, zoom);
+      read = tightenInk(band, ctx, zoom) || band;
     }
-    var found = [], zooms = [2, 3, 4], zi = 0;
-    function step() {
-      if (zi >= zooms.length) return Promise.resolve();
-      return readAtZoom(zooms[zi++]).then(function (v) {
-        if (v) { found.push(v); if (vinCheckOk(v)) return; }   // a reading that checks out ends it
-        return step();
-      });
-    }
-    return OcrOrient.prepare(worker, "7")                       // one line of text
-      .then(function () { return worker.setParameters({ tessedit_char_whitelist: VIN_ALPHABET }); })
-      .then(step)
-      .then(function () {
-        page.width = page.height = 0;
-        return restore().then(function () { return pickVin(found); });
-      }, function () {
-        page.width = page.height = 0;
-        return restore().then(function () { return pickVin(found); });
-      });
+    return worker.recognize(read).then(function (r) {
+      band.width = band.height = 0; if (read !== band) { read.width = read.height = 0; }
+      return (r && r.data && r.data.text) || "";
+    }, function () { band.width = band.height = 0; if (read !== band) { read.width = read.height = 0; } return ""; });
+  }
 
+  /*
+   * Separate a faint cell's own ink from its paper, and take the form's rules out.
+   *
+   * A dot-matrix value printed into a form box is already the lightest thing on
+   * the page, and a worn copier lifts it further: on one scan the printed
+   * labels come off the glass at 43% grey and the number beside them at 74%,
+   * against 94% paper. Read as part of the whole page that is hopeless — the
+   * engine picks one threshold for everything and the faint cell falls on the
+   * paper side of it.
+   *
+   * Read on its own it is recoverable, because a cell is mostly paper and the
+   * paper is all one tone. Its tones pile up into a peak near white, and the
+   * width of that peak is the scan's own speckle: where the peak ends, paper
+   * ends and ink begins. Cutting there tells a 74% grey number from a 94% grey
+   * background even though both are pale — and does not turn JPEG mottle into
+   * letters, which a fixed threshold does.
+   *
+   * What the cut also picks up is the box the value is printed in. A rule is a
+   * line of ink running the whole way across, so it is found by exactly that —
+   * a column or row that is almost entirely ink — and wiped, before it can be
+   * read as a 1 or a row of dashes.
+   */
+  var PEAK_TAIL = 0.06, RULE_FILL = 0.8, MAX_INK_DEPTH = 130;
+  function stretchInk(ctx, w, h, zoom) {
+    var img, i, x, y, n = w * h;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return; }
+    var d = img.data, grey = new Uint8Array(n), hist = new Uint32Array(256);
+    for (i = 0; i < n; i++) {
+      grey[i] = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000 | 0;
+      hist[grey[i]]++;
+    }
+    var cut = paperEdge(hist);
+    if (cut < 0) return;                          // no paper peak to work from: leave it alone
+    for (i = 0; i < n; i++) grey[i] = grey[i] < cut ? 0 : 255;
+
+    // Wipe the box's own rules: a column (or row) of ink almost all the way down
+    // (or across) is a printed line, not a character.
+    var col = new Uint32Array(w), rowc = new Uint32Array(h);
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) if (!grey[y * w + x]) { col[x]++; rowc[y]++; }
+    for (x = 0; x < w; x++) if (col[x] >= h * RULE_FILL) for (y = 0; y < h; y++) grey[y * w + x] = 255;
+    for (y = 0; y < h; y++) if (rowc[y] >= w * RULE_FILL) for (x = 0; x < w; x++) grey[y * w + x] = 255;
+
+    despeckle(grey, w, h, zoom || 1);
+    for (i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = grey[i]; d[i * 4 + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  /*
+   * What is left after the rules go is the value, the dashes where a rule was
+   * not quite straight enough to be wiped in one piece, and the dirt every
+   * photocopy carries. A character is a blob of ink of roughly a character's
+   * size; the rest is neither big enough nor the right shape, and goes.
+   */
+  function despeckle(grey, w, h, zoom) {
+    var minArea = Math.max(6, Math.round(zoom * zoom * 2)), n = w * h;
+    var seen = new Uint8Array(n), stack = new Int32Array(n), i, p, x, y;
+    for (i = 0; i < n; i++) {
+      if (grey[i] || seen[i]) continue;
+      var top = 0, count = 0, x0 = w, x1 = -1, y0 = h, y1 = -1, px = [];
+      stack[top++] = i; seen[i] = 1;
+      while (top > 0) {
+        p = stack[--top]; px.push(p); count++;
+        x = p % w; y = (p / w) | 0;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (x > 0 && !grey[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack[top++] = p - 1; }
+        if (x < w - 1 && !grey[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack[top++] = p + 1; }
+        if (y > 0 && !grey[p - w] && !seen[p - w]) { seen[p - w] = 1; stack[top++] = p - w; }
+        if (y < h - 1 && !grey[p + w] && !seen[p + w]) { seen[p + w] = 1; stack[top++] = p + w; }
+      }
+      var bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+      // Too small to be a character, or a long thin streak — what is left of a
+      // printed rule after the straight part of it was wiped.
+      if (count >= minArea && bw < bh * 10) continue;
+      for (var k = 0; k < px.length; k++) grey[px[k]] = 255;
+    }
+  }
+
+  // Crop the cleaned band down to the ink that survived, so the engine is given
+  // a line of text rather than a line of text adrift in half an inch of paper.
+  function tightenInk(band, ctx, zoom) {
+    var w = band.width, h = band.height, img, x, y;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return null; }
+    var d = img.data, x0 = w, x1 = -1, y0 = h, y1 = -1;
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+      if (d[(y * w + x) * 4] >= 128) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x1 < x0 || y1 < y0) return null;
+    var pad = Math.max(6, Math.round(4 * zoom));
+    x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+    x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+    var cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    if (cw === w && ch === h) return null;
+    var out = document.createElement("canvas");
+    out.width = cw; out.height = ch;
+    var octx = out.getContext("2d");
+    octx.fillStyle = "#fff"; octx.fillRect(0, 0, cw, ch);
+    octx.drawImage(band, x0, y0, cw, ch, 0, 0, cw, ch);
+    return out;
+  }
+  // Where the paper's own peak ends, going down from it — smoothed first, so a
+  // one-level dip in the histogram is not mistaken for the end of the peak.
+  function paperEdge(hist) {
+    var i, sm = new Float64Array(256);
+    for (i = 0; i < 256; i++) sm[i] = (hist[Math.max(0, i - 1)] + hist[i] + hist[Math.min(255, i + 1)]) / 3;
+    var peak = -1, peakAt = -1;
+    for (i = 128; i < 256; i++) if (sm[i] > peak) { peak = sm[i]; peakAt = i; }
+    if (peakAt < 0 || peak <= 0) return -1;
+    var floor = peak * PEAK_TAIL, edge = peakAt;
+    while (edge > 0 && sm[edge] > floor) edge--;
+    if (peakAt - edge > MAX_INK_DEPTH) return -1; // no distinct peak — the cell is not mostly paper
+    return edge;
+  }
+
+  // The strip a row occupies, with a little air above and below so the crop does
+  // not clip the tops of the letters.
+  function rowBox(page, row, x0, x1, padFrac) {
+    var pad = Math.round((row.y1 - row.y0) * (padFrac == null ? 0.4 : padFrac));
+    var y = Math.max(0, row.y0 - pad);
+    var h = Math.min(page.height - y, (row.y1 - row.y0) + pad * 2);
+    var left = Math.max(0, x0 == null ? 0 : x0);
+    var right = Math.min(page.width, x1 == null ? page.width : x1);
+    return { x: left, y: y, w: right - left, h: h };
+  }
+
+  // Put the engine in single-line mode over a given alphabet, and put it back
+  // afterwards whatever happened.
+  function withAlphabet(worker, alphabet, run) {
     function restore() {
       return Promise.resolve(worker.setParameters({ tessedit_char_whitelist: "" }))
         .then(function () { return OcrOrient.prepare(worker, OcrOrient.PSM_AUTO); })
         .catch(function () {});
     }
+    return OcrOrient.prepare(worker, "7")                       // one line of text
+      .then(function () { return worker.setParameters({ tessedit_char_whitelist: alphabet }); })
+      .then(run)
+      .then(function (v) { return restore().then(function () { return v; }); },
+            function () { return restore().then(function () { return null; }); });
+  }
+
+  /*
+   * A VIN read again, on its own terms.
+   *
+   * It is the densest thing on the page — 17 characters, no word shape for the
+   * engine to lean on, in the smallest print on the form — so it is the first
+   * thing a tired scan loses. Reading the whole page at once, a washed-out copy
+   * gives "W1NKMAGB1SF382775" for "W1NKM4GB9SF382775" (4 read as A, 9 as 1), and
+   * a worse one gives nothing at all.
+   *
+   * So once the page has been read, the row the VIN sits on is read a second
+   * time by itself: cropped out, enlarged, and with the engine told two things
+   * it cannot work out for itself — that this is a single line, and that a VIN
+   * is spelled without I, O or Q. The result only wins if it actually looks
+   * like a VIN.
+   *
+   * When the first read lost the VIN so completely that neither the number nor
+   * its own "VIN" label survived, there is no row to go back to. Then the likely
+   * rows are tried in turn, and only a reading that passes its own check digit
+   * is believed — a guess that cannot check itself is worse than nothing here.
+   */
+  var VIN_SWEEP_MAX = 6;
+  function refineVin(worker, src, angle, rows) {
+    var row = null, i;
+    for (i = 0; i < rows.length; i++) if (/\bV\s?I\s?N\b/.test(rows[i].text.toUpperCase())) { row = rows[i]; break; }
+    if (!row) for (i = 0; i < rows.length; i++) if (findVinIn(rows[i].text)) { row = rows[i]; break; }
+
+    var page = OcrOrient.render(src, angle, fullEdge(src), 0);
+    var targets = row ? [row] : sweepRows(page, rows);
+    if (!targets.length) { page.width = page.height = 0; return Promise.resolve(""); }
+
+    var found = [], ti = 0, zi = 0, zooms = [2, 3, 4];
+    // A known row is worth three sizes; a sweep is a guess, so each candidate
+    // gets one middling size and has to prove itself on the check digit.
+    var sweeping = !row;
+    function step() {
+      if (ti >= targets.length) return Promise.resolve();
+      var t = targets[ti], sizes = sweeping ? [3] : zooms;
+      if (zi >= sizes.length) { ti++; zi = 0; return step(); }
+      var box = rowBox(page, t, null, null);
+      if (box.h < 4 || box.w < 4) { ti++; zi = 0; return step(); }
+      return readBand(worker, page, box, sizes[zi++]).then(function (text) {
+        var v = findVinIn(text);
+        if (v && (!sweeping || vinCheckOk(v))) {
+          found.push(v);
+          if (vinCheckOk(v)) return;                            // a reading that checks out ends it
+        }
+        return step();
+      });
+    }
+    return withAlphabet(worker, VIN_ALPHABET, step).then(function () {
+      page.width = page.height = 0;
+      return pickVin(found);
+    });
+  }
+  // Where a VIN might be when nothing on the page said so: the header half of
+  // the form, on rows long enough to hold seventeen characters.
+  function sweepRows(page, rows) {
+    var cut = page.height * 0.65, wide = page.width * 0.2, out = [], i;
+    for (i = 0; i < rows.length && out.length < VIN_SWEEP_MAX; i++) {
+      var r = rows[i];
+      if (r.y1 > cut) continue;
+      if ((r.x1 - r.x0) < wide) continue;
+      if (r.text.replace(/\s/g, "").length < 8) continue;
+      out.push(r);
+    }
+    return out;
   }
   // One that checks out, else the reading the most attempts agreed on.
   function pickVin(found) {
@@ -1362,6 +1566,111 @@
     return best;
   }
 
+
+  /*
+   * The small header cells, read again.
+   *
+   * Mileage and the open date are printed in the same tired dot-matrix as the
+   * VIN, into boxes an inch wide, and a scan loses them the same way: the
+   * printed label beside them survives ("Mileage In:", "RO Open Date:") while
+   * the value next to it comes back empty. On RO 934230 the whole page read
+   * "Mileage In: Bus Ph: 13" — the label, then the *next* label, with nothing
+   * where the number should be.
+   *
+   * The label is the handle. Its own word boxes say where it ends, the next
+   * label on the row says where the cell stops, and what sits between them is
+   * read on its own, enlarged, over just the characters the value can contain.
+   */
+  var CELLS = {
+    mileage: {
+      label: /\bMileage\s*(?:In)?\s*/i,
+      alphabet: "0123456789,",
+      pick: mileageOf,
+      ok: function (v) { return /^\d{2,7}$/.test(v); }
+    },
+    opened: {
+      label: /\b(?:R\.?\s?O\.?\s*)?Open\s*Date\s*/i,
+      alphabet: "0123456789/-.",
+      pick: dateOf,
+      ok: function (v) { return /^\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}$/.test(v); }
+    }
+  };
+  // Where a labelled cell's value sits on its row: after the label's own words,
+  // and before the words that start the next label. A label is recognised by
+  // its colon, and the short words leading up to that colon ("Bus Ph:", "Home
+  // Ph:") belong to it rather than to the cell in front.
+  function cellSpan(row, labelRe) {
+    var w = row.words || [], i, txt = "", hit = -1;
+    for (i = 0; i < w.length; i++) {
+      txt = txt ? txt + " " + w[i].text : w[i].text;
+      if (labelRe.test(txt)) { hit = i; break; }
+    }
+    if (hit < 0) return null;
+    // "Mileage" matches on its own, but the cell starts after "In:".
+    if (!/:$/.test(w[hit].text) && w[hit + 1] && /:$/.test(w[hit + 1].text) && w[hit + 1].text.length <= 4) hit++;
+
+    var end = row.x1, j;
+    for (j = hit + 1; j < w.length; j++) {
+      if (!/:$/.test(w[j].text)) continue;
+      while (j - 1 > hit && /^[A-Za-z]{1,5}$/.test(w[j - 1].text)) j--;
+      end = w[j].x0;
+      break;
+    }
+    var start = w[hit].x1;
+    if (end - start < (row.y1 - row.y0)) return null;          // nothing there to read
+    return { x0: start, x1: end };
+  }
+  // Only the cells the page read left empty, and only when the page's own
+  // layout says where they are.
+  function refineCells(worker, src, angle, rows, want) {
+    var jobs = [], i, k;
+    for (i = 0; i < want.length; i++) {
+      var spec = CELLS[want[i]];
+      if (!spec) continue;
+      for (k = 0; k < rows.length; k++) {
+        var span = cellSpan(rows[k], spec.label);
+        if (span) { jobs.push({ key: want[i], spec: spec, row: rows[k], span: span }); break; }
+      }
+    }
+    if (!jobs.length) return Promise.resolve({});
+
+    var page = OcrOrient.render(src, angle, fullEdge(src), 0);
+    var out = {}, ji = 0;
+    function step() {
+      if (ji >= jobs.length) return Promise.resolve();
+      var job = jobs[ji++], spec = job.spec;
+      // Tight to the row: the box's own rules sit just above and below it, and
+      // in single-line mode a rule read as a row of dashes is what comes back
+      // instead of the number.
+      var box = rowBox(page, job.row, job.span.x0, job.span.x1, 0.12);
+      if (box.w < 4 || box.h < 4) return step();
+      // Unlike a VIN, a mileage carries no way of checking itself. Reading it
+      // twice and demanding the two agree was tried and does not tell the
+      // difference: on one scan two sizes agreed on a wrong number, and on
+      // another they disagreed over a right one. So the first reading that is
+      // the right shape is taken, and the review says where it came from — the
+      // person approving the scan has the paper in front of them.
+      var zooms = [3, 5], zi = 0;
+      function tryZoom() {
+        if (zi >= zooms.length) return Promise.resolve();
+        return readBand(worker, page, box, zooms[zi++], true).then(function (text) {
+          var v = spec.pick(text);
+          if (v && spec.ok(v)) { out[job.key] = v; return; }
+          return tryZoom();
+        });
+      }
+      // Each cell holds one kind of character, so each is read over its own
+      // alphabet rather than all of them over a shared one.
+      return withAlphabet(worker, spec.alphabet, tryZoom).then(step);
+    }
+    return step().then(function () {
+      page.width = page.height = 0;
+      return out;
+    }, function () {
+      page.width = page.height = 0;
+      return out;
+    });
+  }
   // Read every page. The first page decides which way up the batch is (pages of
   // one RO go through the scanner the same way), and the rest follow it — the
   // probe is the expensive part, so it is paid once.
@@ -1404,12 +1713,26 @@
         });
       }
       return readOne().then(function () {
-        if (cancelled && cancelled()) return "";
+        if (cancelled && cancelled()) return { vin: "", cells: {} };
         status("Taking a closer look at the VIN…");
-        return refineVin(worker, sources[0], angle, rows[0] || []).catch(function () { return ""; });
-      }).then(function (vin) {
+        return refineVin(worker, sources[0], angle, rows[0] || []).catch(function () { return ""; })
+          .then(function (vin) {
+            // What the page gave up decides what is worth going back for: a
+            // second look at a cell costs a read apiece, so only the cells that
+            // came back empty are paid for.
+            var draft = parseScan(texts.join("\n"), rows, { vin: vin });
+            var want = [];
+            if (!draft.mileage) want.push("mileage");
+            if (!draft.opened) want.push("opened");
+            if (!want.length || (cancelled && cancelled())) return { vin: vin, cells: {} };
+            status("Taking a closer look at the header…");
+            return refineCells(worker, sources[0], angle, rows[0] || [], want)
+              .then(function (cells) { return { vin: vin, cells: cells }; },
+                    function () { return { vin: vin, cells: {} }; });
+          });
+      }).then(function (extra) {
         try { worker.terminate(); } catch (e) {}
-        return { text: texts.join("\n"), rows: rows, vin: vin };
+        return { text: texts.join("\n"), rows: rows, vin: extra.vin, cells: extra.cells || {} };
       }, function (e) { try { worker.terminate(); } catch (x) {} throw e; });
     });
   }
@@ -1484,6 +1807,7 @@
         .then(function (ocr) {
           (ocr.rows || []).forEach(function (rows) { pages.push(rows); });
           if (ocr.vin) hints.vin = ocr.vin;
+          if (ocr.cells) { if (ocr.cells.mileage) hints.mileage = ocr.cells.mileage; if (ocr.cells.opened) hints.opened = ocr.cells.opened; }
           return texts.concat([ocr.text]).join("\n");
         });
     }).then(function (text) {
@@ -1515,10 +1839,24 @@
     });
     $("#rv-raw").value = parsed.text || "";
     refreshVinWarn();
+    showRefined(parsed.refined || []);
     $("#rv-file-wrap").hidden = !embedded;
     renderReviewLines();
     refreshDupe();
     scanStep("review");
+  }
+  // A cell the page read straight off is one reading; a cell only the close-up
+  // pass found is a weaker one, and says so — the person approving the scan has
+  // the paper in front of them and can settle it in a glance.
+  var REFINED_NAME = { mileage: "mileage", opened: "open date" };
+  function showRefined(keys) {
+    var names = keys.map(function (k) { return REFINED_NAME[k] || k; });
+    var box = $("#rv-cell-warn");
+    box.hidden = !names.length;
+    if (!names.length) return;
+    var list = names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0];
+    box.textContent = "The " + list + " " + (names.length > 1 ? "were" : "was") +
+      " too faint to read with the rest of the page and had to be read close up — worth a glance against the paper.";
   }
   // A VIN carries its own checksum, so a misread can be pointed out rather than
   // handed over as if it were certain.
@@ -1680,6 +2018,8 @@
     layoutLines: layoutLines,
     itemsToRows: itemsToRows,
     vinCheckOk: vinCheckOk,
+    cellSpan: cellSpan,
+    sweepRows: sweepRows,
     reviewText: function (t) { openScan(); showReview(parseScan(t)); },
     // What the which-way-up probe decided on the last scan {angle, tried}.
     get lastScan() { return lastScan; }
