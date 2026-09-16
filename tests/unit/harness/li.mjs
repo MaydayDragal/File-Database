@@ -4,36 +4,37 @@
 // number matchers, version detection, line assembly from PDF.js items, title
 // and field extraction. PDF.js and OCR sit outside it; the cases feed it the
 // text and line arrays those would have produced.
-import { lift, evalBlock } from "./lift.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { ROOT, lift, evalBlock } from "./lift.mjs";
 
 const NAMES = ["sanitize", "cleanTitle", "rlName", "normChars", "normText", "normLI", "canonLI", "liKey",
   "detectLI", "detectLIFuzzy", "detectVersion", "itemsToLines", "joinHyphen", "titleFromStructure",
   "detectTitle", "normDate", "fieldFromLines", "DATE_VAL"];
 
+// extract()'s finish() is the function that turns text and lines into the
+// stored record. It is nested inside extract() and closes over the File and
+// the PDF.js document (for file.name and doc.numPages), so it is lifted as
+// source text and re-bound with those two supplied as parameters. Nothing is
+// re-implemented here: a change to finish() in the app changes what this
+// harness runs.
+const FINISH_RE = /        function finish\(flat, p1, all, ocr\) \{[\s\S]*?\n        \}\n/;
+
 let cached = null;
 export function loadLi() {
   if (cached) return cached;
   const block = lift("li/index.html", "// ---------- filename rules (Windows-safe) ----------", "// OCR (lazy, from CDN");
-  cached = evalBlock("", block, NAMES);
+  const m = FINISH_RE.exec(fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8"));
+  if (!m) throw new Error("li/index.html: could not locate extract()'s finish() — update FINISH_RE in tests/unit/harness/li.mjs");
+  const bound = "\nfunction __finishFor(file, doc) {\n" + m[0] + "\n  return finish;\n}";
+  cached = evalBlock("", block + bound, NAMES.concat(["__finishFor"]));
   return cached;
 }
 
-// The metadata a document gets from its text — extract()'s finish() in
-// li/index.html, with the PDF and File objects replaced by their values.
-// Kept verbatim in shape so the golden records what the app stores.
+// The metadata a document gets from its text, as the app stores it.
 export function metaFromText(flat, p1, all, ocr, filename, pages) {
   const L = loadLi();
-  const hay = flat + " " + filename;
-  const li = L.detectLI(hay) || (ocr ? L.detectLIFuzzy(flat) || L.detectLIFuzzy(filename) : "");
-  let lineText = all.map((l) => l.text).join("\n");
-  if (lineText.length > 60000) { lineText = lineText.slice(0, 60000); const cut = lineText.lastIndexOf("\n"); if (cut > 0) lineText = lineText.slice(0, cut); }
-  return {
-    li, ver: L.detectVersion(hay, li), title: L.detectTitle(p1, flat, li),
-    reason: L.fieldFromLines(p1, /^reason\s*for\s*change\s*/i, true),
-    fgroup: L.fieldFromLines(p1, /^(?:function|design)\s*group\s*/i),
-    date: L.normDate(L.fieldFromLines(p1, /^date\s*/i, false, (v) => L.DATE_VAL.test(v))),
-    validity: L.fieldFromLines(p1, /^validity\s*/i, true), text: lineText, pages, ocr, noText: false,
-  };
+  return L.__finishFor({ name: filename }, { numPages: pages })(flat, p1, all, ocr);
 }
 
 // Regular expressions travel through JSON as { $re, flags }.
