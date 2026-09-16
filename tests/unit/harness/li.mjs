@@ -1,40 +1,23 @@
-// LI Documents' text-level extraction, lifted from li/index.html.
-//
-// The block between the two markers is pure: filename rules, the document-
-// number matchers, version detection, line assembly from PDF.js items, title
-// and field extraction. PDF.js and OCR sit outside it; the cases feed it the
-// text and line arrays those would have produced.
-import fs from "node:fs";
-import path from "node:path";
-import { ROOT, lift, evalBlock } from "./lift.mjs";
+// LI Documents' text-level extraction — now the shared src/core modules,
+// imported directly (REWRITE-PLAN.md Phase 1). The core files are classic
+// scripts that attach to globalThis.FDCore, so importing them for their side
+// effect is enough.
+import "../../../src/core/text.js";
+import "../../../src/core/ids.js";
+import "../../../src/core/li-parse.js";
 
-const NAMES = ["sanitize", "cleanTitle", "rlName", "normChars", "normText", "normLI", "canonLI", "liKey",
-  "detectLI", "detectLIFuzzy", "detectVersion", "itemsToLines", "joinHyphen", "titleFromStructure",
-  "detectTitle", "normDate", "fieldFromLines", "DATE_VAL"];
-
-// extract()'s finish() is the function that turns text and lines into the
-// stored record. It is nested inside extract() and closes over the File and
-// the PDF.js document (for file.name and doc.numPages), so it is lifted as
-// source text and re-bound with those two supplied as parameters. Nothing is
-// re-implemented here: a change to finish() in the app changes what this
-// harness runs.
-const FINISH_RE = /        function finish\(flat, p1, all, ocr\) \{[\s\S]*?\n        \}\n/;
+const core = globalThis.FDCore;
 
 let cached = null;
 export function loadLi() {
   if (cached) return cached;
-  const block = lift("li/index.html", "// ---------- filename rules (Windows-safe) ----------", "// OCR (lazy, from CDN");
-  const m = FINISH_RE.exec(fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8"));
-  if (!m) throw new Error("li/index.html: could not locate extract()'s finish() — update FINISH_RE in tests/unit/harness/li.mjs");
-  const bound = "\nfunction __finishFor(file, doc) {\n" + m[0] + "\n  return finish;\n}";
-  cached = evalBlock("", block + bound, NAMES.concat(["__finishFor"]));
+  cached = Object.assign({}, core.text, core.ids, core.li);
   return cached;
 }
 
 // The metadata a document gets from its text, as the app stores it.
 export function metaFromText(flat, p1, all, ocr, filename, pages) {
-  const L = loadLi();
-  return L.__finishFor({ name: filename }, { numPages: pages })(flat, p1, all, ocr);
+  return core.li.buildRecord(flat, p1, all, ocr, filename, pages);
 }
 
 // Regular expressions travel through JSON as { $re, flags }.

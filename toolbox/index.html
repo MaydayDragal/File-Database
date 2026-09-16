@@ -7,6 +7,9 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%97%9C%EF%B8%8F%3C/text%3E%3C/svg%3E" />
 <script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
+<script src="../src/core/text.js"></script>
+<script src="../src/core/ids.js"></script>
+<script src="../src/core/li-parse.js"></script>
 <style>
 /* ===== Zip Splitter styles (ids prefixed z-) ===== */
 
@@ -4186,21 +4189,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   // ============ RENAME MERCEDES LI DOCS ============
   var rlItems = [];
-  var DOCNUM = /\b([A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7})\b/;
-  // XENTRY's newer LI PDFs typeset the document number with NON-BREAKING
-  // punctuation - a U+2011 non-breaking hyphen between the groups, U+00A0
-  // no-break spaces around the field labels - so "LI83.70\u2011P\u2011080411"
-  // never matched the ASCII-hyphen pattern above and the LI number came back
-  // empty. Fold the no-break/typographic variants back to ASCII before any
-  // matching; en/em dashes are left alone so prose keeps its typography.
-  var NORM_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/g;
-  var NORM_HYPHEN = /[\u2010\u2011\u2012\u2212\ufe58\ufe63\uff0d]/g;
-  var NORM_DROP = /[\u00ad\u200b\u200c\u200d\ufeff]/g;
-  function normText(s) { return String(s == null ? "" : s).replace(NORM_SPACE, " ").replace(NORM_HYPHEN, "-").replace(NORM_DROP, ""); }
-  // Detection only (never the stored text): also accept en/em dashes, which
-  // some exports substitute for the hyphen inside the number itself.
-  var NORM_DASH = /[\u2013\u2014\u2015]/g;
-  function normLI(s) { return normText(s).replace(NORM_DASH, "-"); }
+  // The document-number matcher and text normalization are shared with the
+  // LI app: src/core/{text,ids}.js (REWRITE-PLAN.md Phase 1).
+  var DOCNUM = FDCore.ids.DOCNUM, normText = FDCore.text.normText, normLI = FDCore.text.normLI;
 
   // OCR fallback (Tesseract.js) — same source/overrides as the OCR tab.
   var T_V = "5.1.1", T_CV = "5.1.0", T_CDN = "https://cdn.jsdelivr.net/npm";
@@ -4256,96 +4247,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     });
   }
-  function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-  var WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
-  function sanitize(s) {
-    return String(s || "")
-      .replace(/[\x00-\x1f\x7f]/g, "")   // strip control characters
-      .replace(/[\\/:*?"<>|]/g, " ")      // replace Windows-reserved characters with a space
-      .replace(/\s+/g, " ").trim();
-  }
-  function cleanTitle(s) { return sanitize(String(s || "").replace(/[‘’ʼ′]/g, "'").replace(/[“”″]/g, '"')).replace(/[.\s]+$/, "").trim(); }
-  function detectLI(hay) { var m = normLI(hay).match(DOCNUM); return m ? m[1] : ""; }
-  // Fuzzy match for OCR output: the LI format is rigid, so we can fix common
-  // letter/digit confusions (O↔0, I↔1, S↔5, B↔8, G↔6, Z↔2) by position.
-  var FUZZY = /([A-Za-z0-9]{2})\s?([0-9OoIlSsBbGgZ]{2})[.,]([0-9OoIlSsBbGgZ]{2})\s?[-–—~]\s?([A-Za-z0-9])\s?[-–—~]\s?([0-9OoIlSsBbGgZ]{5,7})/;
-  function toDigits(s) { return s.replace(/[OoQ]/g, "0").replace(/[Il]/g, "1").replace(/[Ss]/g, "5").replace(/[Bb]/g, "8").replace(/Z/g, "2").replace(/[Gg]/g, "6"); }
-  function toAlpha(s) { return s.replace(/0/g, "O").replace(/1/g, "I").replace(/5/g, "S").replace(/8/g, "B").replace(/6/g, "G").replace(/2/g, "Z").toUpperCase(); }
-  function detectLIFuzzy(hay) {
-    var f = normLI(hay).match(FUZZY); if (!f) return "";
-    var out = toAlpha(f[1]) + toDigits(f[2]) + "." + toDigits(f[3]) + "-" + toAlpha(f[4]) + "-" + toDigits(f[5]);
-    return DOCNUM.test(out) ? out : "";
-  }
-  function detectVersion(hay, li) {
-    hay = normText(hay);
-    var pats = [];
-    if (li) pats.push(new RegExp(reEsc(li) + "\\s*[_/ ]\\s*(?:V|Ver\\.?|Version|Rev\\.?|Revision)?\\s*(\\d{1,3})\\b", "i"));
-    pats.push(/\b(?:Version|Revision|Rev\.?|Stand|Ausgabe)\s*[:.]?\s*(\d{1,3})\b/i);
-    for (var i = 0; i < pats.length; i++) { var m = hay.match(pats[i]); if (m) return m[1]; }
-    return "";
-  }
-  // Group PDF text-layer items into visual lines (top-to-bottom).
-  function itemsToLines(items) {
-    var rows = {};
-    items.forEach(function (it) {
-      var s = normText(it.str); if (!s || !s.trim()) return;
-      var y = Math.round((it.transform && it.transform[5]) || 0);
-      var h = Math.abs((it.transform && it.transform[3]) || 0);
-      var key = Math.round(y / 3);
-      if (!rows[key]) rows[key] = { y: y, h: h, parts: [] };
-      rows[key].parts.push({ x: (it.transform && it.transform[4]) || 0, s: s });
-      if (h > rows[key].h) rows[key].h = h;
-    });
-    return Object.keys(rows).map(function (k) { return rows[k]; })
-      .sort(function (a, b) { return b.y - a.y; })   // PDF y is bottom-up → higher y first
-      .map(function (r) { return { text: r.parts.sort(function (a, b) { return a.x - b.x; }).map(function (p) { return p.s; }).join("").replace(/\s+/g, " ").trim(), h: r.h, y: r.y }; });
-  }
-  // Join wrapped title lines, fixing end-of-line hyphenation ("con-" + "trol" → "control").
-  function joinHyphen(arr) {
-    var out = "";
-    arr.forEach(function (t, i) {
-      if (i === 0) { out = t; return; }
-      if (/[-‐‑]$/.test(out)) out = out.replace(/[-‐‑]\s*$/, "") + t;
-      else out += " " + t;
-    });
-    return out;
-  }
-  var HEADER_RE = /^(xentry\b|wis\b|asra\b|star\s*diagnosis|page\s*\d|seite\s*\d|©|copyright\b|printed\b|https?:|www\.)/i;
-  var FIELD_RE = /^\s*(topic\s*number|dokument(nummer|\s*nr)|document\s*number|dok\.?\s*-?\s*nr|order\s*number|auftrag)/i;
-  // LI docs: the title is the block between the page header and the "Topic number"/doc-number line.
-  function titleFromStructure(lines, li) {
-    if (!lines || !lines.length) return "";
-    var idx = -1;
-    for (var i = 0; i < lines.length; i++) {
-      var tx = lines[i].text || "";
-      if ((li && tx.indexOf(li) >= 0) || FIELD_RE.test(tx)) { idx = i; break; }
-    }
-    if (idx < 1) return "";
-    var picked = [];
-    for (var j = 0; j < idx; j++) {
-      var t = (lines[j].text || "").trim();
-      if (!t || HEADER_RE.test(t)) continue;
-      picked.push(t);
-    }
-    return joinHyphen(picked);
-  }
+  // Filename rules, fuzzy OCR numbers, versions, line assembly and title
+  // extraction: src/core/{text,ids,li-parse}.js, the same code the LI app runs.
+  var reEsc = FDCore.text.reEsc, sanitize = FDCore.text.sanitize, cleanTitle = FDCore.text.cleanTitle;
+  var detectLI = FDCore.ids.detectLI, detectLIFuzzy = FDCore.ids.detectLIFuzzy, detectVersion = FDCore.ids.detectVersion;
+  var itemsToLines = FDCore.li.itemsToLines, titleFromStructure = FDCore.li.titleFromStructure;
+  // The Toolbox also has the PDF's metadata title to fall back on, which the
+  // LI app does not: structure first, then metadata, then the shared fallbacks.
   function detectTitle(metaTitle, lines, text, li) {
-    // 1) LI structure (most reliable for these documents)
     var st = titleFromStructure(lines, li);
     if (st && st.length >= 4) return cleanTitle(st);
-    // 2) metadata title
     var t = (metaTitle || "").trim();
     if (t && !DOCNUM.test(t) && t.length >= 4 && !/\.(pdf|indd|doc)$/i.test(t)) return cleanTitle(t);
-    // 3) largest-font line(s)
-    if (lines && lines.length) {
-      var maxH = 0; lines.forEach(function (it) { if (it.h > maxH) maxH = it.h; });
-      var big = lines.filter(function (it) { return it.h >= maxH - 0.4 && (it.text || "").trim().length > 2 && !DOCNUM.test(it.text) && !HEADER_RE.test(it.text) && !/^(version|revision|seite|page|datum|date|validity|function\s*group)\b/i.test((it.text || "").trim()); });
-      var joined = cleanTitle(big.map(function (it) { return (it.text || "").trim(); }).join(" "));
-      if (joined.length >= 4) return joined;
-    }
-    // 4) text right after the doc number
-    if (li) { var m = text.match(new RegExp(reEsc(li) + "(?:\\s*[_/ ]\\s*\\d{1,3})?\\s+(.{4,120}?)(?:\\r|\\n|$)")); if (m) return cleanTitle(m[1]); }
-    return "";
+    return FDCore.li.detectTitle(lines, text, li);
   }
   function extractLI(file, onStatus) {
     return file.arrayBuffer().then(function (buf) {
@@ -4380,14 +4294,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     }).catch(function () { var hay = file.name, li = detectLI(hay); return { li: li, ver: detectVersion(hay, li), title: "", hadText: false }; });
   }
-  function rlName(it) {
-    var li = sanitize(it.li), ver = String(it.ver || "").trim().replace(/[^0-9]/g, ""), title = cleanTitle(it.title);
-    var base = (li || "document") + (ver ? "_" + ver : "") + (title ? " " + title : "");
-    base = sanitize(base).replace(/[.\s]+$/, "");                            // no trailing dot/space before the extension
-    if (base.length > 235) base = base.slice(0, 235).replace(/[.\s]+$/, ""); // keep the full name under Windows' 255-char limit
-    if (WIN_RESERVED.test(base)) base = "_" + base;                          // avoid reserved device names (CON, NUL, …)
-    return (base || "document") + ".pdf";
-  }
+  var rlName = FDCore.li.rlName;
   wireDrop($("pdf-rl-drop"), $("pdf-rl-file"), function (files) {
     var arr = Array.prototype.slice.call(files).filter(function (f) { return /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); });
     if (!arr.length) return;

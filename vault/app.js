@@ -1024,16 +1024,13 @@
   // Tags stamped by LI hand-offs are LI numbers; VIN/FIN Baumuster digits
   // (chars 4-6) are the model series. Both become live links into the other
   // apps instead of dead strings.
-  const LI_TAG_RE = /^[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}$/i;
+  const LI_TAG_RE = FDCore.ids.DOCNUM_EXACT; // shared: ../src/core/ids.js
   // Newer XENTRY PDFs spell the number with U+2011 non-breaking hyphens and
   // U+00A0 spaces, so a tag pasted straight out of one carries those. Fold
   // them to ASCII before matching (and before handing the number to the LI
   // app) or the tag stays a dead string instead of a cross-app link.
-  const liNorm = (t) => String(t || "").replace(/[\u00a0\u202f]/g, " ").replace(/[\u2010\u2011\u2012\u2212\uff0d]/g, "-").replace(/[\u00ad\u200b\ufeff]/g, "").trim();
-  function seriesOfId(id) {
-    const s = String(id || "");
-    return s.length === 17 && /^\d{3}$/.test(s.slice(3, 6)) ? s.slice(3, 6) : "";
-  }
+  const liNorm = (t) => FDCore.text.normLI(t).trim();
+  const seriesOfId = FDCore.ids.seriesOfVin;
   function crossNav(app, payload, hashPath) {
     if (embedded) {
       try { window.parent.postMessage({ type: "shell-nav", app, payload }, "*"); return; } catch (e) {}
@@ -1886,97 +1883,10 @@
   // directly, PDFs through the vendored pdf.js text layer, and images or
   // scanned (no-text-layer) PDFs through OCR — Tesseract.js, lazily loaded
   // from a CDN exactly like the LI app (overridable via window.__TESS_*).
-  const VIN_TEXT_MAX = 1024 * 1024; // read at most 1 MB of a text file
-  const VIN_MAX_PER_FILE = 25;      // a datacard can reference several vehicles
-  const VIN_RICH_TEXT = 400;        // a PDF text layer this size is a real document,
-                                    // not a scan — no VIN in it means there is no VIN
-
-  // A VIN is 17 chars from [A-HJ-NPR-Z0-9] (I, O and Q are never used). PDF and
-  // OCR text extraction very often SPLITS a VIN with spaces (e.g. the datacard
-  // text comes out "W1KLF4HB1 RA068698", or even one character per cell), so we
-  // tolerate up to a couple of spaces/tabs between characters and strip them
-  // from the match. The outer lookarounds still require the whole run to be
-  // bounded by non-letters/digits, so it can't be a slice of a longer code.
-  const VIN_SEP = "[ \\t\\u00A0]{0,2}";
-
-  // Mercedes-Benz World Manufacturer Identifiers (first 3 VIN chars). This is a
-  // Mercedes-only tool (LI docs, XENTRY, datacards), and a real MB VIN/FIN always
-  // begins with one of these — so requiring a known WMI is the single strongest
-  // way to keep REAL vehicle numbers and reject look-alikes (engine numbers like
-  // 112600009311006RE, OCR'd prose, padded fields). Add a prefix here if a
-  // legitimate VIN is ever missed.
-  const MB_WMI = new Set([
-    "WDB", "WDD", "WDC", "W1K", "W1N",        // Germany — passenger / SUV
-    "WDF", "W1V", "W1W", "W1X", "W1Y",        // Germany — vans / commercial
-    "WD3", "WD4",                             // Sprinter / vans
-    "WMX", "WME",                             // AMG / Smart
-    "4JG", "55S",                             // USA (Alabama / Vance)
-    "8AC", "9BM", "MB1",                      // Argentina / Brazil / India
-  ]);
-
-  // Reject 17-char strings that only LOOK like a VIN. Real VIN/FIN examples that
-  // MUST pass: 4JGFB4GB9SB387878, W1KLF4HB1RA068698, W1K2140471A068698. Junk that
-  // MUST fail: FREEMAPUPDATES50A ("...free map updates 50A"), OCR'd blank fields
-  // 000000000000000ER, and engine numbers like 112600009311006RE.
-  function looksLikeVin(v) {
-    if (!MB_WMI.has(v.slice(0, 3))) return false; // must start with a real MB WMI
-    const digits = (v.match(/\d/g) || []).length;
-    if (digits < 4) return false;               // a real VIN/FIN has a numeric serial
-    if (17 - digits < 2) return false;          // ...but keeps its WMI letters too
-    if (/[A-Z]{7,}/.test(v)) return false;      // 7+ letters in a row => a word, not a VIN
-    if (new Set(v).size < 6) return false;      // too few distinct chars => a padded/blank field
-    return true;
-  }
-
-  // Mercedes datacards carry BOTH the ISO VIN (labelled "VIN") and a separate
-  // Baumuster-based datacard/FIN number (e.g. "W1K2140471A068698", model series
-  // 214). They must not be conflated: the VIN drives grouping; the FIN is kept
-  // apart but still searchable. Classification, strongest signal first:
-  //   - a code immediately preceded by "VIN"                -> VIN (authoritative)
-  //   - a code by the datacard header / "FIN"/chassis label -> FIN
-  //   - an unlabelled Baumuster-format code (DIGIT at pos 4) seen alongside a
-  //     real VIN                                             -> FIN
-  //   - anything else                                        -> VIN (keep recall)
-  const VIN_PREC = { vin: 3, fin: 2, "?": 1 };
-  function findVinsDetailed(text, fuzzy) {
-    if (!text) return { vins: [], fins: [] };
-    const seen = new Map(); // code -> "vin" | "fin" | "?"
-    const consider = (t) => {
-      const re = new RegExp("(?<![A-Z0-9])[A-HJ-NPR-Z0-9](?:" + VIN_SEP + "[A-HJ-NPR-Z0-9]){16}(?![A-Z0-9])", "g");
-      let m;
-      while ((m = re.exec(t)) && seen.size < VIN_MAX_PER_FILE) {
-        const v = m[0].replace(/[ \t ]/g, "");
-        if (v.length !== 17 || !looksLikeVin(v)) continue;
-        const before = t.slice(Math.max(0, m.index - 16), m.index).toUpperCase().replace(/[^A-Z]/g, "");
-        let tag = "?";
-        if (/VIN$/.test(before)) tag = "vin";
-        else if (/DATACARD$|DATENKARTE$|FGSTNR$|FAHRGESTELLNR$/.test(before)) tag = "fin";
-        if (!seen.has(v) || VIN_PREC[tag] > VIN_PREC[seen.get(v)]) seen.set(v, tag);
-      }
-    };
-    const up = text.toUpperCase();
-    consider(up);
-    if (fuzzy) {
-      // OCR often misreads 1/0 as I/O/Q. Those letters never occur in a VIN, so
-      // normalizing them inside candidate runs recovers the real number — BUT a
-      // real VIN keeps genuine serial digits that OCR reads correctly, so only
-      // correct runs that already hold >=2 real digits. This stops OCR'd prose
-      // ("WITHOUT LIMITATION" -> W1TH0UTL1M1TAT10N) from being fabricated into a VIN.
-      const runRe = new RegExp("(?<![A-Z0-9])[A-Z0-9](?:" + VIN_SEP + "[A-Z0-9]){16}(?![A-Z0-9])", "g");
-      consider(up.replace(runRe, (run) =>
-        (run.match(/[0-9]/g) || []).length < 2 ? run
-          : run.replace(/I/g, "1").replace(/[OQ]/g, "0")));
-    }
-    const vins = [], fins = [];
-    const hasVin = Array.from(seen.values()).includes("vin");
-    seen.forEach((tag, v) => {
-      const isFin = tag === "fin" || (tag === "?" && hasVin && /\d/.test(v[3]));
-      (isFin ? fins : vins).push(v);
-    });
-    return { vins, fins };
-  }
-  // Back-compat helper - just the VINs (used to decide whether a PDF needs OCR).
-  function findVins(text, fuzzy) { return findVinsDetailed(text, fuzzy).vins; }
+  // The VIN / FIN classifier moved to ../src/core/vin.js (REWRITE-PLAN.md
+  // Phase 1); the Repair Orders scanner shares it.
+  const VIN_TEXT_MAX = FDCore.vin.VIN_TEXT_MAX, VIN_MAX_PER_FILE = FDCore.vin.VIN_MAX_PER_FILE, VIN_RICH_TEXT = FDCore.vin.VIN_RICH_TEXT;
+  const findVinsDetailed = FDCore.vin.findVinsDetailed, findVins = FDCore.vin.findVins;
 
   // OCR engine (lazy, from a CDN — overridable via window.__TESS_*). The VIN
   // scan runs a POOL of Tesseract workers so several images / scanned PDFs are

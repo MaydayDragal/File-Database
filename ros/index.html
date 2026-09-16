@@ -323,6 +323,7 @@
 
 <div id="toast"></div>
 
+<script src="../src/core/vin.js"></script>
 <script src="../ocr.js"></script>
 <script>
 (function () {
@@ -658,44 +659,8 @@
     return "";
   }
 
-  // ---------- VIN detection (same rules as the Vault's scanner) ----------
-  // A Mercedes VIN always opens with one of these world-manufacturer codes, so
-  // requiring one is the strongest single filter against OCR look-alikes.
-  var MB_WMI = { WDB: 1, WDD: 1, WDC: 1, W1K: 1, W1N: 1, WDF: 1, W1V: 1, W1W: 1, W1X: 1, W1Y: 1, WD3: 1, WD4: 1, WMX: 1, WME: 1, "4JG": 1, "55S": 1, "8AC": 1, "9BM": 1, MB1: 1 };
-  function looksLikeVin(v) {
-    if (!MB_WMI[v.slice(0, 3)]) return false;
-    var digits = (v.match(/\d/g) || []).length;
-    if (digits < 4 || 17 - digits < 2) return false;
-    if (/[A-Z]{7,}/.test(v)) return false;          // 7+ letters running => a word
-    var set = {}, n = 0;
-    for (var i = 0; i < v.length; i++) if (!set[v[i]]) { set[v[i]] = 1; n++; }
-    return n >= 6;                                   // too few distinct chars => a blank field
-  }
-  /*
-   * ISO 3779 puts a check digit at character 9, computed over the whole number.
-   * A misread almost never survives it — of the readings a marginal scan gave
-   * for one real VIN, "W1NKM4GB9SF382775" checks out and "W1NKMAGB9SF382775",
-   * "W1NKM4GB0SF382775" and "W1NKMAGB1SF382775" do not. That makes it the one
-   * way to tell a good reading from a plausible-looking wrong one.
-   *
-   * It is used to PREFER a reading, never to reject the only one there is: a
-   * vehicle built for a market that does not compute the digit would fail it
-   * while being perfectly correct.
-   */
-  var VIN_VALUE = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
-  var VIN_WEIGHT = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
-  function vinCheckOk(v) {
-    if (!v || v.length !== 17) return false;
-    var sum = 0;
-    for (var i = 0; i < 17; i++) {
-      var c = v.charAt(i);
-      var n = /[0-9]/.test(c) ? +c : VIN_VALUE[c];
-      if (n == null) return false;
-      sum += n * VIN_WEIGHT[i];
-    }
-    var r = sum % 11;
-    return v.charAt(8) === (r === 10 ? "X" : String(r));
-  }
+  // ---------- VIN detection (shared with the Vault: ../src/core/vin.js) ----------
+  var looksLikeVin = FDCore.vin.looksLikeVin, vinCheckOk = FDCore.vin.vinCheckOk;
 
   function findVinIn(text) {
     var up = String(text || "").toUpperCase(), SEP = "[ \\t\\u00A0]{0,2}", hits = [];
@@ -722,18 +687,7 @@
     return hits.length ? hits[0].vin : "";
   }
 
-  // A VIN carries its own model year (position 10). Position 7 says which
-  // 30-year cycle that letter belongs to: a letter there means 2010 onwards.
-  // Worth having because "Year:" is a two-character cell that OCR often loses.
-  var VIN_YEAR = "ABCDEFGHJKLMNPRSTVWXY";   // 1980.. / 2010.. ; digits 1-9 are 2001-2009
-  function yearFromVin(vin) {
-    if (!vin || vin.length !== 17) return "";
-    var c = vin.charAt(9), modern = /[A-Z]/.test(vin.charAt(6));
-    if (/[1-9]/.test(c)) return String(2000 + parseInt(c, 10));
-    var i = VIN_YEAR.indexOf(c);
-    if (i < 0) return "";
-    return String((modern ? 2010 : 1980) + i);
-  }
+  var yearFromVin = FDCore.vin.yearFromVin;
 
   // ---------- parsing ----------
   // Every field label the dealer forms and the DISPATCH screen print. A value

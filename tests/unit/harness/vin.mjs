@@ -1,21 +1,20 @@
-// The Vault's VIN / FIN classifier, lifted from vault/app.js.
-// Pure: no DOM, no IndexedDB, no OCR — the block between the two markers is
-// constants, looksLikeVin() and findVinsDetailed().
-import { lift, evalBlock } from "./lift.mjs";
+// The VIN / FIN classifier — src/core/vin.js, imported directly
+// (REWRITE-PLAN.md Phase 1). The core file is a classic script that attaches
+// to globalThis.FDCore, so importing it for its side effect is enough.
+import "../../../src/core/vin.js";
 
-let cached = null;
+const V = globalThis.FDCore.vin;
+
 export function loadVin() {
-  if (cached) return cached;
-  const block = lift("vault/app.js", "  const VIN_TEXT_MAX", "  // OCR engine (lazy, from a CDN");
-  const f = evalBlock("", block, ["looksLikeVin", "findVinsDetailed", "findVins", "MB_WMI", "VIN_MAX_PER_FILE"]);
-  cached = {
-    looksLikeVin: f.looksLikeVin,
-    findVinsDetailed: f.findVinsDetailed,
-    findVins: f.findVins,
-    wmi: Array.from(f.MB_WMI).sort(),
-    maxPerFile: f.VIN_MAX_PER_FILE,
+  return {
+    looksLikeVin: V.looksLikeVin,
+    findVinsDetailed: V.findVinsDetailed,
+    findVins: V.findVins,
+    vinCheckOk: V.vinCheckOk,
+    yearFromVin: V.yearFromVin,
+    wmi: Array.from(V.MB_WMI).sort(),
+    maxPerFile: V.VIN_MAX_PER_FILE,
   };
-  return cached;
 }
 
 // Run one golden case: { fn, args } -> JSON-safe output.
@@ -25,6 +24,8 @@ export function runVinCase(c) {
     case "looksLikeVin": return v.looksLikeVin(...c.args);
     case "findVinsDetailed": return v.findVinsDetailed(...c.args);
     case "findVins": return v.findVins(...c.args);
+    case "vinCheckOk": return v.vinCheckOk(...c.args);
+    case "yearFromVin": return v.yearFromVin(...c.args);
     case "wmi": return v.wmi;
     default: throw new Error("unknown vin case " + c.fn);
   }
