@@ -72,6 +72,99 @@ const FORM_TEXT = [
   "TECH COPY MOBILE SHOP COPY",
 ].join("\n");
 
+// A REAL read of that form, copied verbatim from a 300 dpi scan of the printed
+// RO. This is what OCR actually hands over, and every way it differs from the
+// tidy version above is a defect the parser has to survive: the two columns of
+// the form flattened into each other, "Tag #T7910" read as "Tag #17910", the
+// Year and Model labels lost entirely, "Color:" reduced to a "*", a digit
+// clipped off the phone number, and the "# B"/"# C"/"# D" cells turned to noise.
+const REAL_SCAN = [
+  "RBM",
+  "",
+  "Options: RO # 935943 éN",
+  "es Cust # 510459",
+  "",
+  "Tag #17910 Mercedes-Benz",
+  "",
+  "of ALPHARETTA",
+  "",
+  "345 McFarland Pkwy",
+  "Alpharetta, GA 30004",
+  "",
+  "Service Advisor:",
+  "",
+  "JOHNSON, BRANDON S L Name: : 25",
+  "Jill Blue : MERCEDES BENZ GLC300",
+  "",
+  "TRONo: 935943 Address: 12 CASCADE WAY * WINKM4GB9SF382775",
+  "Tag No: T7910 City-ST-Zip: CANTON, GA 30114 * SILVER",
+  "RO Open Date: 08-31-26 Home Ph:",
+  "Mileage In: 15258 Bus Ph: Prod Date: ppATE!",
+  "Complete by Time: (08-31-26 18:00 Cell Ph: 78 979-7260 Mibanr Exp § Stock No:",
+  "",
+  "wary 01-05-95 hiiGiDiR",
+  "Pay Method: CASH E-mail: jillblue628@gmail.com| HOME Delivery ¢ selinglic {71s",
+  "In Service : 01-01-25",
+  "",
+  "ESTIMATE AND AUTHORIZATION | | INE | OP CODE INSTRUCTIONS AND DESCRIPTIONS",
+  "",
+  "Original Estimate: # A | MPI (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT",
+  "Client Advised of Completion ~~ INSPECTION WHICH INCLUDES VIDEO",
+  "",
+  "ph pn Ya RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER",
+  "",
+  "to be done along with the necessary RECENT SERVICE; CHECK AND ADVISE",
+  "",
+  "materials. I agree that RBM is not",
+  "",
+  "responsible for loss or damage to vehicle",
+  "",
+  "i sat tbc I HE COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -",
+  "",
+  "¥ ie HERRON 4 200 eS0OTAIR Bray CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+  "",
+  "loss due to delays in returning my vehicle",
+  "",
+  "lieing] 0 fadibfaiis Riot, 888 | 0 PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH",
+  "",
+  "roadtesting and/or inspection. An express = 19.95 TO SERVICE DEPARTMENT",
+  "",
+  "repairs of this work order.",
+  "MOBILE SHOP COPY",
+].join("\n");
+
+// A second real scan, where the "Name:" label itself did not survive — the name
+// beside it did. Also: the Year cell read as a bare "2", and the VIN row, the
+// mileage and the open date dissolved altogether, so those stay empty.
+const REAL_SCAN_2 = [
+  "REM",
+  "RO # 934230 EN",
+  "Cust # 501550",
+  "Tag # T6885 Mercedes-Benz",
+  "of ALPHARETTA",
+  "345 McFarland Pkwy",
+  "Alpharetta, GA 30004",
+  "Service Advisor:",
+  "COREY,JEFF L",
+  "2",
+  "Model: MERCEDES BENZ S500 4",
+  "SEA DOMINON EXPRESS INC",
+  "JUSTIN LEE",
+  "oR i re jg sl vi esi",
+  "Tag No: T6885 City-ST-Zip: JOHNS CREEK, GA 30022-7125\" in i, WHITE",
+  "RO Open Date: Home Ph: / C 9% ne ee",
+  "Mileage In: Bus Ph: 13",
+  "Stock No:",
+  "SellingDIr: 17114",
+  "Warr Exp :",
+  "Delivery : 01-01-22",
+  "01-01-22",
+  "INSTRUCTIONS AND DESCRIPTIONS",
+  "Cell Ph: 567 455-3843",
+  "E-mail: JUSTINWLEE89@GMAIL.COM | HOME",
+  "In Service :",
+].join("\n");
+
 // The green-screen DISPATCH print-out, with a note stuck under it.
 const DISPATCH_TEXT = [
   "D I S P A T C H",
@@ -166,17 +259,27 @@ let failures = 0;
 const check = (c, l, extra) => { console.log((c ? "  ✓ " : "  ✗ ") + l + (c || extra === undefined ? "" : " — got " + JSON.stringify(extra))); if (!c) failures++; };
 const waitFor = async (fn, ms = 15000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(120); } return false; };
 
-// Stub the OCR engine: it returns the RO text only for a canvas that is taller
-// than it is wide, i.e. only once the sideways photo has been turned upright.
+// A scripted OCR engine stands in for the real one (which is a CDN download).
+// It plays a page that was fed through the scanner sideways: the which-way-up
+// probe — which runs in single-block mode, so every recognize() carries the
+// mode in force — only reads well on its third rotation (270°), and the read
+// that follows returns the repair order. ocr.js's own decisions are covered
+// directly in e2e-ocr-orient.mjs; this is the app wired to them.
 await page.addInitScript((roText) => {
   window.__ocrCalls = [];
+  const words = (n, conf) => Array.from({ length: n }, (_, i) => ({ text: "w" + i, confidence: conf }));
   window.Tesseract = {
     createWorker: function () {
+      let psm = null;
       return Promise.resolve({
+        setParameters: function (p) { psm = String(p.tessedit_pageseg_mode); return Promise.resolve(); },
         recognize: function (canvas) {
-          const upright = canvas.height > canvas.width;
-          window.__ocrCalls.push({ w: canvas.width, h: canvas.height, upright: upright });
-          return Promise.resolve({ data: { text: upright ? roText : "mmm wvvv nnnn" } });
+          const probe = psm === "6";
+          const probeIndex = probe ? window.__ocrCalls.filter((c) => c.probe).length + 1 : 0;
+          window.__ocrCalls.push({ psm: psm, probe: probe, probeIndex: probeIndex, w: canvas.width, h: canvas.height });
+          const good = probe ? (probeIndex === 3 ? 60 : 1) : 60;
+          const conf = probe ? (probeIndex === 3 ? 88 : 22) : 90;
+          return Promise.resolve({ data: { text: probe ? "" : roText, confidence: conf, words: words(good, Math.max(60, conf)) } });
         },
         terminate: function () { window.__ocrTerminated = (window.__ocrTerminated || 0) + 1; return Promise.resolve(); },
       });
@@ -207,6 +310,68 @@ check(form.lines[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFT
 check(form.lines[2].text === "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", "dealer RO: a dash at a line break is not treated as a split word", form.lines[2].text);
 check(!/TECH COPY/i.test(form.lines[3].text), "dealer RO: page footers stay out of the lines", form.lines[3].text);
 
+// ---------- Phase A1b: the VIN's own check digit ----------
+// Character 9 is computed over the whole number, so a misread almost never
+// survives it — which is how a good reading is told from a plausible wrong one.
+const vinChecks = await page.evaluate(() => ({
+  real1: window.__ros.vinCheckOk("W1NKM4GB9SF382775"),
+  real2: window.__ros.vinCheckOk("W1K6G6DB5NA078138"),
+  real3: window.__ros.vinCheckOk("4JGFB4GB9SB387878"),
+  misread1: window.__ros.vinCheckOk("W1NKMAGB9SF382775"),   // 4 read as A
+  misread2: window.__ros.vinCheckOk("W1NKM4GB0SF382775"),   // 9 read as 0
+  misread3: window.__ros.vinCheckOk("W1NKMAGB1SF382775"),   // both
+  short: window.__ros.vinCheckOk("W1NKM4GB9SF38277"),
+}));
+check(vinChecks.real1 && vinChecks.real2 && vinChecks.real3, "check digit: real VINs pass", vinChecks);
+check(!vinChecks.misread1 && !vinChecks.misread2 && !vinChecks.misread3,
+  "check digit: the readings a marginal scan gave for one of them all fail", vinChecks);
+check(!vinChecks.short, "check digit: something that isn't 17 characters fails", vinChecks.short);
+
+const vinPick = await page.evaluate(() => window.__ros.parseScan(
+  "Tag No: T7910 VIN: W1NKMAGB9SF382775 Color: SILVER",
+  null,
+  { vin: "W1NKM4GB9SF382775" }
+).vin);
+check(vinPick === "W1NKM4GB9SF382775",
+  "check digit: a close read of the VIN row beats the whole-page read when it checks out", vinPick);
+
+const vinKeep = await page.evaluate(() => window.__ros.parseScan(
+  "Tag No: T7910 VIN: W1NKM4GB9SF382775 Color: SILVER",
+  null,
+  { vin: "W1NKMAGB9SF382775" }
+).vin);
+check(vinKeep === "W1NKM4GB9SF382775",
+  "check digit: ...and loses to it when the page's own reading is the one that checks out", vinKeep);
+
+// ---------- Phase A2: the same form as OCR really reads it ----------
+const real = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN);
+check(real.ro === "935943", "real scan: RO number", real.ro);
+check(real.tag === "T7910", "real scan: the tag that looks like a tag wins over the mangled one", real.tag);
+check(real.vin === VIN, "real scan: VIN, with OCR's I-for-1 corrected", real.vin);
+check(real.vehicle === "2025 GLC300", "real scan: vehicle, with the year taken from the VIN when the Year cell is lost", real.vehicle);
+check(real.color === "Silver", "real scan: colour found by name when its label is lost — and not from “Jill Blue”", real.color);
+check(real.mileage === "15258", "real scan: mileage", real.mileage);
+check(real.opened === "08-31-26", "real scan: open date", real.opened);
+check(real.advisor === "Johnson, Brandon S L", "real scan: advisor, cut off the next field on the same row", real.advisor);
+check(real.customer === "Jill Blue", "real scan: customer, taken from the row below its own empty cell", real.customer);
+check(real.phone === "78-979-7260", "real scan: the clipped phone number is shown rather than dropped", real.phone);
+check(real.email === "jillblue628@gmail.com", "real scan: e-mail", real.email);
+check(real.lines.length >= 4, "real scan: the flat text still yields the line descriptions", real.lines.length);
+check(real.lines.some((l) => /CUSTOMER STATES SCREEN CONTINUES TO GLITCH/.test(l.text)), "real scan: the customer's complaint survives", real.lines.map((l) => l.text));
+check(!real.lines.some((l) => /hereby authorize|responsible for loss/i.test(l.text)), "real scan: the legal small print stays out of the lines", real.lines.map((l) => l.text));
+
+const real2 = await page.evaluate((t) => window.__ros.parseScan(t), REAL_SCAN_2);
+check(real2.ro === "934230", "second real scan: RO number", real2.ro);
+check(real2.tag === "T6885", "second real scan: tag", real2.tag);
+check(real2.color === "White", "second real scan: colour", real2.color);
+check(real2.advisor === "Corey, Jeff L", "second real scan: advisor", real2.advisor);
+check(real2.customer === "SEA DOMINON EXPRESS INC, JUSTIN LEE",
+  "second real scan: the customer is found from the address block when its own label is lost", real2.customer);
+check(real2.vehicle === "S500 4", "second real scan: the model, with no year to be had", real2.vehicle);
+check(real2.vin === "" && real2.mileage === "" && real2.opened === "",
+  "second real scan: fields the scan destroyed stay empty rather than being guessed",
+  { vin: real2.vin, mileage: real2.mileage, opened: real2.opened });
+
 const disp = await page.evaluate((t) => window.__ros.parseScan(t), DISPATCH_TEXT);
 check(disp.source === "dispatch", "dispatch: recognised as a dispatch screen", disp.source);
 check(disp.ro === "934687", "dispatch: reads the RO number", disp.ro);
@@ -217,6 +382,161 @@ check(disp.vehicle === "2026 E53E", "dispatch: reads the vehicle", disp.vehicle)
 check(disp.mileage === "1499", "dispatch: reads the mileage", disp.mileage);
 check(disp.lines.map((l) => l.text).join("|") === "MPI-RBM OF AL|CUSTOMER STAT|COMPLIMENTARY|CLIENT DECLIN", "dispatch: reads all four lines without their number columns", disp.lines.map((l) => l.text));
 check(/MBUX Display Goes Blank/.test(disp.note), "dispatch: keeps the note written under the print-out", disp.note);
+
+// ---------- Phase A3: the line table read from where things sat on the page ----------
+// Two columns, as the form really prints: legal small print on the left, the
+// line table on the right, and the engine reading each table row as one line.
+const laid = await page.evaluate(() => {
+  // Rows carry their words, because that is what the engine returns and what
+  // makes a two-column row cuttable.
+  const row = (text, x0, y0, w, h) => {
+    const parts = text.split(" ");
+    let x = x0;
+    const words = parts.map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8, conf: 90 }; });
+    return { text, x0, y0, x1: x0 + w, y1: y0 + h, words };
+  };
+  // One row holding the legal column, the LINE/OP cells and the description.
+  const merged = (legal, lx, mid, mx, desc, dx, y0, h, midConf) => {
+    const words = [];
+    const run = (s, from, conf) => { let x = from; s.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11, conf }); x += t.length * 11 + 8; }); return x; };
+    run(legal, lx, 85);
+    run(mid, mx, midConf == null ? 92 : midConf);
+    const end = run(desc, dx, 90);
+    const text = [legal, mid, desc].filter(Boolean).join(" ");
+    return { text, x0: lx, y0, x1: end, y1: y0 + h, words };
+  };
+  return window.__ros.layoutLines([
+    row("ESTIMATE AND AUTHORIZATION", 80, 500, 300, 18),
+    // The heading is centred over a wide column: "INSTRUCTIONS" starts at 1483,
+    // far right of where the descriptions actually begin.
+    { text: "LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", x0: 630, y0: 529, x1: 1877, y1: 545, words: [
+      { text: "LINE", x0: 630, x1: 678 }, { text: "OP", x0: 748, x1: 779 }, { text: "CODE", x0: 787, x1: 847 },
+      { text: "INSTRUCTIONS", x0: 1483, x1: 1648 }, { text: "AND", x0: 1656, x1: 1705 }, { text: "DESCRIPTIONS", x0: 1714, x1: 1877 },
+    ] },
+    // Rows the engine merged ACROSS the two columns — the legal small print, the
+    // LINE and OP CODE cells and the description all in one row, which is what
+    // a real scan of this form comes back as.
+    merged("Original Estimate:", 81, "# A | MPI", 602, "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 900, 572, 19),
+    merged("Client Advised of Completion ~~", 81, "", 0, "INSPECTION WHICH INCLUDES VIDEO", 900, 600, 16),
+    row("I hereby authorize the repair work set forth to be done", 81, 624, 560, 17),
+    merged("materials. I agree that RBM is not", 81, "# B", 602, "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 900, 644, 19),
+    merged("responsible for loss or damage to vehicle", 81, "", 0, "RECENT SERVICE; CHECK AND ADVISE", 900, 672, 16),
+    row("or articles in the vehicle due to fire, theft,", 81, 696, 560, 17),
+    merged("i sat tbc I HE", 81, "# C | CV", 602, "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 900, 716, 19),
+    merged("loss due to delays in returning my vehicle", 81, "", 0, "CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 900, 744, 16),
+    row("to me by the time specified. I authorize", 81, 768, 560, 17),
+    merged("lieing] 0 fadibfaiis Riot, 888", 81, "# D | CW", 602, "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 900, 788, 19),
+    merged("roadtesting and/or inspection. An express =", 81, "", 0, "$19.95 TO SERVICE DEPARTMENT", 900, 816, 16),
+    row("mechanic's lien is hereby acknowledged on this vehicle", 81, 840, 560, 17),
+    row("TECH COPY MOBILE SHOP COPY", 80, 1003, 400, 13),
+  ]);
+});
+check(laid.length === 4, "layout: four lines, one per table row, out of rows that merged the columns", laid.length);
+check(laid.map((l) => l.op).join("|") === "MPI||CV|CW", "layout: the op code is read from the cell beside the description", laid.map((l) => l.op));
+check(laid[0].text === "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+  "layout: a wrapped description is joined to the row it belongs to", laid[0].text);
+check(laid[1].text === "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",
+  "layout: the line with no op code keeps its whole description", laid[1].text);
+check(!laid.some((l) => /hereby authorize|responsible for loss|TECH COPY/i.test(l.text)),
+  "layout: the neighbouring column of small print is left out entirely", laid.map((l) => l.text));
+
+// The same table, but with the LINE and OP CODE cells read as the noise a real
+// scan produces — "ph pn Ya", "i sat tbc I HE", "lieing] 0 fadibfaiis Riot, 888".
+// A wrong op code is worse than none, so those must come back empty while the
+// descriptions still arrive intact.
+const noisy = await page.evaluate(() => {
+  const merged = (legal, lx, mid, mx, desc, dx, y0, h, midConf) => {
+    const words = [];
+    const run = (s, from, conf) => { let x = from; s.split(" ").filter(Boolean).forEach((t) => { words.push({ text: t, x0: x, x1: x + t.length * 11, conf }); x += t.length * 11 + 8; }); return x; };
+    run(legal, lx, 85);
+    run(mid, mx, midConf == null ? 92 : midConf);
+    const end = run(desc, dx, 90);
+    return { text: [legal, mid, desc].filter(Boolean).join(" "), x0: lx, y0, x1: end, y1: y0 + h, words };
+  };
+  return window.__ros.layoutLines([
+    { text: "LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS", x0: 630, y0: 529, x1: 1877, y1: 545, words: [
+      { text: "LINE", x0: 630, x1: 678, conf: 95 }, { text: "OP", x0: 748, x1: 779, conf: 95 }, { text: "CODE", x0: 787, x1: 847, conf: 95 },
+      { text: "INSTRUCTIONS", x0: 1483, x1: 1648, conf: 95 }, { text: "AND", x0: 1656, x1: 1705, conf: 95 }, { text: "DESCRIPTIONS", x0: 1714, x1: 1877, conf: 95 },
+    ] },
+    merged("Original Estimate:", 81, "# A MPI", 602, "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 900, 572, 19),
+    merged("Client Advised of Completion", 81, "", 0, "INSPECTION WHICH INCLUDES VIDEO", 900, 600, 16),
+    merged("ph pn", 81, "Ya", 700, "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER", 900, 644, 19, 46),
+    merged("materials. I agree", 81, "", 0, "RECENT SERVICE; CHECK AND ADVISE", 900, 672, 16),
+    merged("i sat tbc", 81, "I HE", 690, "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -", 900, 716, 19, 51),
+    merged("loss due to delays", 81, "", 0, "CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT", 900, 744, 16),
+    merged("lieing] 0", 81, "fadibfaiis Riot, 888", 640, "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE", 900, 788, 19, 38),
+    merged("roadtesting and/or", 81, "", 0, "$19.95 TO SERVICE DEPARTMENT", 900, 816, 16),
+  ]);
+});
+check(noisy.length === 4, "noisy op cells: the four descriptions still come through", noisy.length);
+check(noisy.map((l) => l.op).join("|") === "MPI|||", "noisy op cells: an unreadable op code is left blank, never guessed", noisy.map((l) => l.op));
+check(/^RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE/.test(noisy[1].text),
+  "noisy op cells: the noise stays out of the description too", noisy[1].text);
+
+// A second real form, where the engine read the heading row as "INSTRUCTIONS AND
+// DESCRIPTIONS" alone — no LINE or OP CODE beside it. That heading is CENTRED
+// over its column, so its own left edge sits a word or two inside every
+// description; taking it as the column edge ate the first word of every row
+// ("COMPLIMENTARY RBM…" became "RBM…"). With nothing to the left of the heading
+// to measure from, the descriptions are found by the other thing that separates
+// the two columns: the table SHOUTS and the small print does not.
+const centred = await page.evaluate(() => {
+  const row = (text, x0, y0, w, h) => {
+    let x = x0;
+    const words = text.split(" ").filter(Boolean).map((t) => { const wx = x; x += t.length * 11 + 8; return { text: t, x0: wx, x1: x - 8, conf: 88 }; });
+    return { text, x0, y0, x1: x0 + w, y1: y0 + h, words };
+  };
+  return window.__ros.layoutLines([
+    // Centred heading, and nothing read to the left of it.
+    row("INSTRUCTIONS AND DESCRIPTIONS", 1100, 500, 420, 16),
+    row("Original Estimate: 0. oo afar dl 7 O00 Tl a HE mer eR CUSTOMER STATES THAT THE BATTERY WARNING", 81, 560, 1800, 18),
+    row("Client Advised of Completion ~~~ LIGHT WAS ON 12 VOLT CRITICAL", 81, 586, 1800, 18),
+    row("I hereby authorize the repair work set forth", 81, 620, 560, 17),
+    row("CUSTOMER STATES THAT THE ENGINE LIGHT WAS ON, OFF", 640, 646, 1200, 18),
+    row("NOW", 640, 672, 90, 16),
+    row("materials. I agree that RBM is not", 81, 700, 560, 17),
+    row("COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT", 640, 726, 1200, 18),
+    row("INSPECTION WHICH INCLUDES VIDEO", 640, 752, 800, 16),
+    row("or articles in the vehicle due to fire, theft,", 81, 780, 560, 17),
+    // The engine split "CHARGE" off the end of this row into a fragment of its
+    // own, and returned it first — it sits at the same height, further right.
+    row("CHARGH", 1850, 804, 90, 17),
+    row("PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH -", 640, 806, 1300, 18),
+    row("$19.95 TO SERVICE DEPARTMENT", 640, 832, 700, 16),
+  ]);
+});
+check(centred.length === 4, "centred heading: one line per table row", centred.length);
+check(centred[0].text === "CUSTOMER STATES THAT THE BATTERY WARNING LIGHT WAS ON 12 VOLT CRITICAL",
+  "centred heading: the description keeps its first word, and the noise in front of it is dropped", centred[0].text);
+check(centred[1].text === "CUSTOMER STATES THAT THE ENGINE LIGHT WAS ON, OFF NOW",
+  "centred heading: a one-word continuation row is kept", centred[1].text);
+check(centred[2].text === "COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+  "centred heading: no first word is eaten off either row", centred[2].text);
+check(!centred.some((l) => /hereby authorize|materials\. I agree|or articles/i.test(l.text)),
+  "centred heading: the small print beside the table stays out", centred.map((l) => l.text));
+check(centred[3].text === "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH $19.95 TO SERVICE DEPARTMENT",
+  "a word split off the end of a row goes back where it was read, not in front", centred[3].text);
+
+// ---------- Phase A4: a PDF text layer keeps each word's width ----------
+// A born-digital PDF hands over one text item per heading cell. columnEdge()
+// puts the descriptions column where the heading before INSTRUCTIONS ENDS, so
+// a word that ended where it began would move the cut a whole cell to the left
+// and hand the op-code column to the description.
+const pdfRows = await page.evaluate(() => {
+  const item = (str, x, y, width) => ({ str, width, transform: [10, 0, 0, 10, x, y] });
+  const rows = window.__ros.itemsToRows([
+    item("LINE", 630, 500, 40), item("OP", 700, 500, 22), item("CODE", 730, 500, 45),
+    item("INSTRUCTIONS AND DESCRIPTIONS", 1000, 500, 300),
+    item("A", 640, 480, 10), item("CV", 705, 480, 24), item("REPLACE BRAKE PADS", 800, 480, 190),
+  ]);
+  const hdr = rows[0];
+  const code = hdr.words.find((w) => w.text === "CODE");
+  return { first: hdr.text, code, hdrRight: hdr.x1, n: rows.length };
+});
+check(pdfRows.n === 2 && /^LINE OP CODE/.test(pdfRows.first), "text items are grouped into rows, top of the page first", pdfRows);
+check(!!pdfRows.code && pdfRows.code.x0 === 730 && pdfRows.code.x1 === 775,
+  "a text-layer word keeps its width (x1 = x + width), so the column cut lands at the heading's end", pdfRows.code);
+check(pdfRows.hdrRight === 1300, "the row's right edge is the end of its last item", pdfRows.hdrRight);
 
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
@@ -277,10 +597,13 @@ await page.click("#scan-btn");
 await page.setInputFiles("#scan-input", pngPath);
 check(await waitFor(async () => (await page.locator("#scan-review:not([hidden])").count()) === 1), "an image is read by the OCR engine");
 const calls = await page.evaluate(() => window.__ocrCalls);
-check(calls.length > 1, "the scan is probed for which way up it is", calls.length);
-check(calls[calls.length - 1].upright, "the page it finally reads is the one turned upright", calls[calls.length - 1]);
+const scan = await page.evaluate(() => window.__ros.lastScan);
+check(calls.some((c) => c.probe), "the scan is probed for which way up it is", calls.map((c) => c.psm));
+check(scan && scan.angle === 270, "the rotation the engine could read is the one used", scan);
+check(calls.filter((c) => c.probe).length === 3, "probing stops as soon as a rotation reads well", calls.filter((c) => c.probe).length);
+check(calls[calls.length - 1].psm === "3", "the page itself is read in document mode, not the engine's one-block default", calls[calls.length - 1]);
 check((await page.evaluate(() => window.__ocrTerminated || 0)) >= 1, "the OCR worker is shut down when the read finishes");
-check((await page.inputValue("#rv-ro")) === "935943", "the OCR'd photo fills the review in too");
+check((await page.inputValue("#rv-ro")) === "935943", "the sideways photo fills the review in as if it had been the right way up");
 await page.keyboard.press("Escape");
 check(await waitFor(async () => (await page.locator("#scan-modal.show").count()) === 0), "Escape closes the scan window");
 

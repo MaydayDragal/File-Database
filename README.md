@@ -119,12 +119,30 @@ once and they are read together (up to four). Reading happens on this device.
 - A PDF that carries its own text layer is read directly. Anything else — a photo,
   a scanned PDF — is recognized with Tesseract.js, downloaded from a CDN on first
   use and then cached by the platform service worker for offline use.
-- A page fed in sideways or upside-down is straightened first: the scanner reads a
-  small copy at each rotation and keeps whichever one reads like a repair order.
+- A page fed in sideways or upside-down is straightened first. The scanner reads a
+  band of the page at each rotation and keeps the one the engine is actually
+  confident about — on a 300 dpi repair order the right way up scores dozens of
+  confident words and every other rotation next to none, so it is not a close
+  call. A page that is already upright is settled by the first check.
 - Both dealer layouts are understood — the printed RO form (`RO No`, `Tag No`,
   `VIN`, `Year`/`Model`, and the `# A`/`# B` line table with its op codes) and the
   green-screen **DISPATCH** print-out (`TAG:`, `RO:`, `VEH:`, and its numbered line
   rows). Text written under a dispatch print-out is offered as an extra line.
+- The line table is read from **where each word sat on the page**, not from the
+  flat text. On a two-column form the flattened text interleaves the legal small
+  print with the line descriptions, and the `# B`/`# C` cells often come back as
+  noise — so every row is cut at the column boundary, the descriptions are taken
+  on their own, and they are split into lines on the gaps between table rows.
+  This holds whether the engine returned the two columns as one row or as two.
+- **The VIN is read twice** — once with the page, then again on its own: the row
+  it sits on is cropped out, enlarged, and read with the engine restricted to a
+  VIN's alphabet. A VIN carries a check digit at character 9, so the two readings
+  can be judged rather than guessed between; if neither passes, the review says
+  so instead of presenting a misread as fact.
+- Fields OCR commonly mangles have a second route: the model year is decoded from
+  the VIN when the `Year` cell is lost, the model from the printed make and model,
+  the colour from the colour word itself when its label is reduced to a stray line,
+  and the tag from whichever of its two printings actually looks like a tag.
 - Nothing is created until you say so: the fields and lines that were read are
   shown for review first, with every line individually editable, droppable, or
   excluded, and the full recognized text underneath in case something was missed.
@@ -135,6 +153,25 @@ once and they are read together (up to four). Reading happens on this device.
 
 Recognition quality decides how much comes across. Check the review step before
 creating — a poor photo produces poor fields, and handwriting is rarely read well.
+
+### How scans are read
+
+Every app that reads a scan — Vault's VIN scan, LI's document import, the
+Toolbox's **Image to Text** and LI rename tools, and the RO scanner — goes
+through [ocr.js](ocr.js), which corrects two defaults that quietly ruin a read:
+
+- **Tesseract reads a page as one block of text unless told otherwise**, which
+  loses most of a form. Asking for automatic page segmentation instead took a
+  300 dpi repair order from 4 of 16 expected fields to 14 of 16.
+- **A page scanned sideways is not an error to the engine** — it returns a few
+  low-confidence scraps that look like a sparse page. The orientation is now
+  measured before the page is read, by recognizing a band at each rotation and
+  counting the words the engine is confident about.
+
+Where an app has a definite answer in mind — a VIN, an LI document number — it
+reads the page as it arrived and only checks the orientation if that read came
+back without one, so a correctly-fed page costs nothing extra. See
+[FEATURES.md](FEATURES.md) for the measurements behind the thresholds.
 
 - **Add files** uploads through the shell while keeping the RO tab open. The
   shell's normal filename routing still applies: LI-named PDFs go to LI Documents,

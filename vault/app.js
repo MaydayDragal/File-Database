@@ -2028,6 +2028,7 @@
   // going in the background (its lane's worker is terminated) — we just stop waiting.
   const OCR_LOAD_MS = window.__VIN_OCR_LOAD_MS || 15000;       // cap for loading/creating the OCR engine
   const OCR_RECOGNIZE_MS = window.__VIN_OCR_RECOGNIZE_MS || 45000;  // cap for recognizing one image / page
+  const OCR_ORIENT_MS = window.__VIN_OCR_ORIENT_MS || 45000;       // ...plus the which-way-up check, when one is needed
   function vinGuard(promise, ms) {
     return new Promise((resolve, reject) => {
       let done = false;
@@ -2040,6 +2041,36 @@
   // Tagged OCR errors so the scan can react: unavailable (engine won't load →
   // give up OCR for the rest of the run) vs skip (this one file) vs cancel.
   function ocrErr(kind) { const e = new Error(kind); e[kind] = true; return e; }
+
+  // Recognize one page/image for VIN detection.
+  //
+  // Two things the raw engine gets wrong on workshop paperwork, both fixed in
+  // ../ocr.js: it defaults to reading a page as ONE block of text, which loses
+  // most of a datacard or an RO, and it has no idea when a page went through
+  // the scanner sideways. So the read runs in document mode, and when it comes
+  // back with no VIN in it the page is checked for which way up it is and read
+  // again — a cost paid only by files that were going to be a miss anyway.
+  //
+  // Returns { text, angle }. `angle` lets later pages of the same document skip
+  // the check; pass a known angle in to use it.
+  async function ocrRead(w, src, soFar, knownAngle) {
+    const orient = window.OcrOrient;
+    // The helper needs something it can measure and turn. Without it — or when
+    // the image couldn't be drawn onto a canvas — read the source as it is.
+    if (!orient || !src || !src.width) {
+      const r = await vinGuard(w.recognize(src), OCR_RECOGNIZE_MS);
+      return { text: (r.data && r.data.text) || "", angle: 0 };
+    }
+    const opts = { readEdge: (s) => Math.max(s.width || 2200, s.height || 2200), cancelled: () => vinCancel };
+    if (knownAngle) {
+      const r = await vinGuard(orient.readAt(w, src, knownAngle, opts), OCR_RECOGNIZE_MS);
+      return { text: r.text, angle: knownAngle };
+    }
+    const r = await vinGuard(orient.readSmart(w, src, Object.assign({
+      accept: (t) => findVins((soFar || "") + "\n" + t, true).length > 0,
+    }, opts)), OCR_RECOGNIZE_MS + OCR_ORIENT_MS);
+    return { text: r.text, angle: r.angle };
+  }
 
   // Draw an image blob onto a bounded canvas so huge photos OCR quickly.
   function blobToCanvas(blob, maxSide) {
@@ -2102,7 +2133,7 @@
       let w;
       try { w = await getWorker(); }
       catch (e) { throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrUnavailable"); } // engine won't load — stop OCR for this run
-      let out = "";
+      let out = "", ocrAngle = 0;
       const oPages = Math.min(doc.numPages, 3);
       for (let i = 1; i <= oPages; i++) {
         let canvas = null;
@@ -2118,8 +2149,10 @@
           await page.render({ canvasContext: ctx, viewport: vp }).promise;
         } catch (e) { if (canvas) canvas.width = canvas.height = 0; continue; } // bad page render — skip it
         try {
-          const r = await vinGuard(w.recognize(canvas), OCR_RECOGNIZE_MS);
-          out += ((r.data && r.data.text) || "") + "\n";
+          const page1 = i === 1;
+          const got = await ocrRead(w, canvas, (baseText || "") + "\n" + text + "\n" + out, page1 ? null : ocrAngle);
+          if (page1) ocrAngle = got.angle;
+          out += got.text + "\n";
         } catch (e) {
           canvas.width = canvas.height = 0;
           throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrSkip"); // OCR stalled — leave this file for later
@@ -2151,8 +2184,8 @@
       catch (e) { throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrUnavailable"); } // engine won't load — stop OCR for this run
       try {
         const cv = await blobToCanvas(rec.blob, 2200);
-        const r = await vinGuard(w.recognize(cv || rec.blob), OCR_RECOGNIZE_MS);
-        text += "\n" + ((r.data && r.data.text) || "");
+        const got = await ocrRead(w, cv || rec.blob, text);
+        text += "\n" + got.text;
       } catch (e) {
         throw ocrErr(e && e.ocrCancel ? "ocrCancel" : "ocrSkip"); // OCR stalled — leave this file for later
       }
