@@ -517,6 +517,27 @@ check(!centred.some((l) => /hereby authorize|materials\. I agree|or articles/i.t
 check(centred[3].text === "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH $19.95 TO SERVICE DEPARTMENT",
   "a word split off the end of a row goes back where it was read, not in front", centred[3].text);
 
+// ---------- Phase A4: a PDF text layer keeps each word's width ----------
+// A born-digital PDF hands over one text item per heading cell. columnEdge()
+// puts the descriptions column where the heading before INSTRUCTIONS ENDS, so
+// a word that ended where it began would move the cut a whole cell to the left
+// and hand the op-code column to the description.
+const pdfRows = await page.evaluate(() => {
+  const item = (str, x, y, width) => ({ str, width, transform: [10, 0, 0, 10, x, y] });
+  const rows = window.__ros.itemsToRows([
+    item("LINE", 630, 500, 40), item("OP", 700, 500, 22), item("CODE", 730, 500, 45),
+    item("INSTRUCTIONS AND DESCRIPTIONS", 1000, 500, 300),
+    item("A", 640, 480, 10), item("CV", 705, 480, 24), item("REPLACE BRAKE PADS", 800, 480, 190),
+  ]);
+  const hdr = rows[0];
+  const code = hdr.words.find((w) => w.text === "CODE");
+  return { first: hdr.text, code, hdrRight: hdr.x1, n: rows.length };
+});
+check(pdfRows.n === 2 && /^LINE OP CODE/.test(pdfRows.first), "text items are grouped into rows, top of the page first", pdfRows);
+check(!!pdfRows.code && pdfRows.code.x0 === 730 && pdfRows.code.x1 === 775,
+  "a text-layer word keeps its width (x1 = x + width), so the column cut lands at the heading's end", pdfRows.code);
+check(pdfRows.hdrRight === 1300, "the row's right edge is the end of its last item", pdfRows.hdrRight);
+
 // ---------- Phase B: a PDF with a text layer goes straight to review ----------
 await page.click("#scan-btn");
 check(await page.locator("#scan-modal.show").count() === 1, "the scan window opens");

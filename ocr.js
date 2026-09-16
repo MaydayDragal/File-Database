@@ -244,6 +244,9 @@
   function readUpright(worker, src, opts) {
     opts = opts || {};
     return bestAngle(worker, src, opts).then(function (angle) {
+      // The probe stops when the caller cancels, but the full read is the
+      // expensive part — never start it for a job that has been abandoned.
+      if (opts.cancelled && opts.cancelled()) return { text: "", angle: angle, data: null, probed: true, cancelled: true };
       return readAt(worker, src, angle, opts).then(function (res) { res.probed = true; return res; });
     });
   }
@@ -280,7 +283,7 @@
         return first;
       }
       return bestAngle(worker, src, opts).then(function (angle) {
-        if (!angle) { first.probed = true; return first; }
+        if (!angle || (opts.cancelled && opts.cancelled())) { first.probed = true; return first; }
         return readAt(worker, src, angle, opts).then(function (res) { res.probed = true; return res; });
       });
     });

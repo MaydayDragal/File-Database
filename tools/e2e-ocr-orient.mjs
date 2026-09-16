@@ -182,6 +182,31 @@ const nothingBetter = await page.evaluate(async () => {
 check(nothingBetter.angle === 0 && nothingBetter.text === "scraps" && nothingBetter.calls === 5,
   "when no rotation reads better, the first read is kept rather than read again", nothingBetter);
 
+// ---------- cancellation: an abandoned job must not start the expensive read ----------
+// The probe already stops when the caller cancels; the full-page read that
+// follows it is the costly part and used to run regardless. Here the job is
+// cancelled after the first probe, so nothing in document mode may follow.
+const cancelledUpright = await page.evaluate(async () => {
+  let cancel = false;
+  const m = window.__mk(() => { cancel = true; return { good: 0, conf: 10, text: "should not be read" }; });
+  const r = await OcrOrient.readUpright(m.worker, window.__src, { cancelled: () => cancel });
+  return { text: r.text, cancelled: r.cancelled === true, modes: m.calls.map((c) => c.psm).join(",") };
+});
+check(cancelledUpright.modes === "6" && cancelledUpright.text === "" && cancelledUpright.cancelled,
+  "readUpright cancelled during the probe never starts the full-page read", cancelledUpright);
+
+const cancelledSmart = await page.evaluate(async () => {
+  let cancel = false;
+  const m = window.__mk(({ probe, probeIndex }) => {
+    if (probe) { cancel = true; return { good: 60, conf: 88 }; }   // a rotation that WOULD win
+    return { good: 3, conf: 25, text: "scraps" };
+  });
+  const r = await OcrOrient.readSmart(m.worker, window.__src, { accept: () => false, cancelled: () => cancel });
+  return { text: r.text, angle: r.angle, modes: m.calls.map((c) => c.psm).join(",") };
+});
+check(cancelledSmart.modes === "3,6" && cancelledSmart.text === "scraps" && cancelledSmart.angle === 0,
+  "readSmart cancelled during the probe keeps the first read instead of re-reading", cancelledSmart);
+
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");
 await browser.close();
