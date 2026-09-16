@@ -1,0 +1,447 @@
+{
+ "captured": {
+  "commit": "4b4ab9a",
+  "node": "v22.22.2",
+  "at": "2026-09-16T19:18:42.479Z"
+ },
+ "cases": [
+  {
+   "id": "wmi-list",
+   "fn": "wmi",
+   "out": [
+    "4JG",
+    "55S",
+    "8AC",
+    "9BM",
+    "MB1",
+    "W1K",
+    "W1N",
+    "W1V",
+    "W1W",
+    "W1X",
+    "W1Y",
+    "WD3",
+    "WD4",
+    "WDB",
+    "WDC",
+    "WDD",
+    "WDF",
+    "WME",
+    "WMX"
+   ]
+  },
+  {
+   "id": "looks-real-4JGFB4GB9SB387878",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-W1KLF4HB1RA068698",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-W1K2140471A068698",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-W1NKM4GB9SF382775",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-W1K6G6DB5NA078138",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-WDD2050091R123456",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-WDB2030461A654321",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-real-WDC1660241A555777",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-junk-FREEMAPUPDATES50A",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-000000000000000ER",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-000000000000000FR",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-112600009311006RE",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-W1TH0UTL1M1TAT10N",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-DR1VEAPPL1CAT10NS",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-junk-1HGCM82633A004352",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-few-digits",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "looks-all-digits-after-wmi",
+   "fn": "looksLikeVin",
+   "out": true
+  },
+  {
+   "id": "looks-long-letter-run",
+   "fn": "looksLikeVin",
+   "out": false
+  },
+  {
+   "id": "labelled-vin",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "unlabelled-vin",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1NKM4GB9SF382775"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "lowercase-input",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1NKM4GB9SF382775"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "datacard-vin-and-fin",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": [
+     "W1K2140471A068698"
+    ]
+   }
+  },
+  {
+   "id": "fin-label-german",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": [
+     "W1K2140471A068698"
+    ]
+   }
+  },
+  {
+   "id": "fgstnr-label",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": [
+     "W1K2140471A068698"
+    ]
+   }
+  },
+  {
+   "id": "unlabelled-baumuster-alongside-vin",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": [
+     "W1K2140471A068698"
+    ]
+   }
+  },
+  {
+   "id": "unlabelled-baumuster-alone",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1K2140471A068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "vin-label-wins-over-fin-label",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "split-once",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "split-per-char",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "split-too-wide",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "nbsp-split",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "slice-of-longer-code",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "digit-before",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "punctuation-around",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "filename",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "WDD2130461A123456"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "engine-number",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "blank-field",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "prose-lookalike",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "honda",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-off-misread",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-on-misread-O",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-on-misread-I-Q",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1KLF4HB1RA068698"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-on-prose",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-on-prose-run",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "fuzzy-on-real-untouched",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1NKM4GB9SF382775"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "two-vehicles",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [
+     "W1NKM4GB9SF382775",
+     "W1K6G6DB5NA078138"
+    ],
+    "fins": []
+   }
+  },
+  {
+   "id": "cap-per-file",
+   "fn": "findVins",
+   "out": [
+    "WDD20500911000000",
+    "WDD20500911000001",
+    "WDD20500911000002",
+    "WDD20500911000003",
+    "WDD20500911000004",
+    "WDD20500911000005",
+    "WDD20500911000006",
+    "WDD20500911000007",
+    "WDD20500911000008",
+    "WDD20500911000009",
+    "WDD20500911000010",
+    "WDD20500911000011",
+    "WDD20500911000012",
+    "WDD20500911000013",
+    "WDD20500911000014",
+    "WDD20500911000015",
+    "WDD20500911000016",
+    "WDD20500911000017",
+    "WDD20500911000018",
+    "WDD20500911000019",
+    "WDD20500911000020",
+    "WDD20500911000021",
+    "WDD20500911000022",
+    "WDD20500911000023",
+    "WDD20500911000024"
+   ]
+  },
+  {
+   "id": "cap-per-file-count",
+   "fn": "findVins",
+   "out": [
+    "WDD20500911000000",
+    "WDD20500911000001",
+    "WDD20500911000002",
+    "WDD20500911000003",
+    "WDD20500911000004"
+   ]
+  },
+  {
+   "id": "empty",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  },
+  {
+   "id": "no-text",
+   "fn": "findVinsDetailed",
+   "out": {
+    "vins": [],
+    "fins": []
+   }
+  }
+ ]
+}

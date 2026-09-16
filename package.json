@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A private, offline PWA file database for documents, videos, photos, PDFs and text. Runs entirely in the browser \u2014 no install or admin rights required.",
+  "description": "A private, offline PWA file database for documents, videos, photos, PDFs and text. Runs entirely in the browser — no install or admin rights required.",
   "scripts": {
     "start": "python3 -m http.server 8080",
     "icons": "python3 tools/gen_icons.py",
-    "test": "node tools/test-static.mjs && node tools/test-li-number.mjs && node tools/test-backup-format.mjs && node tools/test-blob-integrity.mjs && node tools/run-e2e.mjs",
+    "test": "node tools/test-static.mjs && node tests/unit/run.mjs && node tools/test-li-number.mjs && node tools/test-backup-format.mjs && node tools/test-blob-integrity.mjs && node tools/test-golden-ro.mjs && node tools/run-e2e.mjs",
     "test:vault": "node tools/e2e.mjs",
     "test:merge": "node tools/e2e-merge.mjs",
     "test:inventory": "node tools/e2e-inventory.mjs",
@@ -29,7 +29,10 @@
     "test:integrity": "node tools/test-blob-integrity.mjs",
     "test:e2e": "node tools/run-e2e.mjs",
     "vendor:pdfjs": "node tools/vendor-pdfjs.mjs",
-    "test:pdf-security": "node tools/e2e-pdf-security.mjs"
+    "test:pdf-security": "node tools/e2e-pdf-security.mjs",
+    "test:unit": "node tests/unit/run.mjs",
+    "test:golden-ro": "node tools/test-golden-ro.mjs",
+    "golden:capture": "node tools/capture-golden.mjs"
   },
   "repository": {
     "type": "git",
