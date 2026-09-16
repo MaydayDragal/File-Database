@@ -1206,7 +1206,7 @@
       var x = tr[4] || 0, y = tr[5] || 0, h = Math.abs(tr[3] || 10), w = it.width || 0;
       var key = Math.round(y / 3);
       if (!rows[key]) rows[key] = { parts: [], y: y, h: h, x0: x, x1: x + w };
-      rows[key].parts.push({ x: x, s: it.str });
+      rows[key].parts.push({ x: x, w: w, s: it.str });
       if (x < rows[key].x0) rows[key].x0 = x;
       if (x + w > rows[key].x1) rows[key].x1 = x + w;
       if (h > rows[key].h) rows[key].h = h;
@@ -1218,7 +1218,11 @@
         return {
           text: squash(parts.map(function (p) { return p.s; }).join(" ")),
           x0: r.x0, x1: r.x1, y0: -r.y, y1: -r.y + r.h,     // flip so y counts down the page
-          words: parts.map(function (p) { return { text: squash(p.s), x0: p.x, x1: p.x, conf: 100 }; }).filter(function (w) { return w.text; })
+          // Each word keeps its width: columnEdge() finds the descriptions
+          // column from where the heading before INSTRUCTIONS ENDS, so a
+          // zero-width word would put the cut at that heading's start and hand
+          // the op-code cells to the description.
+          words: parts.map(function (p) { return { text: squash(p.s), x0: p.x, x1: p.x + (p.w || 0), conf: 100 }; }).filter(function (w) { return w.text; })
         };
       }).filter(function (r) { return r.text; });
   }
@@ -1674,6 +1678,7 @@
     // Exposed so the scan parser can be exercised on raw text (E2E suite).
     parseScan: parseScan,
     layoutLines: layoutLines,
+    itemsToRows: itemsToRows,
     vinCheckOk: vinCheckOk,
     reviewText: function (t) { openScan(); showReview(parseScan(t)); },
     // What the which-way-up probe decided on the last scan {angle, tried}.
