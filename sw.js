@@ -24,6 +24,7 @@ const EXTRAS = [
   "./src/core/ids.js",
   "./src/core/li-parse.js",
   "./src/core/vin.js",
+  "./src/core/ro-parse.js",
   "./viewer.html",
   "./manifest.webmanifest",
   "./toolbox/index.html",

@@ -19,9 +19,9 @@ commit and compared on every run.
 
 | Parser | Inputs | Golden | Check |
 | --- | --- | --- | --- |
-| LI text extraction (`li/index.html`) | `tests/fixtures/inputs/li-text.mjs` | `tests/fixtures/golden/li-parse.json` | `tests/unit/li-parse.test.mjs` |
-| VIN / FIN classifier (`vault/app.js`) | `tests/fixtures/inputs/vin-text.mjs` | `tests/fixtures/golden/vin.json` | `tests/unit/vin.test.mjs` |
-| RO scan parser (`ros/index.html`) | `tests/fixtures/inputs/ro-scan.mjs` | `tests/fixtures/golden/ro-scan.json` | `tools/test-golden-ro.mjs` (browser, via `window.__ros`) |
+| LI text extraction (`src/core/li-parse.js`) | `tests/fixtures/inputs/li-text.mjs` | `tests/fixtures/golden/li-parse.json` | `tests/unit/li-parse.test.mjs` |
+| VIN / FIN classifier (`src/core/vin.js`) | `tests/fixtures/inputs/vin-text.mjs` | `tests/fixtures/golden/vin.json` | `tests/unit/vin.test.mjs` |
+| RO scan parser (`src/core/ro-parse.js`) | `tests/fixtures/inputs/ro-scan.mjs` | `tests/fixtures/golden/ro-scan.json` | `tests/unit/ro-parse.test.mjs` |
 
 Rules:
 
@@ -31,10 +31,10 @@ Rules:
   diff shows exactly which outputs moved. Never edit a golden by hand.
 - **Adding a case** means adding an input and re-capturing. The check reports
   inputs that have no golden yet.
-- Until Phase 1 extracts the parsers into `src/core/`, the harnesses in
-  `tests/unit/harness/` reach them by lifting a marked region out of the app
-  source (`lift.mjs`) or through a page's test hook (`ro.mjs`). Phase 1 swaps
-  those for plain imports; the goldens do not change.
+- The harnesses in `tests/unit/harness/` import the `src/core/` modules
+  directly (they are classic scripts that attach to `globalThis.FDCore`, so a
+  side-effect import is enough). `lift.mjs` remains for the checks that still
+  reach into app source (version grouping, the diff) and goes away as those move.
 
 Baseline: goldens were first captured at `df6a8a3` (tag `v1-pre-rewrite`),
 the head of `claude/pwa-file-database-hqbppy` when the rewrite started.
