@@ -1,25 +1,22 @@
 /*
- * backup-format.js — pure parser/validator for the binary .fvault (v2) format.
+ * fvault.js — the File Vault backup: binary v2 ("FVLT" + u32 version + u32
+ * metaLen + JSON + each file's blob bytes then thumbnail bytes, back to
+ * back) and the older JSON form with base64 blobs.
  *
- * Layout: "FVLT" + u32 version + u32 metaLen + <metaLen bytes of JSON> +
- * for each file in meta.files, its blob bytes then its thumb bytes, back to
- * back. parseBinary(file) validates the ENTIRE file before returning any
- * entry, so a truncated / overrun / trailing-garbage backup is rejected up
- * front and the caller can leave the database untouched.
- *
- * Loads as a classic browser script (window.FileVaultBackup) and is also
- * consumable from Node (it attaches to globalThis / self).
+ * Two readers, both moved verbatim (REWRITE-PLAN.md Phase 1), because they
+ * serve different jobs: parseBinary() (from vault/backup-format.js) validates
+ * the ENTIRE file before returning any entry, so a truncated / overrun /
+ * trailing-garbage backup is rejected up front and a restore leaves the
+ * database untouched; readLoose() (from viewer.html) trusts the metadata and
+ * slices what it describes, which is what recovering files from a backup
+ * wants. Requires container.js. Classic <script> — defines
+ * window.FDCore.formats.fvault and, for the Vault's restore, the old
+ * window.FileVaultBackup — and side-effect import from Node.
  */
-(function (root) {
+(function (global) {
   "use strict";
-
-  function BackupFormatError(code, message) {
-    this.name = "BackupFormatError";
-    this.code = code;
-    this.message = message || code;
-  }
-  BackupFormatError.prototype = Object.create(Error.prototype);
-  BackupFormatError.prototype.constructor = BackupFormatError;
+  var formats = global.FDCore.formats;
+  var BackupFormatError = formats.BackupFormatError;
 
   var MAGIC = [0x46, 0x56, 0x4c, 0x54]; // "FVLT"
 
@@ -80,5 +77,42 @@
     return { meta: meta, entries: entries };
   }
 
-  root.FileVaultBackup = { parseBinary: parseBinary, BackupFormatError: BackupFormatError };
+  // The Extract page's read: trust the metadata, slice each file's bytes out
+  // (Blob.slice references the on-disk region — nothing is copied), skip the
+  // thumbnails. Returns { meta, entries:[{meta, blob}] }.
+  function readLoose(file) {
+    return formats.readHeader(file).then(function (h) {
+      var meta = h.meta;
+      if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
+      var off = h.payloadOffset, entries = [];
+      meta.files.forEach(function (f) {
+        var bl = f.blobLen || 0, tl = f.thumbLen || 0;
+        var blob = file.slice(off, off + bl, f.blobType || f.type || "application/octet-stream");
+        off += bl + tl; // skip the thumbnail (an internal preview, not user data)
+        entries.push({ meta: f, blob: blob });
+      });
+      return { meta: meta, entries: entries };
+    });
+  }
+
+  // The legacy JSON backup: base64 blobs inline. Records without a blob are
+  // skipped, as they always were. Returns { meta, entries:[{meta, blob}] }.
+  function readLegacyJson(file) {
+    return file.text().then(function (txt) {
+      var meta = JSON.parse(txt);
+      if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
+      var entries = [];
+      meta.files.forEach(function (f) {
+        if (!f.blob) return;
+        var bin = atob(f.blob), u = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        entries.push({ meta: f, blob: new Blob([u], { type: f.blobType || f.type || "application/octet-stream" }) });
+      });
+      return { meta: meta, entries: entries };
+    });
+  }
+
+  formats.fvault = { MAGIC: MAGIC, parseBinary: parseBinary, readLoose: readLoose, readLegacyJson: readLegacyJson, BackupFormatError: BackupFormatError };
+  // The name the Vault's restore has always used.
+  global.FileVaultBackup = { parseBinary: parseBinary, BackupFormatError: BackupFormatError };
 })(typeof self !== "undefined" ? self : globalThis);

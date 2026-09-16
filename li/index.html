@@ -851,7 +851,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
   // jump to that document if it's in the library.
   function findRefs(d) {
     var hay = normText((d.reason || "") + "\n" + (d.text || ""));
-    var re = /\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/g, m, seen = {}, out = [], self = (d.li || "").toUpperCase();
+    var re = FDCore.ids.docnumGlobal(), m, seen = {}, out = [], self = (d.li || "").toUpperCase();
     while ((m = re.exec(hay))) { var x = m[0].toUpperCase(); if (x === self || seen[x]) continue; seen[x] = 1; out.push(x); }
     return out;
   }

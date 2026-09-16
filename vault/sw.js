@@ -13,7 +13,8 @@ const CORE = [
   "./index.html",
   "./styles.css",
   "./db.js",
-  "./backup-format.js",
+  "../src/core/formats/container.js",
+  "../src/core/formats/fvault.js",
   "./blob-integrity.js",
   "./app.js",
 ];

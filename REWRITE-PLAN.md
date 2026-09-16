@@ -359,10 +359,20 @@ Goal: make "identical output" provable before anything moves.
 Acceptance: golden files exist; `npm test` runs unit tests (zero so far) then the
 existing checks.
 
-### Phase 1 — Extract the pure core · M
+### Phase 1 — Extract the pure core · M — **done**
 
 Goal: one copy of every parser and format, importable and tested — with **no UI
 change**.
+
+Landed as `src/core/{text,ids,li-parse,vin,ro-parse}.js` and
+`src/core/formats/{container,zip,fvault,tidb,lidb}.js`. The modules are classic
+scripts that attach to `window.FDCore` (and keep `window.FileVaultBackup` for the
+Vault) and are imported for their side effect by the unit tests — the plain-script
+form, not ESM, because the current pages load classic scripts and hosting has no
+build; Phase 4 adds the `export`s when the pages become modules. All 160 goldens
+pass through the moved code and re-capturing is byte-identical; the goldens caught
+two transcription gaps on the way (a literal U+00A0 in a character class, a
+constant defined outside the function that used it).
 
 - Create `src/core/ids.js`, `li-parse.js`, `ro-parse.js`, `vin.js`, `text.js`,
   `formats/*.js` by moving code out of `li/index.html`, `toolbox/index.html`,

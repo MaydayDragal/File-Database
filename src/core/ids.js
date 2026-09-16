@@ -28,6 +28,9 @@
   function canonLI(s) { var v = normLI(s).replace(/\s+/g, " ").trim(); return DOCNUM.test(v.toUpperCase()) ? v.toUpperCase() : v; }
   function liKey(li) { return "li:" + canonLI(li).toUpperCase(); }
   function detectLI(hay) { var m = normLI(hay).match(DOCNUM); return m ? m[1] : ""; }
+  // A fresh global matcher for scanning a text for EVERY document number in
+  // it (a shared /g regex would carry lastIndex from one call into the next).
+  function docnumGlobal() { return new RegExp(DOCNUM.source, "g"); }
   // Does this string (a filename, a pasted tag) carry a document number anywhere?
   function hasLiNumber(s) { return DOCNUM.test(normLI(s).toUpperCase()); }
   // Is this whole string a document number (case-insensitive, punctuation folded)?
@@ -66,7 +69,7 @@
 
   global.FDCore.ids = {
     DOCNUM: DOCNUM, DOCNUM_EXACT: DOCNUM_EXACT, FUZZY: FUZZY,
-    canonLI: canonLI, liKey: liKey, detectLI: detectLI, detectLIFuzzy: detectLIFuzzy, detectVersion: detectVersion,
+    canonLI: canonLI, liKey: liKey, detectLI: detectLI, docnumGlobal: docnumGlobal, detectLIFuzzy: detectLIFuzzy, detectVersion: detectVersion,
     hasLiNumber: hasLiNumber, isLiNumber: isLiNumber, toDigits: toDigits, toAlpha: toAlpha,
     TOOL_NO: TOOL_NO, normToolNo: normToolNo, canonToolNo: canonToolNo,
     VIN_SHAPE: VIN_SHAPE, seriesOfVin: seriesOfVin,
