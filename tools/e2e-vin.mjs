@@ -69,7 +69,11 @@ fs.writeFileSync(files.pdf, buildPdf());
 fs.writeFileSync(files.img, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
 
 const browser = await launchBrowser();
-const ctx = await browser.newContext({ viewport: { width: 1200, height: 850 } });
+// The platform's service worker proxies the OCR hosts itself (cache-first, so
+// a scan keeps working offline), and a worker's own fetches are outside
+// Playwright's routing — so the routes below could not hold the CDN request
+// open through it. Block the worker for this context: the hang is the point.
+const ctx = await browser.newContext({ viewport: { width: 1200, height: 850 }, serviceWorkers: "block" });
 const page = await ctx.newPage();
 // HANG the Tesseract CDN (hold the request open, never respond) — the worst
 // case that used to wedge the scan forever. Short OCR timeouts keep the test
