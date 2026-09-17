@@ -236,9 +236,9 @@ roughly 3.5 MB of inlined minified code.
 One `sw.js`, one cache name, one precache list that a Node check verifies is
 complete (like `vendor-pdfjs --check` today) so nothing is bumped by hand in four
 places. Runtime cache for `vendor/` and the two OCR hosts, as `sw.js` does now.
-Old scopes (`vault/`, `li/`, `inventory/`) each keep a **self-unregistering**
-`sw.js` and a redirecting `index.html` for one release, so an installed
-standalone PWA lands in the new app and its stale cache is cleared (see §5, Phase 4).
+The old scopes (`vault/`, `li/`, `inventory/`) are deleted outright (D1): a
+worker still registered there serves the 404 it fetches, and a standalone
+install is replaced by installing the platform once.
 
 ---
 
@@ -257,7 +257,7 @@ reversible, `deletedAt`.
 | `documents` | `id` | li, ver, title, reason, fgroup, date, validity, text, pages, **fileId**, filename, size, mtime, noText, err, star, added, rev | li, fgroup, star, added |
 | `tools` | `id` | as today (`inventory/app.js normalize()`), rev | toolNo, grp |
 | `photos` | `id` | blob | — |
-| `ros` | `id` | ro, vehicle, vin, tag, mileage, color, opened, customer, advisor, phone, email, lines[], scanText, createdAt, updatedAt, rev, deletedAt? | ro, vin, updatedAt |
+| `ros` | `id` | ro, vehicle, vin, tag, mileage, color, opened, customer, advisor, phone, email, lines[], scanText, createdAt, updatedAt, rev, deletedAt? | ro (unique, D7), vin, updatedAt |
 | `links` | `id` | **fromType, fromId, toType, toId, kind**, createdAt, source (user / scan / migration) | [fromType+fromId], [toType+toId], unique [fromType+fromId+toType+toId+kind] |
 | `jobs` | `id` | type, inputIds[], state (queued / running / done / failed / cancelled), progress, attempts, error, createdAt | state, type |
 | `vehicles` *(Phase 5)* | `vin` | fin?, series, model text, status (extracted / check-digit-ok / confirmed), notes | series |
@@ -284,7 +284,8 @@ What this fixes, concretely:
 - **RO ↔ files is a typed link**, not a collection string. `links {from: ro, to:
   file, kind: "attachment"}` — a file can sit on two ROs, an RO can pin an exact
   LI version (`kind: "reference"`) or a tool (`kind: "required-tool"`), and
-  renaming an RO touches one record. RO numbers no longer need to be unique.
+  renaming an RO touches one record. RO numbers stay unique (D7), but as a
+  validation rule on a unique index rather than a storage necessity.
 - **LI PDFs are files.** A document points at its `fileId`; "copy to Vault" becomes
   a tag/collection change on the same record, not a second blob.
 - **Long work survives a reload.** OCR imports, VIN scans and thumbnail backfills
@@ -315,17 +316,18 @@ Runs once, on first open of `file-database`, before the shell mounts:
    `LIDocsDB.docs`+`files` → `documents` + `files`/`blobs` (kind `pdf`, collection
    `LI Documents`, `docId` set); `tool-inventory.*` → `tools`/`photos`/`settings`;
    `repair-orders.ros` → `ros`, then `files` whose collection is `RO <n>` get `roId`.
-3. Verify counts store-by-store (and blob `sha256` against the source bytes) and
-   record `settings.migration = { from, counts, at }`.
-4. **Leave the legacy databases in place** for one release. Add a "Remove old
-   databases" action in the ☰ menu; delete automatically in the release after
-   (decision D2 in §7).
+3. Verify counts store-by-store and every blob's `sha256` against the source
+   bytes; record `settings.migration = { from, counts, at }`.
+4. **Delete the legacy databases** as soon as step 3 passes (D2). If it does not
+   pass, keep them, leave the pointer on the old generation and show the report.
+   Because there is no rollback afterwards except from a file, the migration
+   dialog offers a `.fdb` export of the migrated data before it deletes anything.
 
 Migration and restore write into a **new generation** — a fresh IndexedDB
 database named `file-database-<n>` — and only when it verifies does a pointer in
-`localStorage` switch reads to it. The previous generation stays until the user
-removes it, so a bad restore or an interrupted migration can never leave the live
-data half-written, and rollback is flipping the pointer back (decision D8).
+`localStorage` switch reads to it. An interrupted run therefore never leaves the
+live data half-written; the superseded generation is removed once the new one
+has opened successfully (D8, D2).
 Multi-tab safety comes free with IndexedDB: opening a newer schema fires
 `versionchange` in every other tab, which closes its connection and reloads.
 
@@ -357,10 +359,20 @@ Goal: make "identical output" provable before anything moves.
 Acceptance: golden files exist; `npm test` runs unit tests (zero so far) then the
 existing checks.
 
-### Phase 1 — Extract the pure core · M
+### Phase 1 — Extract the pure core · M — **done**
 
 Goal: one copy of every parser and format, importable and tested — with **no UI
 change**.
+
+Landed as `src/core/{text,ids,li-parse,vin,ro-parse}.js` and
+`src/core/formats/{container,zip,fvault,tidb,lidb}.js`. The modules are classic
+scripts that attach to `window.FDCore` (and keep `window.FileVaultBackup` for the
+Vault) and are imported for their side effect by the unit tests — the plain-script
+form, not ESM, because the current pages load classic scripts and hosting has no
+build; Phase 4 adds the `export`s when the pages become modules. All 160 goldens
+pass through the moved code and re-capturing is byte-identical; the goldens caught
+two transcription gaps on the way (a literal U+00A0 in a character class, a
+constant defined outside the function that used it).
 
 - Create `src/core/ids.js`, `li-parse.js`, `ro-parse.js`, `vin.js`, `text.js`,
   `formats/*.js` by moving code out of `li/index.html`, `toolbox/index.html`,
@@ -398,11 +410,14 @@ bridge, the peeks and the RO polling are gone. Apps still run in iframes.
 - Add the `jobs` store and resume-on-boot; LI import, VIN scan and thumbnail
   backfill become jobs. `ingest()` returns per-file results, so a failed file is
   never acknowledged as stored (the bridge acked LI batches that had failures).
-- Migration dialog on first launch; legacy DBs retained.
+- Migration dialog on first launch: offer a `.fdb` export, migrate into a new
+  generation, verify, then delete the legacy databases (D2, D8).
 - Delete `bridge.js`, the `vault-bridge` database, `e2e-bridge.mjs`.
 
 Acceptance: migration unit tests pass; a profile with data in all four legacy DBs
-opens with identical counts; RO attach completes without polling; E2E suites that
+opens with identical counts and hashes and the legacy DBs are gone afterwards;
+a migration whose verification is made to fail leaves the legacy DBs and the
+old pointer untouched; RO attach completes without polling; E2E suites that
 opened legacy DB names are updated to `file-database` (16 suites, search/replace).
 
 ### Phase 3 — De-inline the single-file apps · M
@@ -443,9 +458,9 @@ install, one theme, drops and paste work everywhere.
 - Delete the seven theme snippets, six message handlers, six keyboard forwarders,
   five toasts, six `embedded` probes. Delete `vault/sw.js`, `li/sw.js`,
   `inventory/sw.js` and the three manifests.
-- Ship redirect stubs at `vault/index.html`, `li/index.html`, `inventory/index.html`
-  (`location.replace("../#vault")`) and a self-unregistering `sw.js` at each of
-  those scopes that clears its caches on activate. Remove the stubs one release later.
+- Delete the `vault/`, `li/` and `inventory/` entry pages outright (D1) — no
+  redirect stubs. `README.md` gains one line telling anyone with a standalone
+  install to install the platform instead.
 - One `styles/tokens.css`; per-feature CSS files; remove the three inline
   `<style>` blocks.
 - Port the E2E suites: `page.frameLocator("#frame-x").locator(…)` → `page.locator(…)`
@@ -515,22 +530,23 @@ Rules that keep the safety net alive through the rewrite:
 
 ---
 
-## 7. Decisions to make
+## 7. Decisions — made 2026-09-16
 
-Each has a recommended default; the plan assumes the default unless told otherwise.
+All ten are decided. Three went against the recommended default (D1, D2, D7);
+the rest of this document has been updated to match.
 
-| # | Decision | Recommended | Why |
+| # | Decision | Decided | Consequence |
 | --- | --- | --- | --- |
-| D1 | Standalone per-app PWAs (`vault/`, `li/`, `inventory/`) | **Redirect stubs for one release, then delete** | Installed PWAs and bookmarks land in the new app; data is same-origin so nothing is lost |
-| D2 | Legacy databases after migration | **Keep one release + manual "Remove old databases"; auto-delete next release** | Rollback stays possible for a while at the cost of double disk usage |
-| D3 | Combined backup container | **Binary container (`.fdb`, same layout as `.fvault` v2)** over ZIP | No 4 GiB ZIP limit; streams via `Blob.slice`; validator already exists and is tested |
-| D4 | UI framework | **None — vanilla ES modules** | Keeps no-build hosting; the gain is in modules and one data layer, not a view library; revisit only if a feature needs it |
-| D5 | Toolbox scope | **Keep all ten tools**, each as its own module | `convert`, `elec`, `text`, `calc`, `csv` are self-contained and cost nothing to carry |
-| D6 | Branching | **Phase PRs into the live branch, not a long-lived rewrite branch** | Each phase is shippable; a diverging branch is the LI-Database problem again |
-| D7 | Repair Orders numbering | **Allow duplicate RO numbers** (id is the key) | The current uniqueness requirement exists only because attachment lookup is by string |
-| D8 | Restore/migration target | **New IndexedDB generation + pointer flip** over in-place writes | Atomic activation and one-step rollback; costs disk for one extra copy until the old generation is removed |
-| D9 | RO ↔ file relationship | **Typed `links` store** over a `roId` foreign key | Same cost to build; unlocks multi-RO attachments, pinned LI versions and required tools without a later schema change |
-| D10 | GPT recreation guides | **Reference them from this plan; do not commit the 10 MB of PDFs** | The flowchart JSON/DOT/SVG (small) could be tracked under `docs/` if the acceptance narratives are wanted in-repo |
+| D1 | Standalone per-app PWAs (`vault/`, `li/`, `inventory/`) | **Delete immediately** in Phase 4 | The old paths 404. A service worker still registered at an old scope serves that 404 (its navigation handler returns the response as-is and only falls back to cache on a network error); anyone with a standalone install opens the platform URL and installs once. No stubs to remove later. |
+| D2 | Legacy databases after migration | **Delete right after a verified migration** | Verification is counts per store plus every blob's `sha256` against the source; only then are `file-vault`, `LIDocsDB`, `tool-inventory` and `repair-orders` deleted. A failed verification keeps them and reports. Rollback afterwards is from a backup file, so the migration dialog offers a `.fdb` export first. |
+| D3 | Combined backup container | **Binary container (`.fdb`, same layout as `.fvault` v2)** | No 4 GiB ZIP limit; streams via `Blob.slice`; `vault/backup-format.js`'s validator and tests carry over. |
+| D4 | UI framework | **None — vanilla ES modules** | No-build hosting stays. |
+| D5 | Toolbox scope | **Keep all ten tools**, each its own module | Ten folders under `features/toolbox/`. |
+| D6 | Branching | **One PR per phase into `claude/pwa-file-database-hqbppy`** | Each phase CI-gated and shippable; no long-lived branch. |
+| D7 | Repair Orders numbering | **Enforce unique numbers** | `ros.ro` becomes a unique index; creating or renumbering to an existing number is refused with a link to the other record. Attachment lookup is still by id (D9) — uniqueness is a validation rule now, not a storage necessity. |
+| D8 | Restore/migration target | **New IndexedDB generation + pointer flip** | Atomic activation; an interrupted run never touches live data. The superseded generation is removed once the new one opens (D2). |
+| D9 | RO ↔ file relationship | **Typed `links` store** | Multi-RO attachments, pinned LI versions and required tools without a later schema change. |
+| D10 | GPT recreation guides | **Reference only; commit nothing** | §10 is the record. |
 
 ---
 

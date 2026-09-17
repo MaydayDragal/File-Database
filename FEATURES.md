@@ -87,7 +87,9 @@ but no implemented record-ID hash router.
 ## 3. File Vault
 
 Implementation: [app.js](vault/app.js), [db.js](vault/db.js),
-[backup-format.js](vault/backup-format.js), [blob-integrity.js](vault/blob-integrity.js).
+[blob-integrity.js](vault/blob-integrity.js); the strict backup validator is
+[src/core/formats/fvault.js](src/core/formats/fvault.js) and the VIN/FIN
+classifier [src/core/vin.js](src/core/vin.js) (see §10).
 
 | Area | Implemented behavior |
 | --- | --- |
@@ -149,7 +151,9 @@ receives a batch, while Media can queue later files behind **Next file**.
 ## 4. LI Documents
 
 [li/index.html](li/index.html) contains the app plus inlined JSZip and generated
-PDF.js main/worker bundles.
+PDF.js main/worker bundles. Text normalization, the document-number matchers and
+the text-to-record extraction are the shared [src/core](src/core/) modules
+`text.js`, `ids.js` and `li-parse.js` (§10); the Toolbox's LI renamer runs the same code.
 
 - Imports individual PDFs, folders, drops, and bridge deliveries; extracts document
   number, version, title, reason for change, function group, date, and validity.
@@ -333,9 +337,13 @@ restoring app databases. It lists entries and downloads them individually or in 
 STORE ZIP with CRC32 and UTF-8 names. Vault output uses collection folders; LI uses
 readable document filenames; Inventory outputs `tools.csv`, `tools.json`, and
 `photos/`. Thumbnails and application settings are not extracted as user files.
-The standalone page embeds its own readers/writer. Deflated LI entries use
+The readers and the ZIP writer are the shared [src/core/formats](src/core/formats/)
+modules (`container.js`, `zip.js`, `fvault.js`, `tidb.js`, `lidb.js`), which the
+standalone page loads by relative path. Deflated LI entries use
 `DecompressionStream("deflate-raw")`; ZIP output has a roughly 4 GiB limit and no
-ZIP64 support. Viewer parsers are separate from Vault's strict restore validator.
+ZIP64 support. The Extract reader (`fvault.readLoose`) trusts the metadata and
+slices what it describes; the Vault's restore uses `fvault.parseBinary`, which
+validates the whole file first. Both live in the same module.
 
 ## 9. Shared contracts and storage
 
@@ -415,7 +423,23 @@ available when IndexedDB fails. Ctrl+Shift+D or `FVDebug.open()` opens the viewe
 with filtering, copying, downloading, and clearing. Vault/LI/Inventory also have
 menu entries. It cannot capture errors that occur before it is loaded.
 
-## 10. Offline assets and network dependencies
+## 10. Shared core (`src/core/`)
+
+Pure code every page loads as a classic `<script>` (it attaches to
+`window.FDCore`) and the unit tests import from Node. Moved out of the apps in
+[REWRITE-PLAN.md](REWRITE-PLAN.md) Phase 1 without behaviour change; the golden
+checks in `tests/` prove it.
+
+| Module | Owns | Loaded by |
+| --- | --- | --- |
+| `text.js` | `normChars`/`normText`/`normLI`, Windows-safe `sanitize`/`cleanTitle` | every page |
+| `ids.js` | the LI document-number matcher (`detectLI`, fuzzy OCR form, versions, canonical key), tool numbers, VIN shape, model series | every page |
+| `li-parse.js` | lines from PDF.js items, title and field extraction, renamed filename, `buildRecord()` | LI, Toolbox |
+| `vin.js` | the VIN/FIN classifier (`findVinsDetailed`), the ISO 3779 check digit, model year from a VIN | Vault, Repair Orders |
+| `ro-parse.js` | the RO scan parser: `parseScan`, `layoutLines`, DISPATCH screens, cell spans, the VIN sweep, rows from a text layer or a recognized page | Repair Orders |
+| `formats/` | `container.js` (magic + version + JSON + payloads), `zip.js`, `fvault.js` (strict and loose readers, legacy JSON), `tidb.js`, `lidb.js` | Vault, Extract |
+
+## 11. Offline assets and network dependencies
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |

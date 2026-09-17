@@ -28,7 +28,7 @@
   // and "related" jumps from the other apps). Nav that arrives before boot is
   // replayed once the database has loaded.
   var bootReady = false, pendingNav = [];
-  function normToolNo(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+  var normToolNo = FDCore.ids.normToolNo; // shared: ../src/core/ids.js
   // A cross-app jump means "show me THIS" — every other active filter would
   // silently hide the results ("No tools match group 54" with the starred
   // toggle secretly on), so reset the whole view state first.

@@ -1,0 +1,569 @@
+{
+ "captured": {
+  "commit": "4b4ab9a",
+  "node": "v22.22.2",
+  "at": "2026-09-16T19:18:14.702Z"
+ },
+ "cases": [
+  {
+   "id": "parse-form",
+   "fn": "parseScan",
+   "out": {
+    "ro": "935943",
+    "tag": "T7910",
+    "vehicle": "2025 GLC300",
+    "vin": "W1NKM4GB9SF382775",
+    "color": "Silver",
+    "mileage": "15258",
+    "opened": "08-31-26",
+    "advisor": "Johnson, Brandon S L",
+    "customer": "Jill Blue",
+    "phone": "678-979-7260",
+    "email": "jillblue628@gmail.com",
+    "lines": [
+     {
+      "text": "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+      "op": "MPI"
+     },
+     {
+      "text": "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",
+      "op": ""
+     },
+     {
+      "text": "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+      "op": "CV"
+     },
+     {
+      "text": "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE $19.95 TO SERVICE DEPARTMENT",
+      "op": "CW"
+     }
+    ],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "RBM of Alpharetta\n345 McFarland Pkwy\nAlpharetta, GA 30004\nOptions: DLR:17114\nService Advisor: JOHNSON,BRANDON S L\nRO No: 935943\nTag No: T7910\nRO Open Date: 08-31-26\nMileage In: 15258\nComplete by Time: 08-31-26 18:00\nPay Method: CASH\nName: Jill Blue\nAddress: 612 CASCADE WAY\nCity-ST-Zip: CANTON, GA 30114\nHome Ph:\nBus Ph:\nCell Ph: 678-979-7260\nE-mail: jillblue628@gmail.com|HOME\nRO # 935943 Cust # 510459 Tag # T7910\nYear: 25\nModel: MERCEDES BENZ GLC300\nVIN: W1NKM4GB9SF382775\nColor: SILVER\nProd Date: UPDATE!! Stock No: SellingDlr: 17114\nWarr Exp : Delivery : 01-01-25 In Service : 01-01-25\nLINE OP CODE INSTRUCTIONS AND DESCRIPTIONS\n# A MPI CC (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT\nINSPECTION WHICH INCLUDES VIDEO\n# B CC RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER\nRECENT SERVICE; CHECK AND ADVISE\n# C CV CC COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -\nCHARGE $100.00 PER DAY TO SERVICE DEPARTMENT\n# D CW CC PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE\n$19.95 TO SERVICE DEPARTMENT\nTECH COPY MOBILE SHOP COPY"
+   }
+  },
+  {
+   "id": "parse-real-scan",
+   "fn": "parseScan",
+   "out": {
+    "ro": "935943",
+    "tag": "T7910",
+    "vehicle": "2025 GLC300",
+    "vin": "W1NKM4GB9SF382775",
+    "color": "Silver",
+    "mileage": "15258",
+    "opened": "08-31-26",
+    "advisor": "Johnson, Brandon S L",
+    "customer": "Jill Blue",
+    "phone": "78-979-7260",
+    "email": "jillblue628@gmail.com",
+    "lines": [
+     {
+      "text": "MPI (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT",
+      "op": ""
+     },
+     {
+      "text": "INSPECTION WHICH INCLUDES VIDEO",
+      "op": ""
+     },
+     {
+      "text": "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER",
+      "op": ""
+     },
+     {
+      "text": "RECENT SERVICE; CHECK AND ADVISE",
+      "op": ""
+     },
+     {
+      "text": "HE COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -",
+      "op": ""
+     },
+     {
+      "text": "CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+      "op": ""
+     },
+     {
+      "text": "888 | 0 PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH",
+      "op": ""
+     },
+     {
+      "text": "19.95 TO SERVICE DEPARTMENT",
+      "op": ""
+     }
+    ],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "RBM\n\nOptions: RO # 935943 éN\nes Cust # 510459\n\nTag #17910 Mercedes-Benz\n\nof ALPHARETTA\n\n345 McFarland Pkwy\nAlpharetta, GA 30004\n\nService Advisor:\n\nJOHNSON, BRANDON S L Name: : 25\nJill Blue : MERCEDES BENZ GLC300\n\nTRONo: 935943 Address: 12 CASCADE WAY * WINKM4GB9SF382775\nTag No: T7910 City-ST-Zip: CANTON, GA 30114 * SILVER\nRO Open Date: 08-31-26 Home Ph:\nMileage In: 15258 Bus Ph: Prod Date: ppATE!\nComplete by Time: (08-31-26 18:00 Cell Ph: 78 979-7260 Mibanr Exp § Stock No:\n\nwary 01-05-95 hiiGiDiR\nPay Method: CASH E-mail: jillblue628@gmail.com| HOME Delivery ¢ selinglic {71s\nIn Service : 01-01-25\n\nESTIMATE AND AUTHORIZATION | | INE | OP CODE INSTRUCTIONS AND DESCRIPTIONS\n\nOriginal Estimate: # A | MPI (INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT\nClient Advised of Completion ~~ INSPECTION WHICH INCLUDES VIDEO\n\nph pn Ya RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER\n\nto be done along with the necessary RECENT SERVICE; CHECK AND ADVISE\n\nmaterials. I agree that RBM is not\n\nresponsible for loss or damage to vehicle\n\ni sat tbc I HE COMPLIMENTARY COURTESY VEHICLE DURING SERVICING -\n\n¥ ie HERRON 4 200 eS0OTAIR Bray CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT\n\nloss due to delays in returning my vehicle\n\nlieing] 0 fadibfaiis Riot, 888 | 0 PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH\n\nroadtesting and/or inspection. An express = 19.95 TO SERVICE DEPARTMENT\n\nrepairs of this work order.\nMOBILE SHOP COPY"
+   }
+  },
+  {
+   "id": "parse-real-scan-2",
+   "fn": "parseScan",
+   "out": {
+    "ro": "934230",
+    "tag": "T6885",
+    "vehicle": "S500 4",
+    "vin": "",
+    "color": "White",
+    "mileage": "",
+    "opened": "",
+    "advisor": "Corey, Jeff L",
+    "customer": "SEA DOMINON EXPRESS INC, JUSTIN LEE",
+    "phone": "567-455-3843",
+    "email": "justinwlee89@gmail.com",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "REM\nRO # 934230 EN\nCust # 501550\nTag # T6885 Mercedes-Benz\nof ALPHARETTA\n345 McFarland Pkwy\nAlpharetta, GA 30004\nService Advisor:\nCOREY,JEFF L\n2\nModel: MERCEDES BENZ S500 4\nSEA DOMINON EXPRESS INC\nJUSTIN LEE\noR i re jg sl vi esi\nTag No: T6885 City-ST-Zip: JOHNS CREEK, GA 30022-7125\" in i, WHITE\nRO Open Date: Home Ph: / C 9% ne ee\nMileage In: Bus Ph: 13\nStock No:\nSellingDIr: 17114\nWarr Exp :\nDelivery : 01-01-22\n01-01-22\nINSTRUCTIONS AND DESCRIPTIONS\nCell Ph: 567 455-3843\nE-mail: JUSTINWLEE89@GMAIL.COM | HOME\nIn Service :"
+   }
+  },
+  {
+   "id": "parse-dispatch",
+   "fn": "parseScan",
+   "out": {
+    "ro": "934687",
+    "tag": "T7095",
+    "vehicle": "2026 E53E",
+    "vin": "",
+    "color": "",
+    "mileage": "1499",
+    "opened": "",
+    "advisor": "5582",
+    "customer": "Burdett, Carl",
+    "phone": "",
+    "email": "",
+    "lines": [
+     {
+      "text": "MPI-RBM OF AL",
+      "op": ""
+     },
+     {
+      "text": "CUSTOMER STAT",
+      "op": ""
+     },
+     {
+      "text": "COMPLIMENTARY",
+      "op": ""
+     },
+     {
+      "text": "CLIENT DECLIN",
+      "op": ""
+     }
+    ],
+    "note": "MBUX Display Goes Blank at times. Data line fault case?",
+    "refined": [],
+    "source": "dispatch",
+    "text": "D I S P A T C H\nESTIMATE: 245.00\nTAG:T7095 NAME: BURDETT,CARL SA: 5582 MAKE: M STATUS: AVL/VEH. DISABLE\n1) LOT LOC: PROMISED:17AUG26 1800 EST COMP:29AUG26 1012 P: 8999\n2) SDLR: Y APPT: N WAIT: N SPEC: N RENT: N VEH:26 E53E LIC: MI:1499\n3) RO: 934687 REMARKS:\nLC SKILL ST DESCRIPTION.. TECH... EST ACT LEFT STATUS.....CHG'D CBK HLD\n(A) (BC)(D) (E) (F) AT TME\n4) A P110 3R MPI-RBM OF AL 5401 0.2 PREASSIGNE 11:00\n5) B P110 3R CUSTOMER STAT 5401 1.0 5.5 -4.5 TECH HOLD 11:00 0.0\n6) C S181 7R COMPLIMENTARY 0.8 OPENED 10:42\n7) D S19 7M CLIENT DECLIN 0.5 OPENED 10:42\nEND OF DISPLAY\nCOMMAND:\nMBUX Display Goes Blank at times. Data line fault case?"
+   }
+  },
+  {
+   "id": "parse-bleed",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "",
+    "vehicle": "",
+    "vin": "",
+    "color": "Silver",
+    "mileage": "15258",
+    "opened": "08-31-26",
+    "advisor": "",
+    "customer": "",
+    "phone": "678-979-7260",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "RO Open Date: 08-31-26 678.979.7260 Color: SILVER\nMileage In: 15258 jilblues28@amail com Stock No: SellingDir: 17114"
+   }
+  },
+  {
+   "id": "parse-empty",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "",
+    "vehicle": "",
+    "vin": "",
+    "color": "",
+    "mileage": "",
+    "opened": "",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": ""
+   }
+  },
+  {
+   "id": "parse-note-only",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "",
+    "vehicle": "",
+    "vin": "",
+    "color": "",
+    "mileage": "",
+    "opened": "",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "MBUX display goes blank at times."
+   }
+  },
+  {
+   "id": "parse-vin-hint-wins",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "T7910",
+    "vehicle": "2025",
+    "vin": "W1NKM4GB9SF382775",
+    "color": "Silver",
+    "mileage": "",
+    "opened": "",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "Tag No: T7910 VIN: W1NKMAGB9SF382775 Color: SILVER"
+   }
+  },
+  {
+   "id": "parse-vin-hint-loses",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "T7910",
+    "vehicle": "2025",
+    "vin": "W1NKM4GB9SF382775",
+    "color": "Silver",
+    "mileage": "",
+    "opened": "",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "Tag No: T7910 VIN: W1NKM4GB9SF382775 Color: SILVER"
+   }
+  },
+  {
+   "id": "parse-cell-hints-fill",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "",
+    "vehicle": "",
+    "vin": "",
+    "color": "",
+    "mileage": "66997",
+    "opened": "08-12-26",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [
+     "mileage",
+     "opened"
+    ],
+    "source": "ro",
+    "text": "Mileage In: Bus Ph: 13\nRO Open Date: Home Ph: /"
+   }
+  },
+  {
+   "id": "parse-cell-hints-keep",
+   "fn": "parseScan",
+   "out": {
+    "ro": "",
+    "tag": "",
+    "vehicle": "",
+    "vin": "",
+    "color": "",
+    "mileage": "66997",
+    "opened": "08-12-26",
+    "advisor": "",
+    "customer": "",
+    "phone": "",
+    "email": "",
+    "lines": [],
+    "note": "",
+    "refined": [],
+    "source": "ro",
+    "text": "Mileage In: 66997 Bus Ph:\nRO Open Date: 08-12-26 Home Ph:"
+   }
+  },
+  {
+   "id": "vincheck-real-1",
+   "fn": "vinCheckOk",
+   "out": true
+  },
+  {
+   "id": "vincheck-real-2",
+   "fn": "vinCheckOk",
+   "out": true
+  },
+  {
+   "id": "vincheck-real-3",
+   "fn": "vinCheckOk",
+   "out": true
+  },
+  {
+   "id": "vincheck-misread-4-as-A",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "vincheck-misread-9-as-0",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "vincheck-misread-both",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "vincheck-short",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "vincheck-lowercase",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "vincheck-empty",
+   "fn": "vinCheckOk",
+   "out": false
+  },
+  {
+   "id": "cellspan-mileage",
+   "fn": "cellSpan",
+   "out": {
+    "x0": 185,
+    "x1": 520
+   }
+  },
+  {
+   "id": "cellspan-opened",
+   "fn": "cellSpan",
+   "out": {
+    "x0": 195,
+    "x1": 520
+   }
+  },
+  {
+   "id": "cellspan-filled",
+   "fn": "cellSpan",
+   "out": {
+    "x0": 185,
+    "x1": 520
+   }
+  },
+  {
+   "id": "cellspan-no-cell",
+   "fn": "cellSpan",
+   "out": null
+  },
+  {
+   "id": "cellspan-absent-label",
+   "fn": "cellSpan",
+   "out": null
+  },
+  {
+   "id": "sweep-header-rows",
+   "fn": "sweepRows",
+   "out": [
+    {
+     "text": "oR i re jg sl vi esi",
+     "x0": 300,
+     "x1": 1400,
+     "y0": 600,
+     "y1": 620,
+     "words": []
+    },
+    {
+     "text": "Tag No: T6885 City-ST-Zip: JOHNS CREEK",
+     "x0": 300,
+     "x1": 1800,
+     "y0": 800,
+     "y1": 820,
+     "words": []
+    }
+   ]
+  },
+  {
+   "id": "layout-merged-columns",
+   "fn": "layoutLines",
+   "out": [
+    {
+     "text": "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+     "op": "MPI"
+    },
+    {
+     "text": "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",
+     "op": ""
+    },
+    {
+     "text": "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+     "op": "CV"
+    },
+    {
+     "text": "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE $19.95 TO SERVICE DEPARTMENT",
+     "op": "CW"
+    }
+   ]
+  },
+  {
+   "id": "layout-noisy-op-cells",
+   "fn": "layoutLines",
+   "out": [
+    {
+     "text": "(INS) COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+     "op": "MPI"
+    },
+    {
+     "text": "RVR CUSTOMER STATES SCREEN CONTINUES TO GLITCH AFTER RECENT SERVICE; CHECK AND ADVISE",
+     "op": ""
+    },
+    {
+     "text": "COMPLIMENTARY COURTESY VEHICLE DURING SERVICING - CHARGE $100.00 PER DAY TO SERVICE DEPARTMENT",
+     "op": ""
+    },
+    {
+     "text": "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGE $19.95 TO SERVICE DEPARTMENT",
+     "op": ""
+    }
+   ]
+  },
+  {
+   "id": "layout-centred-heading",
+   "fn": "layoutLines",
+   "out": [
+    {
+     "text": "CUSTOMER STATES THAT THE BATTERY WARNING LIGHT WAS ON 12 VOLT CRITICAL",
+     "op": ""
+    },
+    {
+     "text": "CUSTOMER STATES THAT THE ENGINE LIGHT WAS ON, OFF NOW",
+     "op": ""
+    },
+    {
+     "text": "COMPLIMENTARY RBM OF ALPHARETTA MULTI-POINT INSPECTION WHICH INCLUDES VIDEO",
+     "op": ""
+    },
+    {
+     "text": "PERFORM COMPLIMENTARY EXTERIOR SERVICE WASH - CHARGH $19.95 TO SERVICE DEPARTMENT",
+     "op": ""
+    }
+   ]
+  },
+  {
+   "id": "layout-too-few-rows",
+   "fn": "layoutLines",
+   "out": []
+  },
+  {
+   "id": "layout-no-heading",
+   "fn": "layoutLines",
+   "out": []
+  },
+  {
+   "id": "itemsToRows-pdf-text-layer",
+   "fn": "itemsToRows",
+   "out": [
+    {
+     "text": "LINE OP CODE INSTRUCTIONS AND DESCRIPTIONS",
+     "x0": 630,
+     "x1": 1300,
+     "y0": -500,
+     "y1": -490,
+     "words": [
+      {
+       "text": "LINE",
+       "x0": 630,
+       "x1": 670,
+       "conf": 100
+      },
+      {
+       "text": "OP",
+       "x0": 700,
+       "x1": 722,
+       "conf": 100
+      },
+      {
+       "text": "CODE",
+       "x0": 730,
+       "x1": 775,
+       "conf": 100
+      },
+      {
+       "text": "INSTRUCTIONS AND DESCRIPTIONS",
+       "x0": 1000,
+       "x1": 1300,
+       "conf": 100
+      }
+     ]
+    },
+    {
+     "text": "A CV REPLACE BRAKE PADS",
+     "x0": 640,
+     "x1": 990,
+     "y0": -480,
+     "y1": -470,
+     "words": [
+      {
+       "text": "A",
+       "x0": 640,
+       "x1": 650,
+       "conf": 100
+      },
+      {
+       "text": "CV",
+       "x0": 705,
+       "x1": 729,
+       "conf": 100
+      },
+      {
+       "text": "REPLACE BRAKE PADS",
+       "x0": 800,
+       "x1": 990,
+       "conf": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "itemsToRows-empty",
+   "fn": "itemsToRows",
+   "out": []
+  }
+ ]
+}

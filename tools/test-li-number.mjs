@@ -7,8 +7,13 @@
 // The extractors fold those to ASCII before matching; without that fold the
 // LI number came back empty for every document in that format.
 //
-// The LI app, the standalone toolbox importer and the shell's intake router
-// each carry their own copy of the matcher, so all three are checked here.
+// The matcher used to exist in the LI app, the Toolbox importer and the shell's
+// intake router; since REWRITE-PLAN.md Phase 1 it is src/core/ids.js, which
+// all three load. The core is a classic script that attaches to
+// globalThis.FDCore, so it is imported here for its side effect.
+import "../src/core/text.js";
+import "../src/core/ids.js";
+import "../src/core/li-parse.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,20 +47,10 @@ const PRELUDE = `
   var window = {}, navigator = { hardwareConcurrency: 4 }, document = { createElement: () => ({}), head: { appendChild() {} } };
 `;
 
-function loadExtractors(file, startMark, endMark) {
-  const body = PRELUDE + lift(file, startMark, endMark) +
-    "\n; return { detectLI: detectLI, detectLIFuzzy: detectLIFuzzy, detectVersion: detectVersion, normText: normText };";
-  return new Function(body)();
-}
-
-const copies = [
-  ["li/index.html", "// ---------- LI extraction", "// OCR (lazy, from CDN"],
-  ["toolbox/index.html", "  var DOCNUM = /\\b([A-Z]{2}", "  function itemsToLines(items) {"],
-];
-
-for (const [file, a, b] of copies) {
-  console.log(`\n${file}`);
-  const { detectLI, detectLIFuzzy, detectVersion, normText } = loadExtractors(file, a, b);
+{
+  console.log("\nsrc/core/ids.js (shared by li, toolbox, shell, vault)");
+  const { detectLI, detectLIFuzzy, detectVersion } = globalThis.FDCore.ids;
+  const { normText } = globalThis.FDCore.text;
 
   // The new format — the case that used to come back empty.
   eq(detectLI(`Topic${NBSP}number LI83.70${NB}P${NB}080411`), "LI83.70-P-080411",
@@ -79,6 +74,16 @@ for (const [file, a, b] of copies) {
   // The fold is deliberately narrow: hyphen-shaped characters only, so real
   // prose keeps its typography in the stored, searchable text.
   eq(normText(`an em — dash and a${NBSP}space`), "an em — dash and a space", "em dashes survive normalization");
+
+  // The app pages and the Toolbox must all load the shared file, not a copy.
+  for (const page of ["li/index.html", "toolbox/index.html", "index.html", "vault/index.html", "inventory/index.html"]) {
+    const html = fs.readFileSync(path.join(ROOT, page), "utf8");
+    check(/src\/core\/ids\.js/.test(html), `${page} loads src/core/ids.js`);
+  }
+  const literal = /\\b\[A-Z\]\{2\}\\d\{2\}\\\.\\d\{2\}-\[A-Z\]-\\d\{5,7\}/;
+  for (const f of ["shell.js", "vault/app.js", "toolbox/index.html"]) {
+    check(!literal.test(fs.readFileSync(path.join(ROOT, f), "utf8")), `${f} carries no private copy of the document-number pattern`);
+  }
 }
 
 // ---------- version grouping ----------
@@ -168,14 +173,12 @@ for (const [file, a, b] of copies) {
 
 // ---------- the shell's intake router ----------
 {
-  console.log("\nshell.js");
-  const src = fs.readFileSync(path.join(ROOT, "shell.js"), "utf8");
-  const liNorm = new Function("return " + /function liNorm\([\s\S]*?\n/.exec(src)[0])();
-  const LI_DOCNUM = /\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i;
-  check(LI_DOCNUM.test(liNorm(`LI83.70${NB}P${NB}080411.pdf`)),
+  console.log("\nshell.js (routes through FDCore.ids.hasLiNumber)");
+  const { hasLiNumber } = globalThis.FDCore.ids;
+  check(hasLiNumber(`LI83.70${NB}P${NB}080411.pdf`),
     "a dropped file named with non-breaking hyphens routes to the LI Database");
-  check(LI_DOCNUM.test(liNorm("LI54.10-P-070001.pdf")), "a plain ASCII name still routes to the LI Database");
-  check(!LI_DOCNUM.test(liNorm("quarterly-report.pdf")), "an ordinary PDF name does not route to the LI Database");
+  check(hasLiNumber("LI54.10-P-070001.pdf"), "a plain ASCII name still routes to the LI Database");
+  check(!hasLiNumber("quarterly-report.pdf"), "an ordinary PDF name does not route to the LI Database");
 }
 
 console.log(failures === 0 ? "\nLI NUMBER CHECKS PASSED ✅" : `\n${failures} LI NUMBER CHECK(S) FAILED ❌`);

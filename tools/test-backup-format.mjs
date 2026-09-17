@@ -2,18 +2,19 @@
 // backup must be rejected with a stable BackupFormatError code BEFORE any
 // entry is returned; only a well-formed backup parses.
 //
-// The parser is a classic browser script (attaches to a global); it's loaded
-// here by evaluating its source with a stand-in global object. Node provides
-// Blob, DataView, TextEncoder/Decoder — everything the parser uses.
+// Node provides Blob, DataView, TextEncoder/Decoder — everything the parser uses.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const src = fs.readFileSync(path.join(ROOT, "vault", "backup-format.js"), "utf8");
+// The parser is src/core/formats/fvault.js, which needs container.js first;
+// both resolve their root as `typeof self !== "undefined" ? self : globalThis`,
+// so they are evaluated into one stand-in global here.
 const sandbox = {};
-// The script's IIFE resolves its root as `typeof self !== "undefined" ? self : globalThis`.
-new Function("self", src)(sandbox);
+for (const f of ["container.js", "fvault.js"]) {
+  new Function("self", fs.readFileSync(path.join(ROOT, "src", "core", "formats", f), "utf8"))(sandbox);
+}
 const { parseBinary, BackupFormatError } = sandbox.FileVaultBackup;
 
 let failures = 0;

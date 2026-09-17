@@ -7,6 +7,11 @@
 <title>Database File Viewer — File Database</title>
 <script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
+<script src="src/core/formats/container.js"></script>
+<script src="src/core/formats/zip.js"></script>
+<script src="src/core/formats/fvault.js"></script>
+<script src="src/core/formats/tidb.js"></script>
+<script src="src/core/formats/lidb.js"></script>
 <style>
   /* Same design tokens as the platform, so this reads as part of the product —
      but the page is fully self-contained: it must work even if the apps don't. */
@@ -185,143 +190,52 @@
     });
   }
 
-  // ---------- .fvault (binary v2): "FVLT" + u32 version + u32 metaLen + meta JSON + blob/thumb bytes ----------
+  // ---------- readers (shared: src/core/formats) ----------
+  // The four backup readers moved to src/core/formats/{fvault,tidb,lidb,zip}.js
+  // (REWRITE-PLAN.md Phase 1); this page turns what they return into the
+  // files a person can download, exactly as before.
+  var readZipEntries = FDCore.formats.zip.readEntries;
   function openFvault(file) {
-    return file.slice(0, 12).arrayBuffer().then(function (buf) {
-      var dv = new DataView(buf);
-      var metaLen = dv.getUint32(8, true);
-      return file.slice(12, 12 + metaLen).text().then(function (txt) {
-        var meta = JSON.parse(txt);
-        if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
-        var off = 12 + metaLen, used = {};
-        meta.files.forEach(function (f) {
-          var bl = f.blobLen || 0, tl = f.thumbLen || 0;
-          // Blob.slice references the on-disk region — nothing is copied here.
-          var blob = file.slice(off, off + bl, f.blobType || f.type || "application/octet-stream");
-          off += bl + tl; // skip the thumbnail (an internal preview, not user data)
-          var folder = f.collection ? safeName(f.collection) + "/" : "";
-          entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: blob, type: f.type || "" });
-        });
-        $("#kindLabel").textContent = "📁 File Vault backup";
+    return FDCore.formats.fvault.readLoose(file).then(function (r) {
+      var used = {};
+      r.entries.forEach(function (en) {
+        var f = en.meta, folder = f.collection ? safeName(f.collection) + "/" : "";
+        entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: en.blob, type: f.type || "" });
       });
+      $("#kindLabel").textContent = "📁 File Vault backup";
     });
   }
-
-  // ---------- legacy .fvault (JSON with base64 blobs) ----------
   function openJson(file) {
-    return file.text().then(function (txt) {
-      var meta = JSON.parse(txt);
-      if (!meta || meta.format !== "file-vault" || !Array.isArray(meta.files)) throw new Error("Not a File Vault backup.");
+    return FDCore.formats.fvault.readLegacyJson(file).then(function (r) {
       var used = {};
-      meta.files.forEach(function (f) {
-        if (!f.blob) return;
-        var bin = atob(f.blob), u = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-        var folder = f.collection ? safeName(f.collection) + "/" : "";
-        entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: new Blob([u], { type: f.blobType || f.type || "application/octet-stream" }), type: f.type || "" });
+      r.entries.forEach(function (en) {
+        var f = en.meta, folder = f.collection ? safeName(f.collection) + "/" : "";
+        entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: en.blob, type: f.type || "" });
       });
       $("#kindLabel").textContent = "📁 File Vault backup (legacy)";
     });
   }
-
-  // ---------- .tidb: "TIDB" + u32 version + u32 metaLen + meta JSON + photo bytes ----------
   function openTidb(file) {
-    return file.slice(0, 12).arrayBuffer().then(function (buf) {
-      var dv = new DataView(buf);
-      var metaLen = dv.getUint32(8, true);
-      return file.slice(12, 12 + metaLen).text().then(function (txt) {
-        var meta = JSON.parse(txt);
-        if (!meta || meta.format !== "tool-inventory-db" || !Array.isArray(meta.tools)) throw new Error("Not a Tool Inventory database.");
-        // The tool data itself, as a normal spreadsheet + full JSON.
-        var head = ["ID", "No.", "Qty", "Tool Number", "Svc Grp", "Ct", "Description", "Location", "Year", "Dlr Net($)", "Note", "Comment", "Photo"];
-        var q = function (s) { s = String(s == null ? "" : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-        var lines = [head.join(",")];
-        meta.tools.forEach(function (t) {
-          lines.push([t.id, t.no, t.qty, t.toolNo, t.svcGrp, t.ct, t.desc, t.location, t.year, (t.price == null ? "" : t.price), t.note, t.comment, t.photo].map(q).join(","));
-        });
-        entries.push({ path: "tools.csv", blob: new Blob([lines.join("\n")], { type: "text/csv" }), type: "text/csv" });
-        entries.push({ path: "tools.json", blob: new Blob([JSON.stringify(meta.tools, null, 1)], { type: "application/json" }), type: "application/json" });
-        var off = 12 + metaLen, used = { "tools.csv": 1, "tools.json": 1 };
-        (meta.photos || []).forEach(function (p) {
-          entries.push({ path: dedupe(used, "photos/" + safeName(p.id, "photo") + ".png"), blob: file.slice(off, off + p.len, "image/png"), type: "image/png" });
-          off += p.len;
-        });
-        $("#kindLabel").textContent = "🔧 Tool Inventory database";
+    return FDCore.formats.tidb.read(file).then(function (r) {
+      var meta = r.meta;
+      // The tool data itself, as a normal spreadsheet + full JSON.
+      entries.push({ path: "tools.csv", blob: new Blob([FDCore.formats.tidb.toolsCsv(meta.tools)], { type: "text/csv" }), type: "text/csv" });
+      entries.push({ path: "tools.json", blob: new Blob([JSON.stringify(meta.tools, null, 1)], { type: "application/json" }), type: "application/json" });
+      var used = { "tools.csv": 1, "tools.json": 1 };
+      r.photos.forEach(function (p) {
+        entries.push({ path: dedupe(used, "photos/" + safeName(p.id, "photo") + ".png"), blob: p.blob, type: "image/png" });
       });
+      $("#kindLabel").textContent = "🔧 Tool Inventory database";
     });
-  }
-
-  // ---------- .lidb: a ZIP (stored or deflated) with manifest.json + files/… ----------
-  function readZipEntries(file) {
-    // Find the End Of Central Directory record in the last 64 KB + 22 bytes.
-    var tailLen = Math.min(file.size, 65558);
-    return file.slice(file.size - tailLen).arrayBuffer().then(function (tail) {
-      var t = new Uint8Array(tail), eocd = -1;
-      for (var i = t.length - 22; i >= 0; i--) {
-        if (t[i] === 0x50 && t[i + 1] === 0x4b && t[i + 2] === 0x05 && t[i + 3] === 0x06) { eocd = i; break; }
-      }
-      if (eocd < 0) throw new Error("Damaged ZIP (no directory found).");
-      var dv = new DataView(tail, eocd);
-      var count = dv.getUint16(10, true);
-      var cdSize = dv.getUint32(12, true);
-      var cdOff = dv.getUint32(16, true);
-      return file.slice(cdOff, cdOff + cdSize).arrayBuffer().then(function (cd) {
-        var c = new DataView(cd), u8 = new Uint8Array(cd), pos = 0, list = [];
-        var td = new TextDecoder();
-        for (var n = 0; n < count; n++) {
-          if (c.getUint32(pos, true) !== 0x02014b50) break;
-          var method = c.getUint16(pos + 10, true);
-          var compSize = c.getUint32(pos + 20, true);
-          var nameLen = c.getUint16(pos + 28, true);
-          var extraLen = c.getUint16(pos + 30, true);
-          var cmtLen = c.getUint16(pos + 32, true);
-          var lho = c.getUint32(pos + 42, true);
-          var name = td.decode(u8.subarray(pos + 46, pos + 46 + nameLen));
-          list.push({ name: name, method: method, compSize: compSize, lho: lho });
-          pos += 46 + nameLen + extraLen + cmtLen;
-        }
-        // Resolve each entry's data offset via its local header (variable-size).
-        return Promise.all(list.map(function (en) {
-          return file.slice(en.lho, en.lho + 30).arrayBuffer().then(function (lh) {
-            var l = new DataView(lh);
-            var dataOff = en.lho + 30 + l.getUint16(26, true) + l.getUint16(28, true);
-            en.data = file.slice(dataOff, dataOff + en.compSize);
-            return en;
-          });
-        }));
-      });
-    });
-  }
-  function inflateEntry(en, type) {
-    if (en.method === 0) return Promise.resolve(en.data.slice(0, en.data.size, type));
-    if (en.method === 8 && typeof DecompressionStream !== "undefined") {
-      var ds = new DecompressionStream("deflate-raw");
-      return new Response(en.data.stream().pipeThrough(ds)).blob().then(function (b) { return b.slice(0, b.size, type); });
-    }
-    return Promise.reject(new Error("Unsupported compression in ZIP."));
   }
   function openZip(file) {
-    return readZipEntries(file).then(function (list) {
-      var manifest = null;
-      for (var i = 0; i < list.length; i++) if (list[i].name === "manifest.json") manifest = list[i];
-      if (!manifest) throw new Error("This ZIP isn't an LI Documents backup (no manifest.json).");
-      return inflateEntry(manifest, "application/json").then(function (b) { return b.text(); }).then(function (txt) {
-        var man = JSON.parse(txt);
-        var byFname = {};
-        (man.docs || []).forEach(function (d) { if (d.fname) byFname["files/" + d.fname] = d; });
-        var used = {};
-        var pdfs = list.filter(function (en) { return en.name.indexOf("files/") === 0; });
-        return Promise.all(pdfs.map(function (en) { return inflateEntry(en, "application/pdf"); })).then(function (blobs) {
-          pdfs.forEach(function (en, i) {
-            var d = byFname[en.name] || {};
-            // A readable name: "LI54.10-P-070001_3 - Title.pdf", falling back
-            // to the document's original filename, then the archive name.
-            var nice = d.li ? (d.li + (d.ver ? "_" + d.ver : "") + (d.title ? " - " + d.title : "") + ".pdf") : (d.filename || en.name.slice(6));
-            entries.push({ path: dedupe(used, "LI Documents/" + safeName(nice, "document.pdf")), blob: blobs[i], type: "application/pdf" });
-          });
-          $("#kindLabel").textContent = "🗄️ LI Documents backup";
-        });
+    return FDCore.formats.lidb.read(file).then(function (r) {
+      var used = {};
+      r.pdfs.forEach(function (p) {
+        var nice = FDCore.formats.lidb.readableName(p.doc, p.name);
+        entries.push({ path: dedupe(used, "LI Documents/" + safeName(nice, "document.pdf")), blob: p.blob, type: "application/pdf" });
       });
+      $("#kindLabel").textContent = "🗄️ LI Documents backup";
     });
   }
 
@@ -355,69 +269,9 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
   }
 
-  // ---------- ZIP writer (STORE — the contents are already-compressed formats) ----------
-  var CRC_TABLE = (function () {
-    var t = new Uint32Array(256);
-    for (var n = 0; n < 256; n++) {
-      var c = n;
-      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-      t[n] = c >>> 0;
-    }
-    return t;
-  })();
-  function crc32(u8, crc) {
-    crc = (crc == null ? 0xffffffff : crc) >>> 0;
-    for (var i = 0; i < u8.length; i++) crc = CRC_TABLE[(crc ^ u8[i]) & 0xff] ^ (crc >>> 8);
-    return crc >>> 0;
-  }
-  async function buildZip() {
-    var enc = new TextEncoder();
-    var parts = [], central = [], offset = 0;
-    var now = new Date();
-    var dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xffff;
-    var dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xffff;
-    for (var i = 0; i < entries.length; i++) {
-      var en = entries[i];
-      setProgress("Packing " + (i + 1) + " / " + entries.length + " — " + en.path);
-      // One file at a time in memory: CRC needs the bytes once; the blob
-      // reference (not a copy) then goes into the output parts.
-      var buf = new Uint8Array(await en.blob.arrayBuffer());
-      var crc = (crc32(buf) ^ 0xffffffff) >>> 0;
-      var nameBytes = enc.encode(en.path);
-      var lh = new ArrayBuffer(30); var v = new DataView(lh);
-      v.setUint32(0, 0x04034b50, true);
-      v.setUint16(4, 20, true);          // version needed
-      v.setUint16(6, 0x0800, true);      // UTF-8 names
-      v.setUint16(8, 0, true);           // method: store
-      v.setUint16(10, dosTime, true); v.setUint16(12, dosDate, true);
-      v.setUint32(14, crc, true);
-      v.setUint32(18, buf.length, true); v.setUint32(22, buf.length, true);
-      v.setUint16(26, nameBytes.length, true); v.setUint16(28, 0, true);
-      parts.push(lh, nameBytes, en.blob);
-      central.push({ name: nameBytes, crc: crc, size: buf.length, offset: offset });
-      offset += 30 + nameBytes.length + buf.length;
-      buf = null;
-    }
-    var cdStart = offset, cdSize = 0;
-    central.forEach(function (c) {
-      var ch = new ArrayBuffer(46); var v = new DataView(ch);
-      v.setUint32(0, 0x02014b50, true);
-      v.setUint16(4, 20, true); v.setUint16(6, 20, true);
-      v.setUint16(8, 0x0800, true); v.setUint16(10, 0, true);
-      v.setUint16(12, dosTime, true); v.setUint16(14, dosDate, true);
-      v.setUint32(16, c.crc, true);
-      v.setUint32(20, c.size, true); v.setUint32(24, c.size, true);
-      v.setUint16(28, c.name.length, true);
-      v.setUint32(42, c.offset, true);
-      parts.push(ch, c.name);
-      cdSize += 46 + c.name.length;
-    });
-    var eocd = new ArrayBuffer(22); var e = new DataView(eocd);
-    e.setUint32(0, 0x06054b50, true);
-    e.setUint16(8, central.length, true); e.setUint16(10, central.length, true);
-    e.setUint32(12, cdSize, true); e.setUint32(16, cdStart, true);
-    parts.push(eocd);
-    return new Blob(parts, { type: "application/zip" });
+  // ---------- ZIP writer (shared: src/core/formats/zip.js) ----------
+  function buildZip() {
+    return FDCore.formats.zip.build(entries, function (i, n, p) { setProgress("Packing " + i + " / " + n + " — " + p); });
   }
 
   // ---------- wiring ----------

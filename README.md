@@ -408,12 +408,14 @@ and path-filtered on pushes to that branch.
 | `index.html`, `shell.js`, `shell.css` | Platform UI, intake, navigation, theme, and badges |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Platform PWA assets |
 | `bridge.js`, `debug.js` | File-transfer mailbox and shared local logger |
-| `vault/` | File Vault, IndexedDB helpers, backup validation, Blob verification, PDF.js vendor files |
+| `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, backup formats — loaded by every page, unit-tested from Node |
+| `vault/` | File Vault, IndexedDB helpers, Blob verification, PDF.js vendor files |
 | `li/`, `inventory/`, `toolbox/`, `ros/` | Other application pages and assets |
 | `viewer.html` | Standalone backup extractor |
 | `inventory-data/` | Source catalog JSON and photos; build input, not automatically imported |
 | `portable/` | Portable launchers and user guide |
-| `tools/` | Build helpers, vendoring, static/unit checks, and browser suites |
+| `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |
+| `tools/` | Build helpers, vendoring, static checks, and browser suites |
 | `.github/workflows/` | QA and Windows ZIP workflows |
 
 ## License
