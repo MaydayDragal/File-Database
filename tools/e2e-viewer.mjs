@@ -162,7 +162,7 @@ check((await page.locator("#progress").textContent()).includes("Not a recognized
 // loads the feature as a classic bundle (viewer.js) — a module would be
 // refused from file://.
 {
-  const filePage = await ctx.newPage();
+  const filePage = await browser.newPage();
   const fileErrors = [];
   filePage.on("pageerror", (e) => fileErrors.push(e.message));
   await filePage.goto("file://" + path.join(ROOT, "viewer.html"), { waitUntil: "load" });
