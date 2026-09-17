@@ -2,8 +2,8 @@
  * shell.js — File Database platform shell.
  * Hosts the four apps (Files / LI Documents / Tool Inventory / Toolbox) as
  * lazy same-origin iframes, owns cross-app navigation, the shared theme, tab
- * badges and the platform PWA. File handoffs between apps go over bridge.js
- * (IndexedDB + BroadcastChannel), never through the shell.
+ * badges and the platform PWA. Files go into the shared database through
+ * src/data (intake + jobs); the apps hear about them on its change bus.
  */
 (function () {
   "use strict";
@@ -21,6 +21,12 @@
   var current = null;
 
   var toastT;
+  function downloadBlob(blob, name) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 60000);
+  }
   function toast(m) {
     var t = $("#toast"); if (!t) return;
     t.textContent = m; t.classList.add("show");
@@ -84,7 +90,7 @@
     opts = opts || {};
     var files = Array.prototype.slice.call(list || []).filter(Boolean);
     if (!files.length) return;
-    if (!window.VaultBridge) { toast("Couldn't add files — transfer bus unavailable."); return; }
+    if (!window.FDData || !FDData.intake) { toast("Couldn't add files — storage unavailable."); return; }
     var toLI = [], toVault = [], special = [];
     files.forEach(function (f) {
       var n = (f.name || "").toLowerCase();
@@ -95,44 +101,41 @@
       if (/\.tidb$/.test(n)) special.push({ app: "inventory", msg: { type: "inventory-import", file: f }, label: "Tool Inventory" });
       else if (/\.fvault$/.test(n)) special.push({ app: "vault", msg: { type: "vault-restore", file: f }, label: "Files (restore)" });
       else if (/\.lidb$/.test(n)) special.push({ app: "li", msg: { type: "li-restore", file: f }, label: "LI Documents (restore)" });
+      else if (/\.fdb$/.test(n)) special.push({ restore: f, label: "File Database (restore)" });
       else (looksLikeLI(f) ? toLI : toVault).push(f);
     });
 
     special.forEach(function (s) {
+      if (s.restore) { restorePlatform(s.restore); return; }
       ensureLoaded(s.app);
       frameMessage(s.app, s.msg);
       toast("Opening " + s.msg.file.name + " in " + s.label + "…");
     });
 
-    // Read each file's bytes NOW, at the moment of adding. A dropped File is a
-    // lazy handle to its source — if that source is a OneDrive/network
-    // placeholder, a locked file, or an app's temp export, a LATER read (when
-    // the databases serialize it) can silently return garbage. Reading eagerly
-    // surfaces the failure immediately instead of storing a corrupt copy.
-    var MATERIALIZE_MAX = 256 * 1024 * 1024; // beyond this, keep the handle (memory)
-    function materialize(f) {
-      if (f.size > MATERIALIZE_MAX) return Promise.resolve(f);
-      return f.arrayBuffer().then(function (buf) {
-        if (f.size && !buf.byteLength) throw new Error("empty read");
-        return new File([buf], f.name, { type: f.type });
-      });
-    }
-
+    // The data layer reads each file's bytes NOW (a dropped File is a lazy
+    // handle — a OneDrive placeholder or a locked file can read as garbage
+    // later), stores them, and queues the receiving app's follow-up work
+    // (thumbnails, the quick VIN read, the LI import) as jobs it runs once
+    // its frame is up. A file that fails to read or store is reported here,
+    // never counted as added.
     function deliver(target, arr) {
       if (!arr.length) return;
       ensureLoaded(target);
-      arr.forEach(function (f) {
-        // While a vehicle is pinned, files headed for the vault are tagged
-        // with its VIN — new paperwork joins the car with zero clicks. A drop
-        // forwarded from inside an open vault collection keeps that collection.
-        var meta = { fromShell: true };
-        if (target === "vault" && vehiclePin) meta.vin = vehiclePin.vin;
-        if (target === "vault" && opts.vin) meta.vin = opts.vin; // RO's own vehicle wins
-        if (target === "vault" && opts.collection) meta.collection = opts.collection;
-        materialize(f)
-          .then(function (safe) { return window.VaultBridge.send(target, { name: f.name, type: f.type, blob: safe, meta: meta }); })
-          .catch(function () { toast('Couldn’t read “' + f.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'); });
-      });
+      var o = { collection: "", vin: "", source: "shell" };
+      // While a vehicle is pinned, files headed for the vault are tagged
+      // with its VIN — new paperwork joins the car with zero clicks. A drop
+      // forwarded from inside an open vault collection keeps that collection.
+      if (target === "vault" && vehiclePin) o.vin = vehiclePin.vin;
+      if (target === "vault" && opts.vin) o.vin = opts.vin; // RO's own vehicle wins
+      if (target === "vault" && opts.collection) o.collection = opts.collection;
+      if (target === "vault" && opts.roId) o.roId = opts.roId;
+      FDData.intake.ingest(target, arr, o).then(function (out) {
+        out.results.filter(function (r) { return !r.ok; }).forEach(function (r) {
+          toast(r.error.indexOf("read") === 0
+            ? 'Couldn’t read “' + r.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'
+            : 'Couldn’t save “' + r.name + '” — ' + r.error);
+        });
+      }).catch(function (e) { toast("Couldn't add files — " + ((e && e.message) || e)); });
     }
     deliver("li", toLI);
     deliver("vault", toVault);
@@ -151,9 +154,22 @@
       : (!special.length && toLI.length && !toVault.length) ? "li"
       : (!special.length && toVault.length && !toLI.length) ? "vault" : null;
     if (only && only !== current && !opts.stay) activate(only);
+  }
 
-    // New rows land after the receiver ingests (LI may OCR) — nudge the badges.
-    [500, 1500, 3500].forEach(function (d) { setTimeout(updateBadges, d); });
+  // A whole-platform backup (.fdb) restores into a fresh database
+  // generation; the live data is replaced only once the copy has verified.
+  function restorePlatform(file) {
+    if (!window.FDData || !FDData.backup) { toast("Restore isn't available."); return; }
+    if (!confirm("Restore “" + file.name + "”?\n\nThis replaces everything in File Database (files, LI documents, tools, repair orders) with the backup's contents. The current data is removed only after the backup has been copied and verified.")) return;
+    toast("Restoring backup…");
+    FDData.backup.restore(file, {
+      onProgress: function (p) { if (p.phase === "verify") toast("Verifying backup… " + p.done + " / " + p.total); },
+    }).then(function () {
+      toast("Backup restored — reloading…");
+      setTimeout(function () { location.reload(); }, 600);
+    }).catch(function (e) {
+      toast("Restore failed — " + ((e && e.message) || e) + " Nothing was changed.");
+    });
   }
 
   // ---------- app switching ----------
@@ -341,27 +357,7 @@
     });
   }
 
-  // ---------- tab badges (peek sibling app databases without creating them) ----------
-  function peekCount(dbName, store) {
-    return new Promise(function (resolve) {
-      var req;
-      try { req = indexedDB.open(dbName); } catch (e) { resolve(null); return; }
-      var created = false;
-      req.onupgradeneeded = function () { created = true; try { req.transaction.abort(); } catch (e) {} };
-      req.onsuccess = function () {
-        var db = req.result;
-        try {
-          if (!db.objectStoreNames.contains(store)) { db.close(); resolve(null); return; }
-          var c = db.transaction(store, "readonly").objectStore(store).count();
-          c.onsuccess = function () { db.close(); resolve(c.result); };
-          c.onerror = function () { db.close(); resolve(null); };
-        } catch (e) { db.close(); resolve(null); }
-      };
-      req.onerror = function () { resolve(null); };
-      req.onblocked = function () { resolve(null); };
-      if (created) resolve(null);
-    });
-  }
+  // ---------- tab badges (counts from the shared database, refreshed by change events) ----------
   function setBadge(key, n) {
     var el = document.querySelector('[data-count="' + key + '"]');
     if (!el) return;
@@ -379,15 +375,32 @@
     if (badgeT) return;
     badgeT = setTimeout(function () {
       badgeT = null;
-      peekCount("file-vault", "files").then(function (n) { setBadge("vault", n); });
-      peekCount("LIDocsDB", "docs").then(function (n) { setBadge("li", n); });
-      peekCount("tool-inventory", "tools").then(function (n) { setBadge("inventory", n); });
+      if (!window.FDData || !FDData.repos) return;
+      var r = FDData.repos;
+      r.files.countInFiles().then(function (n) { setBadge("vault", n); }, function () { setBadge("vault", null); });
+      r.documents.count().then(function (n) { setBadge("li", n); }, function () { setBadge("li", null); });
+      r.tools.count().then(function (n) { setBadge("inventory", n); }, function () { setBadge("inventory", null); });
     }, 200);
+  }
+  // Which app runs a job type — its frame is loaded so queued work starts
+  // without a visit to that tab.
+  var JOB_APP = { thumb: "vault", "vin-detect": "vault", "vin-scan": "vault", "li-import": "li", "toolbox-intake": "toolbox" };
+  function wakeRunners() {
+    if (!window.FDData || !FDData.jobs) return;
+    FDData.jobs.listActive().then(function (list) {
+      list.forEach(function (j) { if (JOB_APP[j.type]) ensureLoaded(JOB_APP[j.type]); });
+    }).catch(function () {});
   }
 
   // ---------- boot ----------
+  // The database opens first — on a profile with the old per-app databases
+  // the migration dialog runs here, before any app frame can open them.
   function boot() {
     applyTheme();
+    var ready = (window.FDData && FDData.boot) ? FDData.boot() : Promise.resolve();
+    ready.then(null, function (e) { toast("Couldn't open the database — " + ((e && e.message) || e)); }).then(bootShell);
+  }
+  function bootShell() {
     if (window.matchMedia) {
       try {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
@@ -424,15 +437,20 @@
     });
     $("#vehicle-chip-unpin").addEventListener("click", unpinVehicle);
 
-    // One-click platform backup: each app runs its own existing export
-    // (.fvault, .lidb, .tidb) — three files, one button, no menu spelunking.
-    // Staggered so three save prompts don't land at the same instant.
+    // One-click platform backup: ONE .fdb with everything (files, LI
+    // documents, tools, repair orders, links, settings), then each app's own
+    // export (.fvault, .lidb, .tidb) for tools that still read those.
+    // Staggered so the save prompts don't land at the same instant.
     $("#backup-all-btn").addEventListener("click", function () {
-      toast("Backing up all three databases…");
+      toast("Backing up…");
+      var whole = (window.FDData && FDData.backup)
+        ? FDData.backup.collect().then(function (r) { downloadBlob(r.blob, FDData.backup.fileName()); }).catch(function (e) { toast("Backup failed — " + ((e && e.message) || e)); })
+        : Promise.resolve();
       ["vault", "li", "inventory"].forEach(function (k, i) {
         ensureLoaded(k);
         setTimeout(function () { frameMessage(k, { type: "platform-backup" }); }, i * 1200);
       });
+      whole.catch(function () {});
     });
 
     // Unified "Add files": one button + one hidden input for the whole platform.
@@ -501,7 +519,7 @@
       else if (d.type === "li-changed") updateBadges();
       // An embedded app forwards files dropped/pasted over it, so the platform
       // files them through one router regardless of which tab is showing.
-      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files, { collection: d.collection || "", vin: d.vin || "", stay: !!d.stay });
+      else if (d.type === "shell-add-files" && d.files) routeFiles(d.files, { collection: d.collection || "", vin: d.vin || "", roId: d.roId || "", stay: !!d.stay });
       else if (d.type === "shell-open-picker") $("#shell-file-input").click();
       // Deliver a message to another app WITHOUT switching to it (used by the
       // Repair Orders tab to keep an RO's files in sync in the background).
@@ -523,6 +541,13 @@
     });
     window.addEventListener("focus", updateBadges);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) updateBadges(); });
+    // Every commit in any context announces itself: badges follow, and a
+    // queued job wakes the app that runs it.
+    if (window.FDData && FDData.bus) {
+      ["files:changed", "documents:changed", "tools:changed", "db:generation"].forEach(function (t) { FDData.bus.on(t, updateBadges); });
+      FDData.bus.on("jobs:changed", function (d) { if (d.op === "enqueue" && JOB_APP[d.type]) ensureLoaded(JOB_APP[d.type]); });
+    }
+    wakeRunners();
 
     // Initial app: hash (latest navigation) > legacy query params > last used
     // > default. The query is only honored on hashless URLs (PWA shortcuts,

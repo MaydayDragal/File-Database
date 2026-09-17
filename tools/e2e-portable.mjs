@@ -2,6 +2,7 @@
 // drives it: Edge/Chrome against app/index.html over file://, with the browser
 // profile (and therefore the vault data) kept in the package's data/ folder.
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultCount } from "./e2e-db.mjs";
 import { execFileSync } from "node:child_process";
 import path from "node:path"; import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -23,12 +24,7 @@ const DATA = path.join(PKG, "data");                       // exactly what the .
 const URL = "file://" + path.join(PKG, "app", "index.html");
 const args = ["--allow-file-access-from-files", "--no-sandbox", "--no-first-run"];
 const vaultFrame = async (page) => { for (let i = 0; i < 50; i++) { const f = page.frames().find((f) => f.url().includes("/vault/")); if (f) return f; await sleep(200); } return null; };
-const countVaultFiles = (page) => page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) return res(0);
-    const c = db.transaction("files").objectStore("files").count(); c.onsuccess = () => res(c.result); c.onerror = () => res(-1); };
-  r.onerror = () => res(-1);
-}));
+const countVaultFiles = (page) => vaultCount(page).catch(() => -1);
 
 fs.rmSync(DATA, { recursive: true, force: true }); fs.mkdirSync(DATA, { recursive: true }); // clean stick
 

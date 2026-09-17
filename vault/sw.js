@@ -5,7 +5,7 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "vault-app-v32";
+const CACHE = "vault-app-v33";
 // Required for the app to boot offline — the install fails (and retries) if
 // any of these can't be cached.
 const CORE = [
@@ -22,12 +22,23 @@ const CORE = [
 // unreachable icon, a proxy blip) can NEVER fail the install and strand the
 // user on a stale, un-updatable service worker.
 const EXTRAS = [
-  "../bridge.js",
   "../debug.js",
   "../ocr.js",
   "../src/core/text.js",
   "../src/core/ids.js",
   "../src/core/vin.js",
+  "../src/core/hash.js",
+  "../src/core/formats/fdb.js",
+  "../src/data/schema.js",
+  "../src/data/bus.js",
+  "../src/data/db.js",
+  "../src/data/repos.js",
+  "../src/data/jobs.js",
+  "../src/data/intake.js",
+  "../src/data/backup.js",
+  "../src/data/migrate.js",
+  "../src/data/boot.js",
+  "../src/ui/migrate-dialog.js",
   "./manifest.webmanifest",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",

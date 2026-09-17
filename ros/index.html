@@ -323,8 +323,23 @@
 
 <div id="toast"></div>
 
+<script src="../src/core/text.js"></script>
+<script src="../src/core/ids.js"></script>
 <script src="../src/core/vin.js"></script>
 <script src="../src/core/ro-parse.js"></script>
+<script src="../src/core/hash.js"></script>
+<script src="../src/core/formats/container.js"></script>
+<script src="../src/core/formats/fdb.js"></script>
+<script src="../src/data/schema.js"></script>
+<script src="../src/data/bus.js"></script>
+<script src="../src/data/db.js"></script>
+<script src="../src/data/repos.js"></script>
+<script src="../src/data/jobs.js"></script>
+<script src="../src/data/intake.js"></script>
+<script src="../src/data/backup.js"></script>
+<script src="../src/data/migrate.js"></script>
+<script src="../src/data/boot.js"></script>
+<script src="../src/ui/migrate-dialog.js"></script>
 <script src="../ocr.js"></script>
 <script>
 (function () {
@@ -335,39 +350,24 @@
   var toastT;
   function toast(m) { var t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2600); }
 
-  // ---------- RO storage ----------
-  var DB_NAME = "repair-orders", STORE = "ros", _db = null;
-  function open() {
-    if (_db) return Promise.resolve(_db);
-    return new Promise(function (res, rej) {
-      var r = indexedDB.open(DB_NAME, 1);
-      r.onupgradeneeded = function () { var db = r.result; if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" }); };
-      r.onsuccess = function () { _db = r.result; res(_db); };
-      r.onerror = function () { rej(r.error); };
-    });
-  }
-  function reqP(req) { return new Promise(function (res, rej) { req.onsuccess = function () { res(req.result); }; req.onerror = function () { rej(req.error); }; }); }
-  function roAll() { return open().then(function (db) { return reqP(db.transaction(STORE, "readonly").objectStore(STORE).getAll()); }); }
-  function roPut(rec) { return open().then(function (db) { return reqP(db.transaction(STORE, "readwrite").objectStore(STORE).put(rec)); }); }
-  function roDel(id) { return open().then(function (db) { return reqP(db.transaction(STORE, "readwrite").objectStore(STORE).delete(id)); }); }
+  // ---------- RO storage (shared: ../src/data) ----------
+  // Repair orders live in the platform database; a file attached to an RO is
+  // a typed link (ro → file, "attachment"), so a file can sit on two ROs and
+  // renumbering an RO touches one record. RO numbers are unique (D7).
+  var R = function () { return FDData.repos; };
+  function open() { return FDData.boot(); }
+  function roAll() { return R().ros.list(); }
+  function roPut(rec) { return R().ros.put(rec); }
+  function roDel(id) { return R().ros.remove(id).then(function () { return R().links.removeFor("ro", id); }); }
   function uid() { return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-
-  // ---------- Vault (read-only peek) ----------
-  function readVault() {
-    return new Promise(function (res) {
-      var r = indexedDB.open("file-vault");
-      r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} }; // never create/upgrade from here
-      r.onsuccess = function () {
-        var db = r.result;
-        if (!db.objectStoreNames.contains("files")) { db.close(); return res([]); }
-        var g = db.transaction("files", "readonly").objectStore("files").getAll();
-        g.onsuccess = function () {
-          db.close();
-          res(g.result.map(function (x) { return { id: x.id, name: x.name, type: x.type, kind: x.kind, size: x.size, vins: x.vins || [], collection: x.collection || "" }; }));
-        };
-        g.onerror = function () { db.close(); res([]); };
-      };
-      r.onerror = function () { res([]); };
+  function isRoConflict(e) { return !!(e && e.name === "RoConflict"); }
+  function mini(x) { return { id: x.id, name: x.name, type: x.type, kind: x.kind, size: x.size, vins: x.vins || [], collection: x.collection || "" }; }
+  // The files attached to a repair order, by its links.
+  function attachedFiles(roId) {
+    return R().links.from("ro", roId, "attachment").then(function (ls) {
+      return R().files.getMany(ls.map(function (l) { return l.toId; }));
+    }).then(function (recs) {
+      return recs.filter(Boolean).map(mini).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
     });
   }
 
@@ -439,10 +439,9 @@
   }
   function refreshFiles() {
     if (!current) return;
-    var coll = current.collection, roVin = current.vin;
-    readVault().then(function (all) {
-      if (!current || current.collection !== coll) return;
-      var list = all.filter(function (f) { return f.collection === coll; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
+    var id = current.id, roVin = current.vin;
+    attachedFiles(id).then(function (list) {
+      if (!current || current.id !== id) return;
       var box = $("#files"); box.innerHTML = "";
       if (!list.length) { box.innerHTML = '<div class="files-empty">No files yet. Add the RO paperwork, photos, scans… or import files already in the Vault.</div>'; return; }
       list.forEach(function (f) {
@@ -460,28 +459,43 @@
   }
 
   // ---------- CRUD ----------
+  // A field edit is saved 400 ms after the last keystroke. Anything that
+  // changes `current` first commits that pending save for the record it
+  // belongs to — otherwise the timer fired against the newly opened RO.
+  function flushSave() { if (saveT) { clearTimeout(saveT); saveT = null; commitSave(); } }
   function newRO() {
+    flushSave();
     var rec = blankRO();
     rec.lines = [{ id: uid(), text: "", op: "" }];
     rec.collection = desiredCollection(rec);
     current = rec; ros.push(rec); roPut(rec);
     renderList(); paint(); $("#ro-no").focus();
   }
-  function openRO(id) { var r = ros.find(function (x) { return x.id === id; }); if (!r) return; current = r; renderList(); paint(); }
+  function openRO(id) { var r = ros.find(function (x) { return x.id === id; }); if (!r) return; flushSave(); current = r; renderList(); paint(); }
   function scheduleSave() { if (!current) return; $("#save-note").textContent = "Saving…"; clearTimeout(saveT); saveT = setTimeout(commitSave, 400); }
   function commitSave() {
+    saveT = null;
     if (!current) return;
     var oldColl = current.collection;
     FIELDS.forEach(function (f) { current[f[1]] = $(f[0]).value; });
     current.vin = (current.vin || "").trim().toUpperCase().replace(/\s+/g, "");
     current.updatedAt = Date.now();
     var newColl = desiredCollection(current);
-    if (newColl !== oldColl) { current.collection = newColl; relay({ type: "vault-rename-collection", from: oldColl, to: newColl }); }
-    roPut(current).then(function () { $("#save-note").textContent = "Saved"; setTimeout(function () { if ($("#save-note").textContent === "Saved") $("#save-note").textContent = ""; }, 1400); renderList(); });
+    var rec = current;
+    if (newColl !== oldColl) { rec.collection = newColl; R().files.renameCollection(oldColl, newColl).catch(function () {}); }
+    roPut(rec).then(function () {
+      $("#save-note").textContent = "Saved"; setTimeout(function () { if ($("#save-note").textContent === "Saved") $("#save-note").textContent = ""; }, 1400); renderList();
+    }, function (e) {
+      // D7: the number belongs to another repair order — nothing is saved
+      // until it is changed.
+      if (isRoConflict(e)) { $("#save-note").textContent = "Not saved — RO " + (rec.ro || "").trim() + " already exists"; toast("RO " + (rec.ro || "").trim() + " is already used by another repair order."); }
+      else { $("#save-note").textContent = "Not saved"; toast("Couldn't save — " + ((e && e.message) || e)); }
+    });
   }
   function deleteRO() {
     if (!current) return;
     if (!confirm("Delete " + ((current.ro || "").trim() ? "RO " + current.ro.trim() : "this repair order") + "? The notes are removed. Files stay in the Vault (under “" + current.collection + "”).")) return;
+    flushSave();
     var id = current.id;
     roDel(id).then(function () {
       ros = ros.filter(function (x) { return x.id !== id; });
@@ -510,58 +524,61 @@
     var c = classify(files, roVin);
     var keep = c.noVin.concat(c.match);
     var stampVin = roVin ? c.noVin.map(function (f) { return f.id; }) : [];
+    var rec = current;
     var doApply = function (extraKeep, eject) {
       var add = keep.concat(extraKeep || []).map(function (f) { return f.id; });
       var remove = (eject || []).map(function (f) { return f.id; });
-      relay({ type: "vault-ro-apply", coll: current.collection, vin: roVin, add: add, stampVin: stampVin, remove: remove });
+      var ops = [];
+      if (add.length) {
+        ops.push(R().links.linkMany(add.map(function (fid) { return { fromType: "ro", fromId: rec.id, toType: "file", toId: fid, kind: "attachment", source: "ro" }; })));
+        add.forEach(function (fid) { ops.push(R().files.update(fid, { collection: rec.collection })); });
+      }
+      stampVin.forEach(function (fid) {
+        ops.push(R().files.get(fid).then(function (f) { if (!f) return null; return R().files.update(fid, { vins: Array.from(new Set([roVin].concat(f.vins || []))), vinScan: Date.now() }); }));
+      });
+      remove.forEach(function (fid) {
+        ops.push(R().links.unlink("ro", rec.id, "file", fid, "attachment").then(function () { return R().files.update(fid, { collection: "" }); }));
+      });
       var msgs = [];
       if (c.noVin.length && roVin) msgs.push("stamped VIN on " + c.noVin.length);
       if (add.length) msgs.push(add.length + " added");
       if (remove.length) msgs.push(remove.length + " ignored");
-      if (msgs.length) toast("Files updated — " + msgs.join(" · ") + ".");
-      [400, 1200, 2600].forEach(function (d) { setTimeout(refreshFiles, d); });
+      return Promise.all(ops).catch(function () {}).then(function () {
+        if (msgs.length) toast("Files updated — " + msgs.join(" · ") + ".");
+        refreshFiles();
+      });
     };
     if (c.mismatch.length && roVin) {
       return askMismatch(c.mismatch, roVin).then(function (decision) {
-        if (decision === "add") doApply(c.mismatch, []);
-        else doApply([], uploaded ? c.mismatch : []); // ignore: eject uploads, omit imports
+        if (decision === "add") return doApply(c.mismatch, []);
+        return doApply([], uploaded ? c.mismatch : []); // ignore: eject uploads, omit imports
       });
     }
-    doApply(c.mismatch, []); // no RO VIN, or nothing mismatched
-    return Promise.resolve();
+    return doApply(c.mismatch, []); // no RO VIN, or nothing mismatched
   }
 
-  // ---------- files: upload via the shell ----------
-  function relay(payload) { if (!embedded) return; try { window.parent.postMessage({ type: "shell-relay", app: "vault", payload: payload }, "*"); } catch (e) {} }
+  // ---------- files: attach ----------
   function addFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
     if (!files.length || !current) return;
-    if (!embedded) { toast("Open Repair Orders in the File Database app to attach files."); return; }
     if (!current.collection) { current.collection = desiredCollection(current); roPut(current); }
-    var coll = current.collection, wantNames = files.map(function (f) { return f.name; });
-    readVault().then(function (before) {
-      var beforeIds = {}; before.forEach(function (f) { if (f.collection === coll) beforeIds[f.id] = 1; });
-      // Save into the Vault under this RO (no forced VIN — reconcile decides).
-      try { window.parent.postMessage({ type: "shell-add-files", files: files, collection: coll, stay: true }, "*"); } catch (e) {}
-      toast("Saving " + files.length + " file" + (files.length === 1 ? "" : "s") + " to this RO…");
-      // Wait for the new files to land (and a beat for the Vault's no-OCR VIN
-      // read), then reconcile VINs.
-      var t0 = Date.now();
-      (function poll() {
-        readVault().then(function (now) {
-          var fresh = now.filter(function (f) { return f.collection === coll && !beforeIds[f.id]; });
-          var done = fresh.length >= files.length || Date.now() - t0 > 8000;
-          if (!done) { refreshFiles(); setTimeout(poll, 500); return; }
-          refreshFiles();
-          setTimeout(function () {
-            readVault().then(function (settled) {
-              var got = settled.filter(function (f) { return f.collection === coll && !beforeIds[f.id]; });
-              reconcile(got, true);
-            });
-          }, 900); // let the no-OCR VIN detect finish
-        });
-      })();
-    });
+    var rec = current;
+    toast("Saving " + files.length + " file" + (files.length === 1 ? "" : "s") + " to this RO…");
+    // Stored straight into the shared database, linked to this RO, kept in
+    // its collection for the Files app's filter. No polling: the intake
+    // reports each file, and the quick VIN read it queues (a job the Files
+    // app runs) is awaited before the VINs are reconciled.
+    FDData.intake.ingest("vault", files, { collection: rec.collection, roId: rec.id, source: "ro" }).then(function (out) {
+      out.results.filter(function (r) { return !r.ok; }).forEach(function (r) { toast("Couldn't save “" + r.name + "” — " + r.error); });
+      refreshFiles();
+      if (!out.ids.length) return;
+      var vj = (out.jobs || []).filter(function (j) { return j.type === "vin-detect"; })[0];
+      var settled = vj ? FDData.jobs.whenDone(vj.id, 20000).catch(function () {}) : Promise.resolve();
+      return settled.then(function () { return R().files.getMany(out.ids); }).then(function (got) {
+        if (!current || current.id !== rec.id) return;
+        return reconcile(got.filter(Boolean).map(mini), true);
+      });
+    }).catch(function (e) { toast("Couldn't save the files — " + ((e && e.message) || e)); });
   }
   function openInVault() {
     if (!current) return;
@@ -1275,6 +1292,7 @@
       .map(function (l) { return { id: uid(), text: squash(l.text), op: squash(l.op).toUpperCase() }; })
       .filter(function (l) { return l.text || l.op; });
     var norm = function (s) { return squash(s).toUpperCase(); };
+    flushSave(); // a pending field edit commits before the scan tops the record up
     var existing = vals.ro ? ros.filter(function (r) { return (r.ro || "").trim() === vals.ro; })[0] : null;
     var rec, added = 0;
 
@@ -1299,7 +1317,7 @@
       added = picked.length;
     }
 
-    var attach = embedded && $("#rv-file").checked ? scanFiles.slice() : [];
+    var attach = $("#rv-file").checked ? scanFiles.slice() : [];
     roPut(rec).then(function () {
       current = rec;
       renderList(); paint();
@@ -1364,14 +1382,34 @@
 
   function boot() {
     wire();
-    roAll().then(function (recs) {
+    open().then(function () {
+      // Changes from other contexts (the Files app moving a file to an RO,
+      // another tab editing) refresh what is on screen.
+      var filesT = null, rosT = null;
+      function onFiles(d) { if (!d.remote) return; clearTimeout(filesT); filesT = setTimeout(refreshFiles, 200); }
+      FDData.bus.on("files:changed", onFiles);
+      FDData.bus.on("links:changed", onFiles);
+      FDData.bus.on("ros:changed", function (d) {
+        if (!d.remote) return;
+        clearTimeout(rosT);
+        rosT = setTimeout(function () {
+          roAll().then(function (recs) {
+            ros = recs || [];
+            if (current) { var c = ros.filter(function (x) { return x.id === current.id; })[0]; current = c || null; }
+            renderList(); paint();
+          });
+        }, 200);
+      });
+      return roAll();
+    }).then(function (recs) {
       ros = recs || [];
       ros.forEach(function (r) {
-        if (!r.collection) r.collection = desiredCollection(r);
+        var changed = false;
+        if (!r.collection) { r.collection = desiredCollection(r); changed = true; }
         // migrate the old single notes field into the first story line
-        if (!r.lines) r.lines = (r.notes && r.notes.trim()) ? [{ id: uid(), text: r.notes }] : [];
-        FIELDS.forEach(function (f) { if (typeof r[f[1]] !== "string") r[f[1]] = ""; });
-        roPut(r);
+        if (!r.lines) { r.lines = (r.notes && r.notes.trim()) ? [{ id: uid(), text: r.notes }] : []; changed = true; }
+        FIELDS.forEach(function (f) { if (typeof r[f[1]] !== "string") { r[f[1]] = ""; changed = true; } });
+        if (changed) roPut(r).catch(function () {});
       });
       renderList();
       if (ros.length) openRO(ros.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0].id);

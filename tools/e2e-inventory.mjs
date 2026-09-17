@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { fdbAll, fdbCount } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -170,17 +171,9 @@ await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(500);
 check((await page.locator("#tbody tr").count()) === fxTools.length, "imported data persists after reload");
 check((await page.locator("#tbody .thumb").count()) > 0, "photos persist after reload (blobs in IndexedDB)");
-const starredStill = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("tool-inventory");
-  r.onsuccess = () => { const db = r.result; const c = db.transaction("tools").objectStore("tools").getAll(); c.onsuccess = () => res(c.result.filter((t) => t.star).length); c.onerror = () => res(-1); };
-  r.onerror = () => res(-1);
-}));
+const starredStill = (await fdbAll(page, "tools")).filter((t) => t.star).length;
 check(starredStill === 1, `starred flag persisted in IndexedDB (${starredStill})`);
-const photoBlobs = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("tool-inventory");
-  r.onsuccess = () => { const db = r.result; const c = db.transaction("photos").objectStore("photos").getAll(); c.onsuccess = () => res(c.result.length); c.onerror = () => res(-1); };
-  r.onerror = () => res(-1);
-}));
+const photoBlobs = await fdbCount(page, "photos");
 check(photoBlobs === fxPhotos.length, `photos stored as blobs in IndexedDB (${photoBlobs})`);
 
 // Export CSV downloads

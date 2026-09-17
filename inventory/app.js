@@ -11,8 +11,7 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-  var DB_NAME = "tool-inventory", DB_VERSION = 2, STORE = "tools", PHOTOS = "photos", META = "meta";
-  var db = null, all = [], view = [];
+  var all = [], view = [];
   var bundledCatalog = null; // .tidb shipped with the standalone/USB builds (probed at boot)
   var photoBlobs = {};   // id -> Blob
   var photoUrls = {};    // id -> object URL
@@ -87,30 +86,19 @@
   }
   function dl(blob, name) { var u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 8000); }
 
-  // ---------- IndexedDB ----------
-  function open() {
-    return new Promise(function (res, rej) {
-      var r = indexedDB.open(DB_NAME, DB_VERSION);
-      r.onupgradeneeded = function () {
-        var d = r.result;
-        if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: "id" });
-        if (!d.objectStoreNames.contains(PHOTOS)) d.createObjectStore(PHOTOS, { keyPath: "id" });
-        if (!d.objectStoreNames.contains(META)) d.createObjectStore(META, { keyPath: "k" });
-      };
-      r.onsuccess = function () { db = r.result; res(db); };
-      r.onerror = function () { rej(r.error); };
-    });
-  }
-  function txDone(t) { return new Promise(function (res, rej) { t.oncomplete = function () { res(); }; t.onerror = function () { rej(t.error); }; t.onabort = function () { rej(t.error); }; }); }
-  function reqP(rq) { return new Promise(function (res, rej) { rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { rej(rq.error); }; }); }
-  function getAll() { return reqP(db.transaction(STORE, "readonly").objectStore(STORE).getAll()); }
-  function putMany(list) { var t = db.transaction(STORE, "readwrite"), os = t.objectStore(STORE); list.forEach(function (x) { os.put(x); }); return txDone(t); }
-  function putOne(x) { var t = db.transaction(STORE, "readwrite"); t.objectStore(STORE).put(x); return txDone(t); }
-  function getAllPhotos() { return reqP(db.transaction(PHOTOS, "readonly").objectStore(PHOTOS).getAll()); }
-  function putPhotos(list) { if (!list.length) return Promise.resolve(); var t = db.transaction(PHOTOS, "readwrite"), os = t.objectStore(PHOTOS); list.forEach(function (p) { os.put(p); }); return txDone(t); }
-  function clearData() { var t = db.transaction([STORE, PHOTOS], "readwrite"); t.objectStore(STORE).clear(); t.objectStore(PHOTOS).clear(); return txDone(t); }
-  function getMeta(k) { return reqP(db.transaction(META, "readonly").objectStore(META).get(k)).then(function (r) { return r ? r.v : null; }); }
-  function setMeta(k, v) { var t = db.transaction(META, "readwrite"); t.objectStore(META).put({ k: k, v: v }); return txDone(t); }
+  // ---------- storage (shared: ../src/data) ----------
+  // Tools, photos and this app's settings live in the platform database
+  // (REWRITE-PLAN.md Phase 2); these are the verbs the rest of the file uses.
+  var R = function () { return FDData.repos; };
+  function open() { return FDData.boot(); }
+  function getAll() { return R().tools.list(); }
+  function putMany(list) { return R().tools.putMany(list); }
+  function putOne(x) { return R().tools.put(x); }
+  function getAllPhotos() { return R().photos.list(); }
+  function putPhotos(list) { return list.length ? R().photos.putMany(list) : Promise.resolve(); }
+  function clearData() { return R().tools.clear().then(function () { return R().photos.clear(); }); }
+  function getMeta(k) { return R().settings.getValue("inventory." + k, null); }
+  function setMeta(k, v) { return R().settings.setValue("inventory." + k, v); }
 
   var EDIT_FIELDS = ["location", "qty", "note", "comment"];
   function normalize(t, i) {
@@ -588,6 +576,13 @@
 
   // ---------- boot ----------
   open().then(function () {
+    // Another tab's edits reload the catalog (own writes already updated `all`).
+    var reloadT = null;
+    FDData.bus.on("tools:changed", function (d) {
+      if (!d.remote) return;
+      clearTimeout(reloadT);
+      reloadT = setTimeout(function () { getAll().then(function (list) { all = list || []; fillFilters(); apply(); updateSub(); }); }, 250);
+    });
     return Promise.all([getAll(), loadPhotos(), getMeta("source")]);
   }).then(function (r) {
     all = (r[0] || []).map(normalize);

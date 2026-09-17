@@ -17,7 +17,7 @@ contracts, service workers, and test coverage.
 | Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | [inventory/index.html](inventory/index.html) |
 | Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | [toolbox/index.html](toolbox/index.html) |
 | Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, and associate files stored in the Vault | [ros/index.html](ros/index.html) |
-| Extract | Open `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | [viewer.html](viewer.html) |
+| Extract | Open `.fdb`, `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | [viewer.html](viewer.html) |
 
 The shell loads each app on first use and keeps it open when you switch tabs.
 Vault, LI Documents, and Tool Inventory have their own PWA manifests and service
@@ -250,16 +250,18 @@ remove its stored copy. LI also offers auto-save of its database to a chosen fil
 
 ## Backups and extraction
 
-The top-bar **Back up everything** button asks three apps to export separately.
-It is not a single combined backup, and empty LI/Inventory databases may produce
-no download. Check that the browser allowed the expected downloads.
+The top-bar **Back up everything** button downloads one `.fdb` with everything,
+then asks the three apps for their own formats as well. Empty LI/Inventory
+databases produce no per-app download. Check that the browser allowed the
+expected downloads.
 
 | Data | Backup | Restore behavior |
 | --- | --- | --- |
+| Everything: files with bytes and thumbnails, LI documents, tools and photos, repair orders, links, plain-data settings | `.fdb` binary container (drop it on the platform, or open it in Extract) | Replaces the whole database after a confirm: written into a new generation, verified (counts and every file's SHA-256), then switched to; a failed verification changes nothing |
 | Vault files, thumbnails, and per-file metadata | `.fvault` binary v2; legacy JSON imports remain supported | Adds records; conflicting IDs receive new IDs, so repeated restores can duplicate files |
 | LI PDFs and document metadata | `.lidb` ZIP with a manifest and PDFs | Overwrites matching document IDs after confirmation; other documents remain |
 | Inventory records, edits, stars, and photos | `.tidb` binary container | Replaces the current inventory after confirmation |
-| RO records and story lines | No export implemented | No restore implemented |
+| RO records and story lines | In the `.fdb` | In the `.fdb` |
 
 Vault backups do not include browser preferences, linked-folder handles, or empty
 collections stored only in settings. Backups are not encrypted by the app.
@@ -387,7 +389,7 @@ aliases. Suites without aliases run directly, for example:
 
 ```bash
 node tools/e2e-ros.mjs
-node tools/e2e-bridge.mjs
+node tools/e2e-migrate.mjs
 ```
 
 `npm run icons` regenerates icons using Python. `npm run vendor:pdfjs` regenerates
@@ -407,15 +409,16 @@ and path-filtered on pushes to that branch.
 | --- | --- |
 | `index.html`, `shell.js`, `shell.css` | Platform UI, intake, navigation, theme, and badges |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Platform PWA assets |
-| `bridge.js`, `debug.js` | File-transfer mailbox and shared local logger |
-| `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, backup formats — loaded by every page, unit-tested from Node |
-| `vault/` | File Vault, IndexedDB helpers, Blob verification, PDF.js vendor files |
+| `debug.js` | Shared local logger |
+| `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, hashing, backup formats — loaded by every page, unit-tested from Node |
+| `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the first-launch migration dialog — loaded by every page, unit-tested from Node with fake-indexeddb |
+| `vault/` | File Vault, its adapter over the shared repos, Blob verification, PDF.js vendor files |
 | `li/`, `inventory/`, `toolbox/`, `ros/` | Other application pages and assets |
 | `viewer.html` | Standalone backup extractor |
 | `inventory-data/` | Source catalog JSON and photos; build input, not automatically imported |
 | `portable/` | Portable launchers and user guide |
 | `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |
-| `tools/` | Build helpers, vendoring, static checks, and browser suites |
+| `tools/` | Build helpers, vendoring, static checks, the browser suites and their shared database helper (`e2e-db.mjs`) |
 | `.github/workflows/` | QA and Windows ZIP workflows |
 
 ## License

@@ -12,6 +12,7 @@ import zlib from "node:zlib";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -107,12 +108,7 @@ check(await waitFor(async () => (await page.locator("#results .card").count()) =
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
 
-const record = () => page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => res((c.result || [])[0] || null); c.onerror = () => res(null); };
-  r.onerror = () => res(null);
-}));
+const record = async () => (await vaultFiles(page))[0] || null;
 check(await waitFor(async () => { const r = await record(); return r && r.vinScan; }, 60000), "the scan finishes");
 
 const rec = await record();

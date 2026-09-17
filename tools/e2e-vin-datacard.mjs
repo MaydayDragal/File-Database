@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -80,11 +81,7 @@ await page.locator('#more-menu button[data-action="scan-vins"]').click();
 // transient "finished" toast's poll window on a slow network. Treat the scan
 // as complete when the finished toast shows OR the record has been scanned
 // (durable), with a generous timeout for the OCR cold start.
-const readRec = () => page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const x = c.result[0] || {}; res({ vins: x.vins || [], fins: x.fins || [], vinScan: x.vinScan || 0 }); }; c.onerror = () => res({}); };
-  r.onerror = () => res({});
-}));
+const readRec = async () => { const x = (await vaultFiles(page))[0] || {}; return { vins: x.vins || [], fins: x.fins || [], vinScan: x.vinScan || 0 }; };
 check(await waitFor(async () => {
   if (/VIN scan finished/.test(await toastText() || "")) return true;
   const r = await readRec();

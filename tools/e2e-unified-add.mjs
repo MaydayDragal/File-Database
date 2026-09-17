@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles, vaultCount, fdbCount } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -33,24 +34,8 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 let failures = 0;
 const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failures++; };
 
-// Read a sibling app's IndexedDB from the shell page (same origin). Guarded
-// like the shell's badge peek: aborting onupgradeneeded means the peek can
-// NEVER create an app's database before the app itself does (a premature
-// create would block the app's own store creation — the classic peek bug).
-const dbCount = (dbName, store) => page.evaluate(({ dbName, store }) => new Promise((resolve) => {
-  const r = indexedDB.open(dbName);
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains(store)) { db.close(); return resolve(0); } const c = db.transaction(store, "readonly").objectStore(store).count(); c.onsuccess = () => { db.close(); resolve(c.result); }; c.onerror = () => { db.close(); resolve(-1); }; };
-  r.onerror = () => resolve(0);
-  r.onblocked = () => resolve(0);
-}), { dbName, store });
-const vaultCollections = () => page.evaluate(() => new Promise((resolve) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return resolve([]); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); resolve(g.result.map((x) => ({ name: x.name, collection: x.collection }))); }; g.onerror = () => { db.close(); resolve([]); }; };
-  r.onerror = () => resolve([]);
-  r.onblocked = () => resolve([]);
-}));
+// Read the shared database from the shell page (same origin).
+const vaultCollections = async () => (await vaultFiles(page)).map((x) => ({ name: x.name, collection: x.collection || "" }));
 const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(200); } return false; };
 
 // ---------- fixtures: a mixed batch ----------
@@ -80,10 +65,10 @@ await page.setInputFiles("#shell-file-input", batch);
 
 // Generic files (note + generic PDF) route to the Vault; the two LI-numbered
 // PDFs route to the LI Database — all from a single drop, no prompt.
-const vaultOk = await waitFor(async () => (await dbCount("file-vault", "files")) >= 2);
-const liOk = await waitFor(async () => (await dbCount("LIDocsDB", "docs")) >= 2);
-const vaultN = await dbCount("file-vault", "files");
-const liN = await dbCount("LIDocsDB", "docs");
+const vaultOk = await waitFor(async () => (await vaultCount(page)) >= 2);
+const liOk = await waitFor(async () => (await fdbCount(page, "documents")) >= 2);
+const vaultN = await vaultCount(page);
+const liN = await fdbCount(page, "documents");
 check(vaultOk && vaultN === 2, `generic files routed to the Vault (${vaultN} of 2)`);
 check(liOk && liN === 2, `LI-numbered PDFs routed to the LI Database (${liN} of 2)`);
 
@@ -101,7 +86,7 @@ fs.writeFileSync(path.join(FIX, "LI99.99-P-000111.pdf"), fakePdf);
 await page.setInputFiles("#shell-file-input", [path.join(FIX, "LI99.99-P-000111.pdf")]);
 const switched = await waitFor(async () => (await page.locator("#tab-li.is-active").count()) === 1, 6000);
 check(switched, "an all-LI batch surfaces the LI Documents tab");
-check(await waitFor(async () => (await dbCount("LIDocsDB", "docs")) >= 3), "the extra LI PDF was stored (3 total)");
+check(await waitFor(async () => (await fdbCount(page, "documents")) >= 3), "the extra LI PDF was stored (3 total)");
 
 // ---------- the LI app's own import button is gone when embedded ----------
 const li = page.frameLocator("#frame-li");

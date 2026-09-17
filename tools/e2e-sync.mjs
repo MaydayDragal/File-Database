@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { fdbAll } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -103,11 +104,7 @@ await page.click("#more-btn");                      // reopen to read the label
 check((await page.locator('#more-menu [data-action="auto-sync"]').textContent()).includes("on"), "Auto-sync toggles to 'on'");
 await page.keyboard.press("Escape");
 check(await waitCards(5, 5000), `auto-sync imports the new file on its own within a few seconds (got ${await cards()})`);
-const autoPersisted = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const db = r.result; const g = db.transaction("meta").objectStore("meta").get("syncAuto"); g.onsuccess = () => res(!!(g.result && g.result.value)); g.onerror = () => res(false); };
-  r.onerror = () => res(false);
-}));
+const autoPersisted = !!(((await fdbAll(page, "settings")).find((s) => s.key === "vault.syncAuto") || {}).value);
 check(autoPersisted, "auto-sync preference is persisted in IndexedDB");
 
 // 6. Turning auto-sync off stops it

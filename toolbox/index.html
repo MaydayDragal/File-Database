@@ -4377,7 +4377,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 <script src="../debug.js"></script>
 <script src="../ocr.js"></script>
-<script src="../bridge.js"></script>
+<script src="../src/core/hash.js"></script>
+<script src="../src/core/formats/container.js"></script>
+<script src="../src/core/formats/fdb.js"></script>
+<script src="../src/data/schema.js"></script>
+<script src="../src/data/bus.js"></script>
+<script src="../src/data/db.js"></script>
+<script src="../src/data/repos.js"></script>
+<script src="../src/data/jobs.js"></script>
+<script src="../src/data/intake.js"></script>
+<script src="../src/data/backup.js"></script>
+<script src="../src/data/migrate.js"></script>
+<script src="../src/data/boot.js"></script>
+<script src="../src/ui/migrate-dialog.js"></script>
 <script>
 /* ===== File Database platform integration ===== */
 (function () {
@@ -4404,7 +4416,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   window.__vaultOffer = function (blob, name) {
     try {
-      if (!window.VaultBridge || !blob) return;
+      if (!window.FDData || !blob) return;
       hideSnack();
       snack = document.createElement("div");
       snack.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:12px;max-width:min(92vw,440px);background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 10px 30px rgba(0,0,0,.28);padding:12px 14px;font-size:13.5px;color:var(--text);";
@@ -4418,12 +4430,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       btn.textContent = "💾 Save to File Vault";
       btn.addEventListener("click", function () {
         btn.disabled = true;
-        Promise.resolve(window.VaultBridge.send("vault", {
-          name: name,
-          type: blob.type || "application/octet-stream",
-          blob: blob,
-          meta: { collection: "Toolbox" }
-        })).then(function () {
+        FDData.boot().then(function () {
+          return FDData.intake.ingest("vault", [new File([blob], name, { type: blob.type || "application/octet-stream" })], { collection: "Toolbox", source: "toolbox" });
+        }).then(function (out) {
+          if (!out.ids.length) throw new Error((out.results[0] && out.results[0].error) || "not stored");
           label.textContent = "Saved to File Vault ✓";
           if (btn.parentNode) btn.parentNode.removeChild(btn);
           if (snackTimer) clearTimeout(snackTimer);
@@ -4441,7 +4451,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   };
 
   /* ---- Receive files sent from the File Vault ---- */
-  if (window.VaultBridge) {
+  // A "toolbox-intake" job names stored records (a Files-app selection, or
+  // transient copies the platform intake made); their bytes are read from
+  // the shared store and injected into the tool's file input as ONE batch,
+  // so multi-file tools (PDF merge, media queue) see the whole selection.
+  // Transient copies are removed once handed over.
+  if (window.FDData) {
     var INPUTS = { media: "m-fileInput", pdf: "pdf-org-file", csv: "v-fileInput", zip: "z-fileInput", img: "g-cv-file", ocr: "o-fileInput" };
     var pickTab = function (f) {
       var t = f.type || "", n = (f.name || "").toLowerCase();
@@ -4451,26 +4466,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (/\.zip$/.test(n) || t === "application/zip") return "zip";
       return "media";
     };
-    // The bridge delivers one file per nudge, but a bulk send from the vault
-    // is a BURST — buffer briefly and inject each tool's files as ONE batch,
-    // so multi-file tools (PDF merge, media queue) see the whole selection
-    // instead of each file overwriting the last.
-    // Each buffered file carries its bridge resolver; injecting a tool's batch
-    // resolves them, so the bridge acknowledges an item only once it's been
-    // handed to the tool (not merely received).
-    var pendingIn = [], flushInT = null;
-    function flushIncoming() {
-      flushInT = null;
-      var batch = pendingIn.splice(0);
-      if (!batch.length) return;
+    function injectBatch(items) {
       var groups = {};
-      batch.forEach(function (x) { (groups[x.tab] = groups[x.tab] || []).push(x); });
+      items.forEach(function (x) { (groups[x.tab] = groups[x.tab] || []).push(x.f); });
       Object.keys(groups).forEach(function (tab, i) {
         if (i === 0 && window.__openTab) window.__openTab(tab);
-        var files = groups[tab].map(function (x) { return x.f; });
+        var files = groups[tab];
         try {
           // The media tool queues extra files itself — append through its hook
-          // so a straggler flush can't replace an already-loaded file.
+          // so a straggler batch can't replace an already-loaded file.
           if (tab === "media" && window.__mediaAddFiles) { window.__mediaAddFiles(files); }
           else {
             var input = document.getElementById(INPUTS[tab]);
@@ -4480,27 +4484,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             input.files = dt.files;
             input.dispatchEvent(new Event("change", { bubbles: true }));
           }
-          groups[tab].forEach(function (x) { x.resolve(); });
-        } catch (err) {
-          // A controlled "no tool for this file" is still a settled handler —
-          // resolve so the item is acknowledged rather than retried forever.
-          groups[tab].forEach(function (x) { x.resolve(); });
-        }
+        } catch (err) { /* a controlled "no tool for this file" still counts as handed over */ }
       });
     }
-    window.VaultBridge.receive("toolbox", function (item) {
-      return new Promise(function (resolve) {
-        if (!item || !item.blob) { resolve(); return; }
-        var f = new File([item.blob], item.name || "file", { type: item.type || item.blob.type || "" });
-        var tab = (item.meta && item.meta.tab) || pickTab(f);
-        if (!INPUTS[tab]) tab = pickTab(f);
-        pendingIn.push({ f: f, tab: tab, resolve: resolve });
-        clearTimeout(flushInT);
-        // Big photos read out of the vault's IndexedDB can arrive far apart —
-        // a short window would split one bulk send into several flushes.
-        flushInT = setTimeout(flushIncoming, 500);
+    function intakeJob(job) {
+      var R = FDData.repos;
+      return R.files.getMany(job.inputIds).then(function (recs) {
+        var have = recs.filter(Boolean);
+        return Promise.all(have.map(function (r) { return R.files.getBlob(r.id); })).then(function (blobs) {
+          var items = [], transient = [];
+          have.forEach(function (r, i) {
+            if (!blobs[i]) return;
+            var f = new File([blobs[i]], r.name || "file", { type: r.type || blobs[i].type || "" });
+            var tab = (job.meta && job.meta.tab) || pickTab(f);
+            if (!INPUTS[tab]) tab = pickTab(f);
+            items.push({ f: f, tab: tab });
+            if (r.transient && !(job.meta && job.meta.keep)) transient.push(r.id);
+          });
+          if (items.length) injectBatch(items);
+          return transient.length ? R.files.removeManyFull(transient) : null;
+        });
       });
-    });
+    }
+    FDData.boot().then(function () { FDData.jobs.register("toolbox-intake", intakeJob); });
   }
 })();
 </script>
