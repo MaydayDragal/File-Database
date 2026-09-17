@@ -1159,8 +1159,18 @@ export function start(root, host, shell) {
     _refreshT = setTimeout(async () => {
       try {
         const fresh = await DB.listMeta();
-        const flags = new Map(items.filter((x) => x._noThumb).map((x) => [x.id, true]));
-        items = fresh.map((r) => { if (flags.has(r.id)) r._noThumb = true; return r; });
+        // Merge by id, keeping the objects already on screen: a running scan
+        // (VIN, fingerprint) writes its results onto the records it looked up
+        // at start, so replacing them mid-flight would drop those updates.
+        const byId = new Map(items.map((x) => [x.id, x]));
+        items = fresh.map((r) => {
+          const cur = byId.get(r.id);
+          if (!cur) return r;
+          const noThumb = cur._noThumb;
+          Object.assign(cur, r);
+          if (noThumb) cur._noThumb = true;
+          return cur;
+        });
         if (state.currentId && !items.some((x) => x.id === state.currentId)) closeDetail();
         render();
         updateStorage();
