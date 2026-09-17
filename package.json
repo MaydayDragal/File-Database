@@ -52,6 +52,7 @@
   "homepage": "https://github.com/MaydayDragal/File-Database#readme",
   "devDependencies": {
     "esbuild": "0.25.5",
+    "fake-indexeddb": "^6.2.5",
     "pdfjs-dist": "4.2.67",
     "playwright": "1.56.1"
   }

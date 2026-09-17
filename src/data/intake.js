@@ -1,0 +1,105 @@
+/*
+ * intake.js — the one front door for files (REWRITE-PLAN.md §3.2).
+ *
+ * ingest(target, files, opts) reads each file's bytes NOW (a dropped File is
+ * a lazy handle — a OneDrive placeholder or a locked file can read as
+ * garbage later), stores them through repos.files.ingest() and queues the
+ * follow-up work as jobs the owning app runs:
+ *   "vault"   → a Files record (inFiles 1) + "thumb" and "vin-detect" jobs;
+ *               with opts.roId, an attachment link to that repair order
+ *   "li"      → a hidden PDF record (inFiles 0, "LI Documents") + "li-import"
+ *   "toolbox" → a transient record (inFiles 0) + "toolbox-intake" {tab}
+ * It resolves with per-file results: a file that failed to read or store is
+ * never reported as delivered (the old mailbox acknowledged LI batches that
+ * had failures).
+ *
+ * Classic <script> (window.FDData.intake) and side-effect import from Node.
+ * Requires repos.js, jobs.js and src/core/ids.js.
+ */
+(function (global) {
+  "use strict";
+  var data = global.FDData, repos = data.repos, jobs = data.jobs;
+  var core = global.FDCore;
+
+  var MATERIALIZE_MAX = 256 * 1024 * 1024; // beyond this, keep the handle (memory)
+  var THUMB_KINDS = { image: 1, video: 1, pdf: 1 };
+  var VIN_SKIP_KIND = { video: 1 };
+
+  function isPdf(f) { return /pdf/i.test((f && f.type) || "") || /\.pdf$/i.test((f && f.name) || ""); }
+  // The platform's routing rule: a PDF whose name carries a Mercedes
+  // document number is an LI document; everything else is a file.
+  function looksLikeLI(f) { return isPdf(f) && core && core.ids && core.ids.hasLiNumber(f.name || ""); }
+  // Where a dropped file goes. The platform's own database files open in
+  // their app instead of being stored as opaque blobs.
+  function classifyTarget(f) {
+    var n = String((f && f.name) || "").toLowerCase();
+    if (/\.tidb$/.test(n)) return "inventory-import";
+    if (/\.fvault$/.test(n)) return "vault-restore";
+    if (/\.lidb$/.test(n)) return "li-restore";
+    if (/\.fdb$/.test(n)) return "platform-restore";
+    return looksLikeLI(f) ? "li" : "vault";
+  }
+  function materialize(f) {
+    if (!f) return Promise.reject(new Error("no file"));
+    if (f.size > MATERIALIZE_MAX) return Promise.resolve(f);
+    return f.arrayBuffer().then(function (buf) {
+      if (f.size && !buf.byteLength) throw new Error("empty read");
+      return new Blob([buf], { type: f.type || "application/octet-stream" });
+    });
+  }
+  function metaFor(target, f, opts) {
+    var m = Object.assign({}, opts.meta || {});
+    if (target === "vault") {
+      m.inFiles = 1;
+      if (opts.collection) m.collection = opts.collection;
+      if (opts.vin) m.vins = Array.from(new Set([String(opts.vin).toUpperCase()].concat(m.vins || [])));
+    } else if (target === "li") {
+      m.inFiles = 0; m.collection = repos.LI_COLLECTION; m.kind = "pdf";
+    } else if (target === "toolbox") {
+      m.inFiles = 0; m.transient = 1; m.collection = "";
+    }
+    return m;
+  }
+
+  function ingest(target, list, opts) {
+    opts = opts || {};
+    var files = Array.prototype.slice.call(list || []).filter(Boolean);
+    var entries = [], results = [];
+    var chain = Promise.resolve();
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        return materialize(f).then(function (blob) {
+          entries.push({ blob: blob, name: f.name || "Untitled", type: f.type || blob.type || "application/octet-stream", meta: metaFor(target, f, opts) });
+        }, function (e) {
+          results.push({ name: f.name || "Untitled", id: null, ok: false, error: "read: " + ((e && e.message) || e) });
+        });
+      });
+    });
+    return chain.then(function () { return repos.files.ingest(entries, { verify: opts.verify !== false }); }).then(function (stored) {
+      results = results.concat(stored);
+      var ok = stored.filter(function (r) { return r.ok; });
+      var ids = ok.map(function (r) { return r.id; });
+      var queued = [];
+      var after = Promise.resolve();
+      if (!ids.length) return { results: results, ids: ids, jobs: queued };
+      if (target === "vault") {
+        var thumbIds = ok.filter(function (r) { return THUMB_KINDS[r.kind]; }).map(function (r) { return r.id; });
+        var vinIds = ok.filter(function (r) { return !VIN_SKIP_KIND[r.kind]; }).map(function (r) { return r.id; });
+        if (opts.roId) {
+          after = after.then(function () {
+            return repos.links.linkMany(ids.map(function (id) { return { fromType: "ro", fromId: opts.roId, toType: "file", toId: id, kind: "attachment", source: opts.source || "user" }; }));
+          });
+        }
+        if (thumbIds.length) after = after.then(function () { return jobs.enqueue("thumb", thumbIds).then(function (j) { queued.push({ id: j.id, type: "thumb" }); }); });
+        if (vinIds.length && opts.vinDetect !== false) after = after.then(function () { return jobs.enqueue("vin-detect", vinIds, { quiet: vinIds.length > 3 }).then(function (j) { queued.push({ id: j.id, type: "vin-detect" }); }); });
+      } else if (target === "li") {
+        after = after.then(function () { return jobs.enqueue("li-import", ids, { source: opts.source || "intake" }).then(function (j) { queued.push({ id: j.id, type: "li-import" }); }); });
+      } else if (target === "toolbox") {
+        after = after.then(function () { return jobs.enqueue("toolbox-intake", ids, { tab: opts.tab || null }).then(function (j) { queued.push({ id: j.id, type: "toolbox-intake" }); }); });
+      }
+      return after.then(function () { return { results: results, ids: ids, jobs: queued }; });
+    });
+  }
+
+  data.intake = { MATERIALIZE_MAX: MATERIALIZE_MAX, THUMB_KINDS: THUMB_KINDS, VIN_SKIP_KIND: VIN_SKIP_KIND, isPdf: isPdf, looksLikeLI: looksLikeLI, classifyTarget: classifyTarget, materialize: materialize, ingest: ingest };
+})(typeof self !== "undefined" ? self : globalThis);

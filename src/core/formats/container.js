@@ -2,7 +2,7 @@
  * container.js — the shape every File Database backup shares: a 4-byte
  * magic, a little-endian uint32 version, a uint32 metadata length, that many
  * bytes of UTF-8 JSON, then the payload bytes the metadata describes.
- * .fvault ("FVLT") and .tidb ("TIDB") are both this; .lidb is a ZIP.
+ * .fvault ("FVLT"), .tidb ("TIDB") and .fdb ("FDBK") are all this; .lidb is a ZIP.
  *
  * Moved out of vault/backup-format.js and viewer.html (REWRITE-PLAN.md
  * Phase 1). Classic <script> (window.FDCore.formats) and side-effect import
@@ -27,6 +27,7 @@
       var magic = String.fromCharCode.apply(null, b);
       if (magic === "FVLT") return "fvault";
       if (magic === "TIDB") return "tidb";
+      if (magic === "FDBK") return "fdb";
       if (b[0] === 0x50 && b[1] === 0x4b) return "zip";      // "PK" — .lidb
       if (b[0] === 0x7b || b[0] === 0xef) return "json";     // "{" or BOM — legacy JSON backup
       return null;
