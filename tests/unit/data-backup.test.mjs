@@ -63,3 +63,24 @@ test("a tampered blob is caught by the sha256 check", async () => {
   await assert.rejects(backup.restore(new Blob([buf]), {}), /does not match its hash/);
   assert.equal(db.currentName(), "file-database-1");
 });
+
+test("a backup whose file record has no bytes is refused", async () => {
+  await fresh();
+  await db.open();
+  await seed();
+  const { blob, meta } = await backup.collect();
+  // Drop the first file's payload from the manifest (as a torn snapshot would have).
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const metaLen = new DataView(buf.buffer).getUint32(8, true);
+  const m = JSON.parse(new TextDecoder().decode(buf.subarray(12, 12 + metaLen)));
+  const drop = m.payloads.findIndex((p) => p.store === "blobs" && p.id === "f1");
+  const dropped = m.payloads[drop];
+  const before = m.payloads.slice(0, drop).reduce((n, p) => n + p.len, 0);
+  m.payloads.splice(drop, 1);
+  const metaBytes = new TextEncoder().encode(JSON.stringify(m));
+  const header = new Uint8Array(buf.subarray(0, 12)); new DataView(header.buffer).setUint32(8, metaBytes.length, true);
+  const payloads = buf.subarray(12 + metaLen);
+  const torn = new Blob([header, metaBytes, payloads.subarray(0, before), payloads.subarray(before + dropped.len)]);
+  await assert.rejects(backup.restore(torn, {}), /no bytes in the backup/);
+  assert.equal(db.currentName(), "file-database-1");
+});

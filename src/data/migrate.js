@@ -51,15 +51,21 @@
       });
     })).then(function () { return out; });
   }
+  // Any record in any store counts: a profile with only settings, a folder
+  // handle or photos left in a legacy database still has something to carry.
   function hasData(p) {
-    return Object.keys(LEGACY).some(function (k) { return p[k] && p[k].exists && (p[k].counts[LEGACY[k].main] || 0) > 0; });
+    return Object.keys(LEGACY).some(function (k) {
+      return p[k] && p[k].exists && Object.keys(p[k].counts).some(function (st) { return (p[k].counts[st] || 0) > 0; });
+    });
   }
   function anyExists(p) {
     return Object.keys(LEGACY).some(function (k) { return p[k] && p[k].exists; });
   }
   // "none" — nothing to do; "needed" — legacy data and no migrated
-  // generation; "cleanup" — a migration already completed but a legacy
-  // database is still around (an interrupted delete): remove it quietly.
+  // generation (a live generation opened after a skipped migration is
+  // carried into the new one by run()); "cleanup" — a migration already
+  // completed but a legacy database is still around (an interrupted
+  // delete): remove it quietly.
   function status() {
     return probe().then(function (p) {
       var pointer = db.currentName();
@@ -86,10 +92,53 @@
     opts = opts || {};
     var cb = opts.onProgress;
     var target = db.nextName();
-    var report = { ok: false, generation: target, from: {}, counts: {}, expected: {}, hashes: 0, warnings: [], error: null, at: now() };
+    var report = { ok: false, generation: target, from: {}, carried: null, counts: {}, expected: {}, hashes: 0, skipped: 0, warnings: [], error: null, at: now() };
     var expectHash = {};   // blob id -> sha256 of the source bytes
     var vaultFiles = [];   // metadata of migrated vault files (for RO links)
-    var liFileIds = [];
+    var ALL = ["files", "blobs", "thumbs", "documents", "tools", "photos", "ros", "links", "settings"];
+    var written = {};      // store -> records put into the target (what verify expects)
+    ALL.forEach(function (st) { written[st] = 0; });
+    var present = {};      // store -> ids already in the target (carried over)
+    function taken(store, id) { return !!(present[store] && present[store][id]); }
+    function note(store, id) { written[store]++; (present[store] = present[store] || {})[id] = true; }
+    function skip(what) { report.skipped++; report.warnings.push(what + " already exists in the live database and was kept as is."); }
+
+    // A live generation that already exists (the app was used after a skipped
+    // migration, or a restore came in between) is carried into the target
+    // first, so nothing created since is lost; the legacy copy then fills in
+    // around it and a legacy record whose id is already present is skipped.
+    function carryOver() {
+      var prev = db.currentName();
+      if (!prev || prev === target) return Promise.resolve();
+      return db.probe(prev).then(function (info) {
+        if (!info.exists) return null;
+        report.carried = {};
+        var chain = Promise.resolve();
+        ALL.concat(["jobs", "log"]).forEach(function (st) {
+          chain = chain.then(function () {
+            return db.run([st], "readonly", function (api) { return api.req(api.store(st).getAll()); }, prev).then(function (recs) {
+              if (st === "settings") recs = recs.filter(function (r) { return r.key !== "migration"; });
+              report.carried[st] = recs.length;
+              progress(cb, "carry", 0, recs.length, "Keeping current data");
+              var i = 0;
+              function next() {
+                if (i >= recs.length) return Promise.resolve();
+                var batch = recs.slice(i, i + 50); i += batch.length;
+                return writeInto(target, [st], function (api) {
+                  return Promise.all(batch.map(function (r) {
+                    if (written[st] != null) note(st, r.id != null ? r.id : r.key);
+                    if (st === "blobs" && r.sha256) expectHash[r.id] = r.sha256;
+                    return api.req(api.store(st).put(r));
+                  }));
+                }).then(next);
+              }
+              return next();
+            });
+          });
+        });
+        return chain;
+      });
+    }
 
     function copyVault() {
       return db.readAll(LEGACY.vault.name, "files").then(function (recs) {
@@ -106,10 +155,12 @@
                 meta.inFiles = 1;
                 repos.files.prepare(meta, null);
                 meta.rev = 1;
+                if (taken("files", meta.id)) { skip("File " + meta.name); return null; }
                 vaultFiles.push(meta);
+                note("files", meta.id);
                 var ops = [api.req(api.store("files").put(meta))];
-                if (r.blob) { report.from.vault.blobs++; expectHash[meta.id] = shas[k]; ops.push(api.req(api.store("blobs").put({ id: meta.id, blob: r.blob, size: r.blob.size, sha256: shas[k] }))); }
-                if (r.thumb) { report.from.vault.thumbs++; ops.push(api.req(api.store("thumbs").put({ id: meta.id, blob: r.thumb }))); }
+                if (r.blob) { report.from.vault.blobs++; expectHash[meta.id] = shas[k]; note("blobs", meta.id); ops.push(api.req(api.store("blobs").put({ id: meta.id, blob: r.blob, size: r.blob.size, sha256: shas[k] }))); }
+                if (r.thumb) { report.from.vault.thumbs++; note("thumbs", meta.id); ops.push(api.req(api.store("thumbs").put({ id: meta.id, blob: r.thumb }))); }
                 return Promise.all(ops);
               }));
             });
@@ -120,7 +171,11 @@
         report.from.vault.meta = metas.length;
         if (!metas.length) return null;
         return writeInto(target, ["settings"], function (api) {
-          return Promise.all(metas.map(function (m) { return api.req(api.store("settings").put({ key: "vault." + m.key, value: m.value, rev: 1 })); }));
+          return Promise.all(metas.map(function (m) {
+            if (taken("settings", "vault." + m.key)) return null;
+            note("settings", "vault." + m.key);
+            return api.req(api.store("settings").put({ key: "vault." + m.key, value: m.value, rev: 1 }));
+          }));
         });
       });
     }
@@ -143,6 +198,7 @@
                 var doc = Object.assign({}, d);
                 var lf = lfiles[d.id];
                 var ops = [];
+                if (taken("documents", d.id)) { skip("LI document " + d.id); return null; }
                 if (lf && lf.blob) {
                   var fileId = "li:" + d.id;
                   var meta = {
@@ -151,13 +207,14 @@
                     createdAt: d.added || now(), updatedAt: d.added || now(),
                   };
                   repos.files.prepare(meta, null); meta.rev = 1;
-                  liFileIds.push(fileId);
                   expectHash[fileId] = shas[k];
                   doc.fileId = fileId;
+                  note("files", fileId); note("blobs", fileId);
                   ops.push(api.req(api.store("files").put(meta)));
                   ops.push(api.req(api.store("blobs").put({ id: fileId, blob: lf.blob, size: lf.blob.size, sha256: shas[k] })));
                 }
                 repos.documents.prepare(doc); doc.rev = 1;
+                note("documents", doc.id);
                 ops.push(api.req(api.store("documents").put(doc)));
                 return Promise.all(ops);
               }));
@@ -167,7 +224,11 @@
         return next().then(function () {
           if (!settings.length) return null;
           return writeInto(target, ["settings"], function (api) {
-            return Promise.all(settings.map(function (s) { return api.req(api.store("settings").put({ key: "li." + s.k, value: s.v, rev: 1 })); }));
+            return Promise.all(settings.map(function (s) {
+              if (taken("settings", "li." + s.k)) return null;
+              note("settings", "li." + s.k);
+              return api.req(api.store("settings").put({ key: "li." + s.k, value: s.v, rev: 1 }));
+            }));
           });
         });
       });
@@ -181,7 +242,12 @@
           (function (slice) {
             chain = chain.then(function () {
               return writeInto(target, ["tools"], function (api) {
-                return Promise.all(slice.map(function (t) { var rec = Object.assign({}, t); repos.tools.prepare(rec); rec.rev = 1; return api.req(api.store("tools").put(rec)); }));
+                return Promise.all(slice.map(function (t) {
+                  var rec = Object.assign({}, t); repos.tools.prepare(rec); rec.rev = 1;
+                  if (taken("tools", rec.id)) { skip("Tool " + rec.id); return null; }
+                  note("tools", rec.id);
+                  return api.req(api.store("tools").put(rec));
+                }));
               });
             });
           })(r[0].slice(i, i + 200));
@@ -190,7 +256,11 @@
           (function (slice) {
             chain = chain.then(function () {
               return writeInto(target, ["photos"], function (api) {
-                return Promise.all(slice.map(function (p) { return api.req(api.store("photos").put({ id: p.id, blob: p.blob })); }));
+                return Promise.all(slice.map(function (p) {
+                  if (taken("photos", p.id)) return null;
+                  note("photos", p.id);
+                  return api.req(api.store("photos").put({ id: p.id, blob: p.blob }));
+                }));
               });
             });
           })(r[1].slice(j, j + 50));
@@ -198,7 +268,11 @@
         if (r[2].length) {
           chain = chain.then(function () {
             return writeInto(target, ["settings"], function (api) {
-              return Promise.all(r[2].map(function (m) { return api.req(api.store("settings").put({ key: "inventory." + m.k, value: m.v, rev: 1 })); }));
+              return Promise.all(r[2].map(function (m) {
+                if (taken("settings", "inventory." + m.k)) return null;
+                note("settings", "inventory." + m.k);
+                return api.req(api.store("settings").put({ key: "inventory." + m.k, value: m.v, rev: 1 }));
+              }));
             });
           });
         }
@@ -210,7 +284,10 @@
         report.from.ros = { ros: recs.length, links: 0, duplicates: 0 };
         progress(cb, "ros", 0, recs.length, "Repair Orders");
         var seen = {};
-        var prepared = recs.slice().sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); }).map(function (r) {
+        var prepared = recs.slice().sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); }).filter(function (r) {
+          if (taken("ros", r.id)) { skip("Repair order " + (r.ro || r.id)); return false; }
+          return true;
+        }).map(function (r) {
           var rec = Object.assign({}, r);
           repos.ros.prepare(rec); rec.rev = 1;
           // D7: the first RO with a number keeps it indexed; a later duplicate
@@ -228,26 +305,21 @@
           (byColl[r.collection] || []).forEach(function (fid) {
             var l = { fromType: "ro", fromId: r.id, toType: "file", toId: fid, kind: "attachment", source: "migration", createdAt: now() };
             repos.links.prepare(l); l.rev = 1;
-            links.push(l);
+            if (!taken("links", l.id)) links.push(l);
           });
         });
         report.from.ros.links = links.length;
+        prepared.forEach(function (r) { note("ros", r.id); });
+        links.forEach(function (l) { note("links", l.id); });
         return writeInto(target, ["ros", "links"], function (api) {
           return Promise.all(prepared.map(function (r) { return api.req(api.store("ros").put(r)); }).concat(links.map(function (l) { return api.req(api.store("links").put(l)); })));
         }).then(function () { progress(cb, "ros", recs.length, recs.length, "Repair Orders"); });
       });
     }
     function verify() {
-      var all = ["files", "blobs", "thumbs", "documents", "tools", "photos", "ros", "links", "settings"];
-      var v = report.from.vault || { files: 0, blobs: 0, thumbs: 0, meta: 0 };
-      var l = report.from.li || { docs: 0, settings: 0 };
-      var inv = report.from.inventory || { tools: 0, photos: 0, meta: 0 };
-      var r = report.from.ros || { ros: 0, links: 0 };
-      report.expected = {
-        files: v.files + liFileIds.length, blobs: v.blobs + liFileIds.length, thumbs: v.thumbs,
-        documents: l.docs, tools: inv.tools, photos: inv.photos, ros: r.ros, links: r.links,
-        settings: (v.meta || 0) + (l.settings || 0) + (inv.meta || 0),
-      };
+      var all = ALL;
+      // What was written, store by store, is what the target must hold.
+      report.expected = Object.assign({}, written);
       return db.run(all, "readonly", function (api) {
         return Promise.all(all.map(function (s) { return api.req(api.store(s).count()); }));
       }, target).then(function (ns) {
@@ -275,10 +347,10 @@
     }
 
     return db.deleteDatabase(target).catch(function () {}).then(function () { return db.openNamed(target); })
-      .then(copyVault).then(copyLI).then(copyInventory).then(copyRos).then(verify)
+      .then(carryOver).then(copyVault).then(copyLI).then(copyInventory).then(copyRos).then(verify)
       .then(function () {
         return writeInto(target, ["settings"], function (api) {
-          return api.req(api.store("settings").put({ key: "migration", value: { from: report.from, counts: report.counts, at: now(), generation: target, warnings: report.warnings }, rev: 1 }));
+          return api.req(api.store("settings").put({ key: "migration", value: { from: report.from, carried: report.carried, counts: report.counts, skipped: report.skipped, at: now(), generation: target, warnings: report.warnings }, rev: 1 }));
         });
       })
       .then(function () { return opts.beforeDelete ? Promise.resolve().then(function () { return opts.beforeDelete(report); }).catch(function () {}) : null; })

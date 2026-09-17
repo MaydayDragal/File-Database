@@ -1793,10 +1793,11 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
         }
         var src = srcs[arr.indexOf(f)] || {};
         if (src.fileId) meta.fileId = src.fileId;
-        // A stored record re-imported under an id that already had another
-        // file: that older PDF is dropped if it was ours, unhooked if it is a
-        // Files-app record.
-        var stale = (prev && src.fileId && prev.fileId && prev.fileId !== src.fileId) ? prev.fileId : null;
+        // Re-importing an existing LI/version replaces its PDF: a manual
+        // import stores the new bytes as a new file record, and the previous
+        // one is dropped if it was ours (hidden), unhooked if it is a
+        // Files-app record — never left orphaned.
+        var stale = (prev && prev.fileId && prev.fileId !== (src.fileId || null)) ? prev.fileId : null;
         return putDoc(meta, src.fileId ? null : f).then(function () {
           if (prev) { updated++; var di = docs.indexOf(prev); if (di >= 0) docs[di] = meta; }
           else { added++; docs.push(meta); }

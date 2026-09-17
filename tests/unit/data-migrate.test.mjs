@@ -113,3 +113,40 @@ test("a fresh profile with nothing to migrate just opens generation 1", async ()
   assert.equal(db.currentName(), "file-database-1");
   assert.equal(await repos.files.count(), 0);
 });
+
+test("a legacy database holding only secondary-store data is migrated, not deleted", async () => {
+  await fresh();
+  await seedLegacy("file-vault", { files: { keyPath: "id", records: [] }, meta: { keyPath: "key", records: [{ key: "collections", value: ["Toolbox"] }] } });
+  await seedLegacy("tool-inventory", { tools: { keyPath: "id", records: [] }, photos: { keyPath: "id", records: [{ id: "p1", blob: blobOf("PNG", "image/png") }] }, meta: { keyPath: "k", records: [] } }, 2);
+  assert.equal((await migrate.status()).state, "needed");
+  await FDData.boot({ ui: false });
+  assert.deepEqual(await repos.settings.getValue("vault.collections"), ["Toolbox"]);
+  assert.equal(await repos.photos.count(), 1);
+  assert.equal(await dbExists("file-vault"), false);
+});
+
+test("data created after a skipped migration is carried into the merged generation", async () => {
+  await fresh();
+  await seedAll();
+  // "Skip for now": the app opens an empty generation 1 and the user works in it.
+  await db.open();
+  await repos.tools.put({ id: "new1", toolNo: "111 111 11 11 11", desc: "added later" });
+  await repos.files.putFull({ id: "nf1", name: "later.txt", type: "text/plain", blob: blobOf("LATER") });
+  await repos.tools.put({ id: "t1", toolNo: "000 589 01 23 00", desc: "edited copy of a legacy id" }); // an id clash: the live record wins
+  assert.equal((await migrate.status()).state, "needed");
+  const report = await migrate.run({});
+  assert.equal(report.ok, true);
+  assert.equal(report.generation, "file-database-2");
+  assert.equal(db.currentName(), "file-database-2");
+  assert.equal(await dbExists("file-database-1"), false, "the interim generation is superseded");
+  assert.equal(report.carried.tools, 2);
+  assert.equal(await repos.tools.count(), 3, "legacy t2 + live new1 + the clashing t1");
+  assert.equal((await repos.tools.get("t1")).desc, "edited copy of a legacy id");
+  assert.equal(report.skipped, 1);
+  assert.equal(await (await repos.files.getBlob("nf1")).text(), "LATER");
+  assert.equal(await repos.files.count(), 4, "3 legacy files + 1 created later");
+  assert.equal(report.hashes, 4);
+  assert.equal(await repos.ros.count(), 3);
+  for (const n of migrate.LEGACY_NAMES) assert.equal(await dbExists(n), false, n + " deleted");
+  assert.equal((await migrate.status()).state, "none");
+});

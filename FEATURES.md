@@ -368,8 +368,8 @@ requeues jobs a dead page left running.
 | `bus.js` | `emit`/`on` on an `EventTarget` mirrored over `BroadcastChannel("file-database")`; `detail.remote` marks events from another context |
 | `jobs.js` | `enqueue`, `register` (runs a type's queue in this page under `navigator.locks`), heartbeat, cancel, retry up to 5, stale requeue, `whenDone` |
 | `intake.js` | `ingest(target, files, opts)`: eager read, store with verification, per-file results, then the follow-up job (`thumb` + `vin-detect` for Files, `li-import`, `toolbox-intake`) and an RO `attachment` link when `roId` is given |
-| `backup.js` | `collect()` → one `.fdb` ([src/core/formats/fdb.js](src/core/formats/fdb.js), magic `FDBK`); `restore()` into a new generation, verified, then the pointer flips and the old generation is deleted |
-| `migrate.js` | `status()` / `run()`: `file-vault`, `LIDocsDB`, `tool-inventory`, `repair-orders` → one generation; files in an RO's collection become links; colliding RO numbers keep the older record's key |
+| `backup.js` | `collect()` → one `.fdb` ([src/core/formats/fdb.js](src/core/formats/fdb.js), magic `FDBK`) read in a single transaction so every store is from the same instant; `restore()` into a new generation, verified (counts, a payload behind every file record, every blob's hash), then the pointer flips and the old generation is deleted |
+| `migrate.js` | `status()` / `run()`: `file-vault`, `LIDocsDB`, `tool-inventory`, `repair-orders` → one generation; a legacy database counts as holding data when any of its stores does; anything already in the live generation (a skipped migration, a restore) is carried into the merged one first and legacy records whose ids it already holds are skipped; files in an RO's collection become links; colliding RO numbers keep the older record's key |
 
 Jobs today: `thumb`, `vin-detect` (the quick, OCR-free read on arrival) and
 `vin-scan` (the manual scan) run in the Files app; `li-import` in LI Documents;

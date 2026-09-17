@@ -1,11 +1,10 @@
 /*
  * backup.js — one backup of everything, and restore into a new generation.
  *
- * collect() reads every metadata store in ONE read-only transaction (a
- * consistent snapshot by IndexedDB's own rules), then the payload stores
- * (blobs, thumbs, photos) whose Blobs are handles, not copies, and hands
- * both to formats/fdb.js. Because blobs are immutable there is no write
- * pause. Settings whose values are not JSON (folder handles) are skipped
+ * collect() reads every store — records and the payload stores (blobs,
+ * thumbs, photos) — in ONE read-only transaction (a consistent snapshot by
+ * IndexedDB's own rules; the Blobs are handles, not copies) and hands it to
+ * formats/fdb.js. Because blobs are immutable there is no write pause. Settings whose values are not JSON (folder handles) are skipped
  * and listed in the manifest.
  *
  * restore(file) parses the whole .fdb first (nothing is written for an
@@ -53,8 +52,13 @@
     var name = opts.generation || db.currentName();
     var meta = { exportedAt: Date.now(), generation: name, records: {}, payloads: [], skippedSettings: [] };
     var payloadBlobs = [];
-    return db.run(RECORD_STORES, "readonly", function (api) {
-      return Promise.all(RECORD_STORES.map(function (s) { return api.req(api.store(s).getAll()); }));
+    var all = RECORD_STORES.concat(PAYLOAD_STORES);
+    // ONE read-only transaction over every store: records and payloads come
+    // from the same snapshot, so a file deleted or added by another tab
+    // while the backup is read can never leave a record without its bytes
+    // (or bytes without a record) in the file.
+    return db.run(all, "readonly", function (api) {
+      return Promise.all(all.map(function (s) { return api.req(api.store(s).getAll()); }));
     }, name).then(function (lists) {
       RECORD_STORES.forEach(function (s, i) { meta.records[s] = lists[i]; });
       meta.records.settings = meta.records.settings.filter(function (r) {
@@ -62,12 +66,8 @@
         meta.skippedSettings.push(r.key); return false;
       });
       progress(opts.onProgress, "records", 1, 1);
-      return db.run(PAYLOAD_STORES, "readonly", function (api) {
-        return Promise.all(PAYLOAD_STORES.map(function (s) { return api.req(api.store(s).getAll()); }));
-      }, name);
-    }).then(function (lists) {
       PAYLOAD_STORES.forEach(function (s, i) {
-        lists[i].forEach(function (r) {
+        lists[RECORD_STORES.length + i].forEach(function (r) {
           if (!r || !r.blob) return;
           meta.payloads.push({ store: s, id: r.id, len: r.blob.size, type: r.blob.type || "application/octet-stream", sha256: r.sha256 || null });
           payloadBlobs.push(r.blob);
@@ -155,6 +155,11 @@
         Object.keys(report.expected).forEach(function (s) {
           if (counts[s] !== report.expected[s]) throw new Error("Verification failed: " + s + " has " + counts[s] + " records, expected " + report.expected[s] + ".");
         });
+        // Every file record must have its bytes in the backup.
+        var have = {};
+        parsed.payloads.forEach(function (p) { if (p.store === "blobs") have[p.id] = true; });
+        var missing = (parsed.meta.records.files || []).filter(function (f) { return !have[f.id]; });
+        if (missing.length) throw new Error("Verification failed: " + missing.length + " file record(s) have no bytes in the backup (" + missing[0].name + ").");
         var hashed = parsed.payloads.filter(function (p) { return p.store === "blobs" && p.sha256; });
         var i = 0;
         function next() {
