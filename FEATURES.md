@@ -505,7 +505,7 @@ keep it that way.
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| The page | [sw.js](sw.js) | `file-database-v1`, `platform-runtime-v1` | Required core (the page, the shell, the theme); every feature, service, vendor runtime and icon precached tolerantly on install (generated list, verified against the tree); network-first navigation; cache-first assets |
+| The page | [sw.js](sw.js) | `file-database-v1`, `platform-runtime-v1` | Required core (the page, the shell, the theme); every feature, service, vendor runtime and icon precached tolerantly on install (a list generated from the tree by [tools/sw-manifest.mjs](tools/sw-manifest.mjs), checked in `npm test`); network-first navigation; cache-first assets |
 
 One visit precaches the whole platform, every feature included. The worker
 prunes its own old caches and everything the pre-Phase-4 workers left behind

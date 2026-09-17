@@ -398,7 +398,9 @@ node tools/e2e-migrate.mjs
 and that no page inlines a library (the static check also refuses any source
 file over 300 KB outside `vendor/`). `npm run build:viewer` regenerates
 `viewer.js` from `src/features/extract/`; `node tools/build-viewer.mjs --check`
-(part of `npm test`) verifies it is current.
+(part of `npm test`) verifies it is current. `node tools/sw-manifest.mjs --write`
+regenerates the service worker's precache list from the tree and `--check`
+(also part of `npm test`) refuses a list that has fallen behind it.
 
 [qa.yml](.github/workflows/qa.yml) runs on pushes to
 `claude/pwa-file-database-hqbppy` and on pull requests. It installs dependencies,

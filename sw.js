@@ -3,7 +3,7 @@
    open and run with no network. User data lives in IndexedDB and never
    touches this cache. `tools/sw-manifest.mjs --check` verifies the list is
    complete against the tree. */
-const CACHE = "file-database-v1";
+const CACHE = "file-database-v2";
 // The text-recognition engine the scanners download on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see src/services/ocr.js). Their files are
@@ -18,6 +18,7 @@ const CORE = [
   "./src/main.js",
   "./src/shell/index.js",
   "./src/features/index.js",
+  "./src/features/mount.js",
 ];
 // …while these are cached tolerantly: a single hiccup (a proxy blip, one
 // unreachable icon) must never fail the whole install and strand the user on
@@ -91,18 +92,18 @@ const EXTRAS = [
   "./src/ui/migrate-dialog.js",
   "./debug.js",
   "./ocr.js",
-  "./vendor/pdf.min.js",
-  "./vendor/pdf.worker.min.js",
   "./vendor/jszip.min.js",
   "./vendor/pdf-lib.min.js",
+  "./vendor/pdf.min.js",
+  "./vendor/pdf.worker.min.js",
   "./viewer.html",
   "./viewer.js",
   "./manifest.webmanifest",
+  "./icons/apple-touch-icon.png",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
-  "./icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (e) => {

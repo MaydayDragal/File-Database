@@ -585,9 +585,10 @@ Done as written, with these notes:
   writes; and the platform's worker proxies the OCR hosts for the page, which
   the VIN suite's hung-CDN route could not hold, so that suite blocks the
   worker in its context.
-- Not done here: a Lighthouse run (not in the toolchain); `tools/sw-manifest.mjs
-  --check` (Phase 6) still has to be written so the precache list cannot go
-  stale.
+- `tools/sw-manifest.mjs` (planned for Phase 6, pulled forward after the
+  follow-up review found `mount.js` missing from the list) regenerates the
+  worker's precache list from the tree and `--check` runs in `npm test`.
+- Not done here: a Lighthouse run (not in the toolchain).
 
 ### Phase 5 — Use the unified model · M
 
