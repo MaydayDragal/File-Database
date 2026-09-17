@@ -39,7 +39,7 @@ const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fa
 const toastText = () => page.locator("#toast").textContent().catch(() => "");
 async function waitFor(fn, ms = 10000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(200); } return fn(); }
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 
 // Seed a video record (VIN in its filename) + a text record (VIN in content),
 // straight into the shared database, then reload so the app loads them into its list.

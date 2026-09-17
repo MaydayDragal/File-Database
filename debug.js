@@ -24,16 +24,13 @@
   var memory = [];         // fallback + fast mirror of recent entries
   var MEM_MAX = 200;
 
-  // Which app is this page? (drives the "app" column in the viewer)
+  // Which feature was on screen when the entry was made (the "app" column in
+  // the viewer). One page hosts every feature now, so this is the shell's
+  // active tab at the time; before the shell is up it is "shell".
   function appName() {
-    var p = location.pathname;
-    if (p.indexOf("/vault/") >= 0) return "vault";
-    if (p.indexOf("/li/") >= 0) return "li";
-    if (p.indexOf("/inventory/") >= 0) return "inventory";
-    if (p.indexOf("/toolbox/") >= 0) return "toolbox";
+    try { var s = window.FDShell; if (s && s.current) return s.current; } catch (e) {}
     return "shell";
   }
-  var APP = appName();
 
   // ---------- storage (never throws; falls back to memory only) ----------
   var dbP = null;
@@ -104,7 +101,7 @@
 
   var listeners = [];
   function add(level, src, msg, stack) {
-    var entry = { t: Date.now(), level: level, app: APP, src: src, msg: clip(msg), stack: clip(stack || "") };
+    var entry = { t: Date.now(), level: level, app: appName(), src: src, msg: clip(msg), stack: clip(stack || "") };
     memory.push(entry);
     if (memory.length > MEM_MAX) memory.splice(0, memory.length - MEM_MAX);
     persist(entry);

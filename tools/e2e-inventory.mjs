@@ -61,13 +61,12 @@ let failures = 0;
 const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failures++; };
 
 // ---------- Standalone app: empty by default ----------
-await page.goto(base + "inventory/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#inventory", { waitUntil: "networkidle" });
 await page.waitForTimeout(500);
 check((await page.locator("#tbody tr").count()) === 0, "ships empty — no bundled data");
 const emptyBoot = (await page.locator("#empty").textContent()).trim();
 check(await page.locator("#empty").isVisible() && /no tool database loaded/i.test(emptyBoot), `empty state prompts to open a database ('${emptyBoot.slice(0, 40)}…')`);
 check((await page.locator("#sub").textContent()).toLowerCase().includes("no database"), "header shows 'No database loaded'");
-check(await page.locator("#backBtn").isVisible(), "standalone inventory shows the '⌂ File Database' link");
 
 // ---------- Load a .tidb database file ----------
 await page.setInputFiles("#dbInput", TIDB_PATH);
@@ -110,7 +109,7 @@ await page.waitForTimeout(250);
 const grpRows = await page.locator("#tbody tr").count();
 check(grpRows > 0 && grpRows < rowCount, `service-group filter '${grpVal}' shows ${grpRows} tools`);
 // every visible row's Svc Grp cell equals the filter (col index 4: photo,star,toolNo,desc,svcGrp)
-const allMatch = await page.evaluate((g) => Array.from(document.querySelectorAll("#tbody tr")).every((tr) => tr.children[4].textContent.trim() === g), grpVal);
+const allMatch = await page.evaluate((g) => Array.from(document.querySelector("#view-inventory").shadowRoot.querySelectorAll("#tbody tr")).every((tr) => tr.children[4].textContent.trim() === g), grpVal);
 check(allMatch, "filtered rows all belong to that service group");
 await page.selectOption("#fGrp", "");
 await page.waitForTimeout(200);
@@ -120,7 +119,7 @@ await page.click("#offeredFilter");
 await page.waitForTimeout(250);
 const offRows = await page.locator("#tbody tr").count();
 check(offRows > 0 && offRows < rowCount, `offered filter narrows ${rowCount}→${offRows}`);
-const allOffered = await page.evaluate(() => Array.from(document.querySelectorAll("#tbody tr")).every((tr) => tr.querySelector(".badge-offer")));
+const allOffered = await page.evaluate(() => Array.from(document.querySelector("#view-inventory").shadowRoot.querySelectorAll("#tbody tr")).every((tr) => tr.querySelector(".badge-offer")));
 check(allOffered, "every offered-filtered row is marked 'offered'");
 await page.click("#offeredFilter");
 await page.waitForTimeout(200);
@@ -208,7 +207,7 @@ await page.click("#tab-inventory");
 await page.waitForTimeout(300);
 check(await page.locator("#view-inventory:not([hidden])").count() === 1, "clicking it opens the embedded inventory");
 check(await page.locator("#tab-inventory.is-active").count() === 1, "Tool Inventory tab is active");
-const invFrame = page.frameLocator("#frame-inventory");
+const invFrame = page.locator("#view-inventory");
 // Same origin/context: the database imported above persists in IndexedDB, so the
 // embedded app renders those rows.
 await invFrame.locator("#tbody tr").first().waitFor({ timeout: 15000 });
@@ -240,7 +239,7 @@ p2.on("pageerror", (e) => err2.push(String(e.message)));
 await p2.goto(base, { waitUntil: "networkidle" });   // shell boots the vault + badge peek first
 await p2.waitForTimeout(600);
 await p2.click("#tab-inventory");
-const inv2 = p2.frameLocator("#frame-inventory");
+const inv2 = p2.locator("#view-inventory");
 // Fresh profile → no database loaded → the app shows its empty-state prompt, not a crash.
 await inv2.locator("#empty").waitFor({ timeout: 20000 }).catch(() => {});
 const emptyOk = await inv2.locator("#empty").evaluate((el) => el.offsetParent !== null && /no tool database loaded/i.test(el.textContent)).catch(() => false);

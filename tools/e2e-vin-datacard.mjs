@@ -70,7 +70,7 @@ const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) fa
 const toastText = () => page.locator("#toast").textContent().catch(() => "");
 async function waitFor(fn, ms = 15000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(200); } return fn(); }
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
 await page.locator("#file-input").setInputFiles(pdfPath);
 check(await waitFor(async () => (await page.locator("#results .card").count()) === 1), "datacard imported");

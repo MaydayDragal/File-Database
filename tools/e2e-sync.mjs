@@ -69,7 +69,7 @@ async function clickMenu(action) {
   await page.click(`#more-menu [data-action="${action}"]`);
 }
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 check((await cards()) === 0, "vault starts empty");
 

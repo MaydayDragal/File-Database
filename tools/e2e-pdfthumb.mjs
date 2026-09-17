@@ -69,7 +69,7 @@ async function waitThumb(ms = 12000) {
   return thumbLoaded();
 }
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // --- Import path: adding a PDF renders its first page as the card thumbnail ---

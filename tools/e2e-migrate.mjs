@@ -90,7 +90,7 @@ const LEGACY = ["file-vault", "LIDocsDB", "tool-inventory", "repair-orders", "va
 
   await page.goto(base, { waitUntil: "load" });
   check(await waitFor(page, async () => (await page.locator("#fdb-migrate").count()) === 1, 10000), "the migration dialog shows on first launch");
-  check(await page.locator("#frame-vault[src]").count() === 0, "no app frame is loaded while the dialog is up");
+  check(await page.evaluate(() => !document.querySelector("#view-vault").shadowRoot), "no feature is mounted while the dialog is up");
   const listed = await page.locator("#fdb-migrate li").allTextContents();
   check(listed.join("|") === "3 files|1 LI document|2 tools|1 repair order", "the dialog lists what will be migrated", listed);
   await page.click("#fdb-migrate-start");
@@ -107,7 +107,7 @@ const LEGACY = ["file-vault", "LIDocsDB", "tool-inventory", "repair-orders", "va
   check(await waitFor(page, async () => (await page.locator("#fdb-migrate-done").count()) === 1, 15000), "the migration completes");
   await page.click("#fdb-migrate-done");
   check(await waitFor(page, async () => (await page.locator("#fdb-migrate").count()) === 0), "the dialog closes");
-  check(await waitFor(page, async () => (await page.locator("#frame-vault[src]").count()) === 1, 10000), "the shell mounts the apps afterwards");
+  check(await waitFor(page, async () => page.evaluate(() => !!document.querySelector("#view-vault").shadowRoot), 10000), "the shell mounts the features afterwards");
 
   for (const n of LEGACY) check(!(await dbExists(page, n)), n + " deleted after the verified migration");
   check(await page.evaluate(() => localStorage.getItem("fdb.generation")) === "file-database-1", "the pointer names generation 1");
@@ -126,17 +126,17 @@ const LEGACY = ["file-vault", "LIDocsDB", "tool-inventory", "repair-orders", "va
   check(blobs.every((b) => typeof b.sha256 === "string" && b.sha256.length === 64), "every blob carries its sha256");
 
   // The apps see the data.
-  const vault = page.frameLocator("#frame-vault");
+  const vault = page.locator("#view-vault");
   check(await waitFor(page, async () => (await vault.locator(".card, .row").count()) === 3, 10000), "the Files app lists the 3 migrated files (in the migrated list view)");
   check(await waitFor(page, async () => (await page.locator('[data-count="vault"]').textContent()) === "3"), "the Files badge shows 3");
   await page.click("#tab-li");
-  const li = page.frameLocator("#frame-li");
+  const li = page.locator("#view-li");
   check(await waitFor(page, async () => (await li.locator("#rows tr").count()) === 1, 10000), "LI Documents lists the migrated document");
   await page.click("#tab-inventory");
-  const inv = page.frameLocator("#frame-inventory");
+  const inv = page.locator("#view-inventory");
   check(await waitFor(page, async () => (await inv.locator("#tbody tr").count()) === 2, 10000), "Tool Inventory lists the 2 migrated tools");
   await page.click("#tab-ros");
-  const ros = page.frameLocator("#frame-ros");
+  const ros = page.locator("#view-ros");
   check(await waitFor(page, async () => (await ros.locator("#ro-no").inputValue()) === "42", 10000), "Repair Orders opens RO 42");
   check(await waitFor(page, async () => (await ros.locator("#files .file").count()) === 1, 10000), "RO 42 shows its attached file through the link");
 
@@ -172,7 +172,7 @@ const LEGACY = ["file-vault", "LIDocsDB", "tool-inventory", "repair-orders", "va
   await page.click("#fdb-migrate-continue");
   check(await waitFor(page, async () => (await page.locator("#fdb-migrate-done").count()) === 1, 15000), "and completes");
   await page.click("#fdb-migrate-done");
-  check(await waitFor(page, async () => (await page.locator("#frame-vault[src]").count()) === 1, 10000), "the shell mounts");
+  check(await waitFor(page, async () => page.evaluate(() => !!document.querySelector("#view-vault").shadowRoot), 10000), "the shell mounts");
   check(!(await dbExists(page, "file-vault")), "legacy databases deleted after the successful retry");
   await ctx.close();
 }

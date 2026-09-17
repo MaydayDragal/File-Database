@@ -136,7 +136,7 @@ await page.addInitScript((roText) => {
   };
 }, FORM_TEXT);
 
-await page.goto(base + "ros/index.html", { waitUntil: "load" });
+await page.goto(base + "#ros", { waitUntil: "load" });
 await page.waitForTimeout(400);
 
 // ---------- Phase A: the parser ----------

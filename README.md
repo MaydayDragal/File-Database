@@ -10,20 +10,20 @@ contracts, service workers, and test coverage.
 
 ## Apps
 
-| App | What it does | Direct entry point |
+| App | What it does | Route |
 | --- | --- | --- |
-| File Vault | Store, preview, search, tag, star, and group files by collection or VIN | [vault/index.html](vault/index.html) |
-| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | [li/index.html](li/index.html) |
-| Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | [inventory/index.html](inventory/index.html) |
-| Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | [toolbox/index.html](toolbox/index.html) |
-| Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, and associate files stored in the Vault | [ros/index.html](ros/index.html) |
-| Extract | Open `.fdb`, `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | [viewer.html](viewer.html) |
+| Files | Store, preview, search, tag, star, and group files by collection or VIN | `#vault` (or `#files`) |
+| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | `#li` |
+| Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | `#inventory` |
+| Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | `#toolbox` |
+| Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, and associate files stored in Files | `#ros` |
+| Extract | Open `.fdb`, `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | `#viewer` (also standalone: [viewer.html](viewer.html)) |
 
-The shell loads each app on first use and keeps it open when you switch tabs.
-Vault, LI Documents, and Tool Inventory have their own PWA manifests and service
-workers. Toolbox, Repair Orders, and Extract use the platform's service worker.
-Repair Order notes and RO scanning work standalone; its file workflows require the
-platform shell.
+Everything is one page: the shell mounts each app into its panel on first use
+and keeps it mounted when you switch tabs. There is one install, one service
+worker and one theme. The old per-app pages (`vault/`, `li/`, `inventory/`) are
+gone — if you installed one of them as its own app, open the platform once and
+install that instead; your data is already there.
 
 ## Getting started
 
@@ -294,10 +294,10 @@ network access. LI's service worker caches OCR resources; offline OCR across all
 apps is not guaranteed. Toolbox's EXIF GPS link opens OpenStreetMap with the
 selected coordinates if you click it.
 
-For hosted offline use, first open each app you need while online and exercise
-features that lazy-load resources, such as Vault PDF previews. Loading just the
-platform does not precache every app or all OCR assets. Verify your intended
-workflow with the network disconnected before depending on it.
+For hosted offline use, one visit while online precaches the whole platform,
+every app and the vendored PDF.js included; only the OCR engine and its
+language data come from the network on first use. Verify your intended workflow
+with the network disconnected before depending on it.
 
 ## Portable USB edition
 
@@ -346,9 +346,8 @@ backup in the build output directory. See [portable/START-HERE.txt](portable/STA
   `/` focuses search in Vault, LI, and Inventory. Vault also supports `a` to add
   and `g`/`l` for grid/list.
 - The shell's theme toggle cycles System → Light → Dark for all six apps.
-- Ctrl+Shift+D opens the debug log in the shell, Vault, LI, Inventory, and Toolbox.
-  RO and Extract pages do not load the logger. Files, LI, and Inventory also have
-  debug-log menu entries. Logs stay local until copied or downloaded.
+- Ctrl+Shift+D opens the debug log anywhere on the page; Files, LI, and Inventory
+  also have debug-log menu entries. Logs stay local until copied or downloaded.
 
 ## Development and QA
 
@@ -410,16 +409,16 @@ and path-filtered on pushes to that branch.
 
 | Path | Purpose |
 | --- | --- |
-| `index.html`, `shell.js`, `shell.css` | Platform UI, intake, navigation, theme, and badges |
-| `sw.js`, `manifest.webmanifest`, `icons/` | Platform PWA assets |
+| `index.html`, `src/main.js`, `src/shell/` | The one page and its shell: tabs, intake, navigation, theme, badges, install |
+| `src/features/` | One folder per tab (`files`, `documents`, `inventory`, `toolbox`, `ros`, `extract`): markup, app, styles, mounted into a shadow root by the shell |
+| `src/styles/` | `tokens.css` (the one theme) and the shell's stylesheet |
+| `sw.js`, `manifest.webmanifest`, `icons/` | The platform's PWA assets (one worker, one manifest) |
 | `debug.js` | Shared local logger |
 | `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, hashing, backup formats — loaded by every page, unit-tested from Node |
 | `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the first-launch migration dialog — loaded by every page, unit-tested from Node with fake-indexeddb |
 | `src/services/` | Shared browser machinery: the on-demand PDF.js, the OCR engine loader and worker pool, thumbnails, folder sync |
 | `vendor/` | The vendored runtimes, one copy each: PDF.js main + worker, JSZip, pdf-lib |
-| `vault/` | File Vault, its adapter over the shared repos, Blob verification |
-| `li/`, `inventory/`, `toolbox/`, `ros/` | The other applications: each a page of markup, its script(s) and its stylesheet (the Toolbox: one file per tool under `toolbox/tools/`) |
-| `viewer.html`, `viewer.js`, `viewer.css` | Standalone backup extractor |
+| `viewer.html` | Standalone host of the Extract feature: a copy next to your backups can always get the files back out |
 | `inventory-data/` | Source catalog JSON and photos; build input, not automatically imported |
 | `portable/` | Portable launchers and user guide |
 | `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |

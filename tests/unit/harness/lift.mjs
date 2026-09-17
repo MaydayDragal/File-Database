@@ -1,7 +1,7 @@
 // Lift a region of one of the single-file apps and evaluate it headless.
 //
 // Phase 0 of the rewrite (REWRITE-PLAN.md): the parsers still live inside
-// li/index.html, vault/app.js and ros/index.html, so the golden checks reach
+// src/features/*/app.js (the former single-file apps), so the golden checks reach
 // them the same way tools/test-li-number.mjs always has — by cutting the block
 // out between two marker strings and evaluating it. Phase 1 replaces every
 // caller of this file with a plain import from src/core/; the golden files

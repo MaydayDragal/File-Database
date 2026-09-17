@@ -104,7 +104,7 @@ await page.addInitScript((vinOcr) => {
   };
 }, VIN_OCR);
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
 await page.locator("#file-input").setInputFiles([fSplit, fHasVin, fNoVin, fRich]);
 check(await waitFor(async () => (await page.locator("#results .card").count()) === 4), "4 fixtures imported");

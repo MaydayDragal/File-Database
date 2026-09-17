@@ -44,7 +44,7 @@ async function waitFor(fn, ms = 10000) {
 const listText = () => page.locator("#fv-debug-list").textContent().catch(() => "");
 
 // --- Vault: every capture path lands in the log ---
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 check(await page.evaluate(() => !!window.FVDebug), "FVDebug is installed on the vault page");
 

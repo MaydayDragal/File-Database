@@ -57,15 +57,15 @@ await page.addInitScript(({ workers, ocrMs }) => {
   };
 }, { workers: WORKERS, ocrMs: OCR_MS });
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
 await page.locator("#file-input").setInputFiles(imgs);
-await page.waitForFunction((n) => document.querySelectorAll("#results .card").length === n, IMAGES);
+await page.waitForFunction((n) => document.querySelector("#view-vault").shadowRoot.querySelectorAll("#results .card").length === n, IMAGES);
 
 const t0 = Date.now();
 await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click();
-await page.waitForFunction(() => /VIN scan finished/.test(document.querySelector("#toast")?.textContent || ""), { timeout: 15000 });
+await page.waitForFunction(() => /VIN scan finished/.test(document.querySelector("#view-vault").shadowRoot.querySelector("#toast")?.textContent || ""), { timeout: 15000 });
 const elapsed = Date.now() - t0;
 
 const ocr = await page.evaluate(() => window.__ocr);

@@ -23,7 +23,7 @@ ok(!/https?:\/\//.test(fs.readFileSync(path.join(PKG, "Start File Database.bat")
 const DATA = path.join(PKG, "data");                       // exactly what the .bat uses for --user-data-dir
 const URL = "file://" + path.join(PKG, "app", "index.html");
 const args = ["--allow-file-access-from-files", "--no-sandbox", "--no-first-run"];
-const vaultFrame = async (page) => { for (let i = 0; i < 50; i++) { const f = page.frames().find((f) => f.url().includes("/vault/")); if (f) return f; await sleep(200); } return null; };
+const vaultFrame = async (page) => { for (let i = 0; i < 50; i++) { const ok = await page.evaluate(() => !!document.querySelector("#view-vault")?.shadowRoot).catch(() => false); if (ok) return page.locator("#view-vault"); await sleep(200); } return null; };
 const countVaultFiles = (page) => vaultCount(page).catch(() => -1);
 
 fs.rmSync(DATA, { recursive: true, force: true }); fs.mkdirSync(DATA, { recursive: true }); // clean stick
@@ -35,7 +35,7 @@ await page.goto(URL, { waitUntil: "domcontentloaded" });
 await sleep(800);
 const tab = await page.$("#tab-vault"); if (tab) await tab.click();
 const vf = await vaultFrame(page);
-ok(!!vf, "shell + vault app boot from the USB over file://");
+ok(!!vf, "shell + Files feature boot from the USB over file://");
 const tmp = path.join(ROOT, "tools", "_fixtures"); fs.mkdirSync(tmp, { recursive: true });
 fs.writeFileSync(path.join(tmp, "note.txt"), "portable hello");
 await vf.locator("#file-input").setInputFiles(path.join(tmp, "note.txt"));
@@ -45,7 +45,7 @@ ok((await countVaultFiles(page)) === 1, "a saved file lands in IndexedDB inside 
 // From the USB profile it must still boot cleanly to its empty-state prompt.
 const inv = await page.$("#tab-inventory"); if (inv) await inv.click();
 await sleep(2500);
-const invF = page.frames().find((f) => f.url().includes("/inventory/"));
+const invF = (await page.evaluate(() => !!document.querySelector("#view-inventory")?.shadowRoot).catch(() => false)) ? page.locator("#view-inventory") : null;
 const invEmpty = invF ? await invF.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)).catch(() => false) : false;
 ok(invEmpty, "inventory boots to its empty-state prompt from local files");
 // The USB build ships the catalog (app/data/FileInventory.tidb) — the empty

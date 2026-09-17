@@ -89,7 +89,7 @@ async function waitFor(fn, ms = 15000) {
   return fn();
 }
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // --- Import the fixtures ---

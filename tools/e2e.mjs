@@ -1,4 +1,4 @@
-// End-to-end smoke test for the File Vault app (standalone at /vault/) using
+// End-to-end smoke test for the Files feature (the File Vault) on the one page, using
 // the pre-installed Chromium.
 import http from "node:http";
 import fs from "node:fs";
@@ -42,7 +42,7 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ✓ " : "  ✗ ") + label); if (!cond) failures++; };
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // Empty state
@@ -164,14 +164,14 @@ await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(500);
 check((await page.locator(".card").count()) === 3, "data persists after reload");
 
-// --- Service worker registered (scoped to /vault/ — the shell owns the root) ---
+// --- Service worker registered (the platform's one, at the root) ---
 const swScope = await page.evaluate(async () => {
   if (!("serviceWorker" in navigator)) return null;
   const reg = await navigator.serviceWorker.getRegistration();
   return reg ? reg.scope : null;
 });
 check(!!swScope, "service worker registered (offline-capable)");
-check(!!swScope && new URL(swScope).pathname === "/vault/", `service worker scoped to /vault/ (got ${swScope})`);
+check(!!swScope && new URL(swScope).pathname === "/", `service worker scoped to the root (got ${swScope})`);
 
 // --- Delete flow (accept confirm) ---
 page.on("dialog", (d) => d.accept());
@@ -183,10 +183,10 @@ check((await page.locator(".card").count()) === 2, "delete removes a card -> 2 l
 
 // --- Theme toggle (system -> light -> dark) ---
 check(await page.evaluate(() => !document.documentElement.hasAttribute("data-theme")), "starts on system theme (no data-theme attr)");
-await page.click("#theme-btn"); // system -> light
+await page.click("#shell-theme-btn"); // system -> light
 await page.waitForTimeout(120);
 check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "light", "toggle -> light");
-await page.click("#theme-btn"); // light -> dark
+await page.click("#shell-theme-btn"); // light -> dark
 await page.waitForTimeout(120);
 check(await page.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "toggle -> dark");
 const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -199,7 +199,7 @@ check(await page.evaluate(() => document.documentElement.getAttribute("data-them
 
 await page.screenshot({ path: path.join(ROOT, "tools", "screenshot-dark.png") });
 
-// --- Install button actually invokes the install prompt ---
+// --- The platform's Install button actually invokes the install prompt ---
 const installResult = await page.evaluate(async () => {
   // Simulate Chrome's install criteria being met.
   let promptCalled = false;
@@ -207,13 +207,13 @@ const installResult = await page.evaluate(async () => {
   evt.prompt = () => { promptCalled = true; };
   evt.userChoice = Promise.resolve({ outcome: "accepted" });
   window.dispatchEvent(evt);
-  const btn = document.getElementById("install-btn");
+  const btn = document.getElementById("shell-install-btn");
   const wasVisible = !btn.hidden;
   btn.click();
   await new Promise((r) => setTimeout(r, 50));
   return { wasVisible, promptCalled };
 });
-check(installResult.wasVisible, "install button shown after beforeinstallprompt");
+check(installResult.wasVisible, "the platform's install button shows after beforeinstallprompt");
 check(installResult.promptCalled, "clicking install invokes the native prompt");
 
 console.log(errors.length ? "\nConsole errors:\n" + errors.join("\n") : "\nNo console errors.");

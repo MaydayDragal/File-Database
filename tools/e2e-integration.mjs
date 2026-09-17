@@ -53,7 +53,7 @@ const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.n
 
 // ---------- 1. Standalone-build catalog offer: empty inventory offers a one-click load ----------
 await page.goto(base + "#inventory", { waitUntil: "load" });
-const inv = page.frameLocator("#frame-inventory");
+const inv = page.locator("#view-inventory");
 await inv.locator("#empty").waitFor({ timeout: 15000 });
 const offerShown = await waitFor(async () => (await inv.locator("#loadBuiltinBtn").count()) > 0, 10000);
 check(offerShown, "empty inventory offers 'Load the built-in tool catalog' (bundled with the standalone app)");
@@ -76,7 +76,7 @@ check((await inv.locator("#tbody tr").count()) > 1000, "clicking the chip clears
 
 await page.goto(base + "#li/group/54", { waitUntil: "load" });
 await page.waitForTimeout(700);
-const li = page.frameLocator("#frame-li");
+const li = page.locator("#view-li");
 check(await page.locator("#tab-li.is-active").count() === 1, "#li/group/54 activates LI Documents");
 // dismiss LI's auto-open import prompt if it appeared
 if (await li.locator("#importOverlay.show").count()) { await li.locator("#importOverlay .x[data-close]").click().catch(() => {}); }
@@ -102,7 +102,7 @@ const vinDetected = await waitFor(async () => {
 check(vinDetected, "a file added through the front door is auto-read for its VIN (no OCR, no clicks)");
 
 // ---------- 4. By-VIN series chips → cross-app jump ----------
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 await page.goto(base + "#vault", { waitUntil: "load" });
 await page.waitForTimeout(500);
 await vault.locator('#nav-filters .nav__item[data-filter="vins"], [data-filter="vins"]').first().click();
@@ -182,7 +182,7 @@ fs.writeFileSync(path.join(FIX, "LI54.10-P-070001.pdf"), "%PDF-1.4\n1 0 obj<<>>e
 fs.writeFileSync(path.join(FIX, "note-for-relay.txt"), "just a note");
 await page.setInputFiles("#shell-file-input", [path.join(FIX, "LI54.10-P-070001.pdf"), path.join(FIX, "note-for-relay.txt")]);
 const relayed = await waitFor(async () => {
-  const t = (await page.locator("#toast").textContent()) || "";
+  const t = (await page.locator("#shell-toast").textContent()) || "";
   return /(Files|LI Documents):/.test(t);
 }, 25000);
 check(relayed, "a background app's toast surfaces through the shell relay (app-prefixed)");
@@ -280,8 +280,8 @@ await vault.locator("#search-input").fill("s");
 await page.waitForTimeout(400);
 await vault.locator("#search-input").fill("");
 await page.waitForTimeout(4000); // also lets the auto VIN detect render land
-const previewState = await page.frames().find((f) => f.url().includes("/vault/")).evaluate(async () => {
-  const f = document.querySelector("#d-preview iframe");
+const previewState = await page.evaluate(async () => {
+  const f = document.querySelector("#view-vault").shadowRoot.querySelector("#d-preview iframe");
   if (!f) return "no-iframe";
   try { const r = await fetch(f.src); const b = await r.blob(); return b.size > 100 ? "ok" : "empty"; }
   catch (e) { return "revoked"; }

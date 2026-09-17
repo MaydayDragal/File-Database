@@ -27,7 +27,7 @@ check(parseFailures.length === 0, `all ${scripts.length} tracked scripts parse (
 
 // ---------- 2. Every web manifest is valid ----------
 const manifests = tracked(["*.webmanifest"]);
-check(manifests.length >= 4, `found the app manifests (${manifests.length})`, manifests.join(", "));
+check(manifests.length === 1, `exactly one web manifest, the platform's (${manifests.length})`, manifests.join(", "));
 for (const f of manifests) {
   let ok = false, detail = "";
   try {

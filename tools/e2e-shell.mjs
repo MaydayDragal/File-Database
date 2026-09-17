@@ -39,12 +39,8 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ✓ " : "  ✗ ") + label); if (!cond) failures++; };
-const frameFor = (part) => page.frames().find((f) => f.url().includes(part));
-const frameSrc = (sel) => page.evaluate((s) => document.querySelector(s).getAttribute("src"), sel);
-const frameTheme = (sel) => page.evaluate((s) => {
-  const doc = document.querySelector(s).contentDocument;
-  return doc ? doc.documentElement.getAttribute("data-theme") : "no-doc";
-}, sel);
+// A feature is "loaded" once it has mounted into its panel's shadow root.
+const mountedApp = (key) => page.evaluate((k) => !!document.querySelector("#view-" + k).shadowRoot, key);
 
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
@@ -58,13 +54,13 @@ const panelsVisible = async () => page.evaluate(() =>
   Array.from(document.querySelectorAll(".app-panel")).filter((el) => !el.hidden).map((el) => el.id));
 let vis = await panelsVisible();
 check(vis.length === 1 && vis[0] === "view-vault", `exactly one panel visible (${vis.join(", ")})`);
-check(!!(await frameSrc("#frame-vault")), "vault iframe loads eagerly (default app)");
-check(!(await frameSrc("#frame-li")), "LI iframe not loaded yet (lazy)");
-check(!(await frameSrc("#frame-inventory")), "inventory iframe not loaded yet (lazy)");
-check(!(await frameSrc("#frame-toolbox")), "toolbox iframe not loaded until first activation (lazy)");
+check(await mountedApp("vault"), "vault feature mounts eagerly (default app)");
+check(!(await mountedApp("li")), "LI feature not mounted yet (lazy)");
+check(!(await mountedApp("inventory")), "inventory feature not mounted yet (lazy)");
+check(!(await mountedApp("toolbox")), "toolbox feature not mounted until first activation (lazy)");
 
 // --- Vault boots embedded: shell chrome wins, app chrome hidden ---
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 await vault.locator("#empty").waitFor({ timeout: 8000 });
 check(await vault.locator(".topbar .brand").isHidden(), "vault brand hidden when embedded");
 check(await vault.locator("#theme-btn").isHidden(), "vault theme button hidden when embedded");
@@ -75,9 +71,9 @@ await page.waitForTimeout(300);
 check(await page.locator("#tab-li.is-active").count() === 1, "LI tab active after click");
 vis = await panelsVisible();
 check(vis.length === 1 && vis[0] === "view-li", "LI panel is the only visible panel");
-const li = page.frameLocator("#frame-li");
+const li = page.locator("#view-li");
 await li.locator("header.topbar").waitFor({ timeout: 8000 });
-check(true, "LI iframe booted on first activation");
+check(true, "LI feature mounted on first activation");
 check(await li.locator("header.topbar h1").isHidden(), "LI h1 hidden when embedded");
 check(await li.locator("#backToVault").isHidden(), "LI back link hidden when embedded");
 check(await li.locator("#importBtn").isHidden(), "LI's own Import button hidden when embedded (shell owns 'Add files')");
@@ -91,37 +87,40 @@ if (await li.locator("#importOverlay.show").count()) {
 // Inventory ships empty and loads a portable .tidb database file, so a fresh
 // embed shows its empty-state prompt rather than bundled rows.
 await page.click("#tab-inventory");
-const inv = page.frameLocator("#frame-inventory");
+const inv = page.locator("#view-inventory");
 await inv.locator("#empty").waitFor({ timeout: 20000 });
-check(await inv.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)), "inventory iframe booted (empty-state prompt)");
+check(await inv.locator("#empty").evaluate((el) => /no tool database loaded/i.test(el.textContent)), "inventory feature mounted (empty-state prompt)");
 check(await inv.locator("#backBtn").isHidden(), "inventory back link hidden when embedded");
 
 // --- Toolbox tab ---
 await page.click("#tab-toolbox");
-const toolbox = page.frameLocator("#frame-toolbox");
+const toolbox = page.locator("#view-toolbox");
 await toolbox.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
-check(true, "toolbox iframe booted on first activation");
+check(true, "toolbox feature mounted on first activation");
 check(await toolbox.locator(".brand").isHidden(), "toolbox brand hidden when embedded");
 check((await toolbox.locator(".tabs .tab").count()) === 10, "toolbox shows its 10 tool tabs");
 check((await page.title()) === "Toolbox · File Database", "shell title follows the active app");
 
-// --- Theme: cycle system → light → dark, broadcast into every loaded frame ---
+// --- Theme: cycle system → light → dark; one document, one theme (tokens.css) ---
 check(await page.evaluate(() => !document.documentElement.hasAttribute("data-theme")), "shell starts on system theme");
-await page.click("#theme-btn"); // light
-await page.click("#theme-btn"); // dark
+await page.click("#shell-theme-btn"); // light
+await page.click("#shell-theme-btn"); // dark
 await page.waitForTimeout(400);
 check((await page.evaluate(() => document.documentElement.getAttribute("data-theme"))) === "dark", "shell data-theme=dark");
 check((await page.evaluate(() => localStorage.getItem("fv-theme"))) === "dark", "fv-theme=dark persisted");
-for (const [name, sel] of [["vault", "#frame-vault"], ["li", "#frame-li"], ["inventory", "#frame-inventory"], ["toolbox", "#frame-toolbox"]]) {
-  check((await frameTheme(sel)) === "dark", `${name} frame follows the dark theme`);
+// The tokens are inherited into every feature's shadow root: a feature's
+// panel background follows the theme with no message and no per-app copy.
+const panelBg = (key) => page.evaluate((k) => getComputedStyle(document.querySelector("#view-" + k).shadowRoot.querySelector(".fd-root")).backgroundColor, key);
+for (const name of ["vault", "li", "inventory", "toolbox"]) {
+  check((await panelBg(name)) === "rgb(15, 20, 32)", `${name} panel follows the dark theme`);
 }
 await page.screenshot({ path: path.join(ROOT, "tools", "screenshot-shell.png") });
-await page.click("#theme-btn"); // back to system
+await page.click("#shell-theme-btn"); // back to system
 await page.waitForTimeout(400);
 check(await page.evaluate(() => !document.documentElement.hasAttribute("data-theme")), "cycling back to system removes the shell attribute");
 check((await page.evaluate(() => localStorage.getItem("fv-theme"))) === null, "fv-theme removed for system");
-for (const [name, sel] of [["vault", "#frame-vault"], ["li", "#frame-li"], ["inventory", "#frame-inventory"], ["toolbox", "#frame-toolbox"]]) {
-  check((await frameTheme(sel)) === null, `${name} frame attribute removed for system`);
+for (const name of ["vault", "li", "inventory", "toolbox"]) {
+  check((await panelBg(name)) === "rgb(244, 246, 251)", `${name} panel back on the light theme`);
 }
 
 // --- Hash deep links ---
@@ -131,7 +130,7 @@ check(await page.locator("#tab-toolbox.is-active").count() === 1, "#toolbox/pdf 
 let activeTool = "";
 for (let i = 0; i < 20; i++) {           // the toolbox-open message may be pending until the frame loads
   activeTool = await page.evaluate(() =>
-    document.querySelector("#frame-toolbox")?.contentDocument?.querySelector(".tab.active")?.dataset.tab || "");
+    document.querySelector("#view-toolbox")?.shadowRoot?.querySelector(".tab.active")?.dataset.tab || "");
   if (activeTool === "pdf") break;
   await page.waitForTimeout(250);
 }
@@ -156,26 +155,32 @@ check(!new URL(page.url()).search, "consumed legacy query is stripped from the U
 await page.goto(base + "?view=starred", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 check(await page.locator("#tab-vault.is-active").count() === 1, "?view=starred activates the vault");
-check(((await frameSrc("#frame-vault")) || "").includes("?view=starred"), "?view=starred is passed through to the vault iframe");
+let starredNav = 0;
+for (let i = 0; i < 20; i++) {           // the feature mounts and boots asynchronously — poll
+  starredNav = await page.locator("#view-vault").locator('#nav-filters [data-filter="starred"].is-active').count().catch(() => 0);
+  if (starredNav === 1) break;
+  await page.waitForTimeout(250);
+}
+check(starredNav === 1, "?view=starred opens the vault on its starred files");
 await page.goto(base + "?action=add", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 check(await page.locator("#tab-vault.is-active").count() === 1, "?action=add activates the vault");
-check(((await frameSrc("#frame-vault")) || "").includes("action=add"), "?action=add is passed through to the vault iframe");
+check(await mountedApp("vault"), "?action=add mounts the vault (and opens the platform's file picker)");
 
 // --- Legacy child → shell navigation message ---
 await page.click("#tab-li");
-const liDeep = page.frameLocator("#frame-li");
+const liDeep = page.locator("#view-li");
 await liDeep.locator("header.topbar").waitFor({ timeout: 8000 });
 if (await liDeep.locator("#importOverlay.show").count()) {
   await liDeep.locator("#importOverlay .x[data-close]").click();
 }
-await frameFor("/li/").evaluate(() => window.parent.postMessage({ type: "vault-nav", to: "files" }, "*"));
+await page.evaluate(() => window.FDShell.send({ type: "vault-nav", to: "files" }));
 await page.waitForTimeout(400);
-check(await page.locator("#tab-vault.is-active").count() === 1, "legacy {type:'vault-nav'} from a child switches to Files");
+check(await page.locator("#tab-vault.is-active").count() === 1, "legacy {type:'vault-nav'} from a feature switches to Files");
 
 // --- Tab badges reflect the vault's file count ---
 await page.goto(base, { waitUntil: "networkidle" });   // plain URL again (no ?view= query)
-const vault2 = page.frameLocator("#frame-vault");
+const vault2 = page.locator("#view-vault");
 await vault2.locator("#empty").waitFor({ timeout: 8000 });
 const tmp = path.join(ROOT, "tools", "_fixtures");
 fs.mkdirSync(tmp, { recursive: true });
@@ -194,13 +199,12 @@ for (let i = 0; i < 25; i++) {           // badge peek is debounced + async — 
 }
 check(badge === "1", `Files tab badge shows the exact vault count (got "${badge}")`);
 
-// --- Toolbox → File Vault save (snackbar offer over the bridge) ---
+// --- Toolbox → File Vault save (snackbar offer, through the shared database) ---
 await page.click("#tab-toolbox");
-const tb = page.frameLocator("#frame-toolbox");
+const tb = page.locator("#view-toolbox");
 await tb.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
-const tbFrame = frameFor("/toolbox/");
-await tbFrame.waitForFunction(() => typeof window.__vaultOffer === "function", null, { timeout: 8000 });
-await tbFrame.evaluate(() => {
+await page.waitForFunction(() => typeof window.__vaultOffer === "function", null, { timeout: 8000 });
+await page.evaluate(() => {
   window.__vaultOffer(new Blob(["hi"], { type: "text/plain" }), "note.txt");
 });
 const saveBtn = tb.locator("button", { hasText: "Save to File Vault" });

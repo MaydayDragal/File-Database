@@ -40,7 +40,6 @@ page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ✓ " : "  ✗ ") + label); if (!cond) failures++; };
-const frameFor = (part) => page.frames().find((f) => f.url().includes(part));
 
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
@@ -48,7 +47,7 @@ await page.waitForTimeout(400);
 // --- The shell boots with the vault ("Files") as the default app ---
 check(await page.locator("#tab-vault.is-active").count() === 1, "shell opens on the Files tab");
 check(await page.locator("#view-vault:not([hidden])").count() === 1, "vault panel is visible");
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 await vault.locator("#empty").waitFor({ timeout: 8000 });
 check(true, "vault iframe booted (empty state visible)");
 
@@ -57,7 +56,7 @@ check(await page.locator("#tab-li").isVisible(), "shell shows an 'LI Documents' 
 await page.click("#tab-li");
 await page.waitForTimeout(300);
 check(await page.locator("#view-li:not([hidden])").count() === 1, "clicking it reveals the embedded LI view");
-const li = page.frameLocator("#frame-li");
+const li = page.locator("#view-li");
 await li.locator("header.topbar").waitFor({ timeout: 8000 });
 check(await li.locator("#importBtn").isHidden(), "embedded LI app loaded; its own Import button hidden (shell owns 'Add files')");
 // The LI app auto-opens its import prompt when empty; dismiss it like a user.
@@ -66,11 +65,9 @@ if (await li.locator("#importOverlay.show").count()) {
   await page.waitForTimeout(200);
 }
 
-// --- The data layer is present in BOTH app frames (evaluated inside each iframe) ---
-const vaultFrame = frameFor("/vault/");
-const liFrame = frameFor("/li/");
-check(!!vaultFrame && await vaultFrame.evaluate(() => !!(window.FDData && window.FDData.repos)), "data layer loaded inside the vault iframe");
-check(!!liFrame && await liFrame.evaluate(() => !!(window.FDData && window.FDData.repos)), "data layer loaded inside the LI iframe");
+// --- Both features are mounted on the one page, over the one data layer ---
+check(await page.evaluate(() => !!(window.FDData && window.FDData.repos)), "the data layer is loaded once, on the page");
+check(await page.evaluate(() => !!document.querySelector("#view-vault").shadowRoot && !!document.querySelector("#view-li").shadowRoot), "the Files and LI features are both mounted");
 
 // --- Add a PDF to File Vault, then 'Send to LI' ---
 await page.click("#tab-vault");
@@ -95,8 +92,8 @@ check(await page.locator("#tab-li.is-active").count() === 1, "'Send to LI' switc
 check(await page.locator("#view-li:not([hidden])").count() === 1, "LI panel visible after the handoff");
 check(outboxToLi.length >= 1, "an li-import job was queued for the stored PDF (" + JSON.stringify(outboxToLi) + ")");
 
-// --- LI -> File Vault: store from inside the LI frame through the shared intake ---
-await liFrame.evaluate(async () => {
+// --- LI -> File Vault: store through the shared intake (the one data layer on the page) ---
+await page.evaluate(async () => {
   const blob = new Blob(["%PDF-1.4 li->vault"], { type: "application/pdf" });
   const file = new File([blob], "LI54.10-P-071499 Steering column.pdf", { type: "application/pdf" });
   await window.FDData.intake.ingest("vault", [file], { collection: "LI Documents", meta: { tags: ["LI54.10-P-071499", "54 Electrical", "Model 205"], note: "LI: Steering column" } });
@@ -141,12 +138,12 @@ await vault.locator("#d-send-toolbox").click();
 await page.waitForTimeout(400);
 check(await page.locator("#tab-toolbox.is-active").count() === 1, "'Send to Toolbox' switches the shell to the Toolbox tab");
 check(await page.locator("#view-toolbox:not([hidden])").count() === 1, "Toolbox panel visible after the handoff");
-const toolbox = page.frameLocator("#frame-toolbox");
+const toolbox = page.locator("#view-toolbox");
 await toolbox.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
 let media = { active: false, name: "" };
 for (let i = 0; i < 40; i++) {           // frame lazy-loads + the job runs async — poll
   media = await page.evaluate(() => {
-    const doc = document.querySelector("#frame-toolbox")?.contentDocument;
+    const doc = document.querySelector("#view-toolbox")?.shadowRoot;
     if (!doc) return { active: false, name: "" };
     return {
       active: !!doc.querySelector("#tool-media.active"),

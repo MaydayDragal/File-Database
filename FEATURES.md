@@ -7,39 +7,47 @@ passing-test certification.
 
 ## 1. Platform topology
 
-The [shell](shell.js) hosts six lazy-loaded, same-origin iframes. A visited frame
-stays loaded while another tab is visible. Cross-app work uses two mechanisms:
+One page ([index.html](index.html)), one service worker, one manifest. The
+shell ([src/shell/index.js](src/shell/index.js)) owns the top bar and mounts
+each feature ([src/features/](src/features/)) into its panel's **shadow root**
+the first time its tab is shown or work is routed to it; a mounted feature
+stays mounted while another tab is visible. There are no iframes: a feature's
+markup, styles and element IDs live inside its own shadow root, so two features
+can use the same ID and the same class names without touching each other,
+while the theme's tokens are inherited into all of them. Cross-feature work
+uses two mechanisms:
 
 | Mechanism | Purpose | Participants |
 | --- | --- | --- |
-| The shared database ([src/data](src/data/), §9) | Every record; files stored once through one intake; follow-up work as jobs; change events on a bus that reaches every frame and tab | Shell and every app read and write it directly |
-| `postMessage` through the shell | Navigation, theme, keyboard commands, restores, and the RO's "select in Files" mode | Shell and app frames |
+| The shared database ([src/data](src/data/), §9) | Every record; files stored once through one intake; follow-up work as jobs; change events on a bus that reaches every feature and every open tab | Shell and every feature read and write it directly |
+| Messages as function calls | Navigation, keyboard commands, restores, the RO's "select in Files" mode: a feature calls `shell.send({type, …})`, the shell calls `instance.receive({type, …})` — the same message contract the iframes once spoke over `postMessage` (§9) | Shell and feature instances |
 
-Navigation messages usually contain metadata, but file-bearing messages also
-exist: `shell-add-files` carries Files to the shell, and restore/import messages
-carry backup Files into their app. It is incorrect to describe all postMessage
-traffic as having no file bytes. Same-origin deployment is required for the
-shared database, theme and change bus; it is not an isolation boundary between apps.
+| Feature key | Folder | What it is |
+| --- | --- | --- |
+| `vault` (`files` alias) | [src/features/files/](src/features/files/) | Files and organization (the File Vault) |
+| `li` | [src/features/documents/](src/features/documents/) | LI library and PDF processing |
+| `inventory` | [src/features/inventory/](src/features/inventory/) | Catalog and local edits |
+| `toolbox` | [src/features/toolbox/](src/features/toolbox/) | Ten utilities, one file each under `tools/` |
+| `ros` | [src/features/ros/](src/features/ros/) | RO records/stories and their attachments |
+| `viewer` | [src/features/extract/](src/features/extract/) | Backup extraction, without database restore |
 
-| App key | Entry point | Standalone support | Own SW/manifest |
-| --- | --- | --- | --- |
-| `vault` (`files` alias) | [vault/index.html](vault/index.html) | Files and organization | Yes |
-| `li` | [li/index.html](li/index.html) | LI library and PDF processing | Yes |
-| `inventory` | [inventory/index.html](inventory/index.html) | Catalog and local edits | Yes |
-| `toolbox` | [toolbox/index.html](toolbox/index.html) | Utility tabs | No; platform cache |
-| `ros` | [ros/index.html](ros/index.html) | RO records/stories; attachment actions need the shell | No; platform cache |
-| `viewer` | [viewer.html](viewer.html) | Backup extraction, without database restore | No; platform cache |
+Every feature folder is `index.js` (`route` + `mount(host, shell)`), `app.js`
+(the app, `start(root, host, shell)` → an instance with `receive(msg)`),
+`markup.js` (its former `<body>`) and `styles.css`. [viewer.html](viewer.html)
+still exists as a standalone host of the Extract feature, so a copy of it next to
+a backup can always get the files back out; the other per-app pages are gone
+(D1) — anyone who installed one installs the platform instead.
 
 ## 2. Shell behavior
 
-[shell.js](shell.js) and [index.html](index.html) implement:
+[src/shell/index.js](src/shell/index.js) and [index.html](index.html) implement:
 
 - Six ARIA tabs with one visible panel, arrow/Home/End navigation, and remembered
   last-used app (`fd-app`).
 - Live row-count badges for Vault, LI, and Inventory; refresh on navigation,
   focus/visibility changes, app notifications, and intake timers. Background count
   changes pulse, and background app toasts are relayed to the shell.
-- A shared System/Light/Dark theme, applied before paint and broadcast to frames.
+- A shared System/Light/Dark theme, applied before paint; [src/styles/tokens.css](src/styles/tokens.css) is the one set of colours, inherited into every feature.
 - A unified file picker and drop router. PDF filenames matching
   `/\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i` route to LI. Other ordinary files
   route to Vault. This is filename recognition, not PDF-content classification.
@@ -56,8 +64,10 @@ shared database, theme and change bus; it is not an isolation boundary between a
   no external VIN decoder. Unpinning clears these scopes.
 - Ctrl/Cmd+K recognition of LI numbers, special-tool numbers, and 17-character
   VINs; arbitrary text offers searches in Vault, LI, and Inventory.
-- Alt+1–6 app switching, forwarded by embedded pages. `/` search belongs to the
-  Vault, LI, and Inventory handlers, not every app.
+- Alt+1–6 app switching from anywhere on the page. `/` search belongs to the
+  Vault, LI, and Inventory handlers (each listens on its own shadow root, so a
+  shortcut acts only when the focus is inside that feature); the shell focuses
+  the feature's panel on activation unless the user is already typing.
 - **Back up everything** downloads one `.fdb` with every store (files, LI
   documents, tools, repair orders, links, plain-data settings) and then sends
   `platform-backup` to Vault, LI, and Inventory at 1.2-second offsets for the
@@ -79,7 +89,7 @@ shared database, theme and change bus; it is not an isolation boundary between a
 | `#inventory/search/<query>` | Catalog search |
 | `#vault/vin/<VIN>`, `#vault/search/<query>` | Vehicle filter or metadata search |
 | `?view=li`, `?view=inventory` | Legacy app selection |
-| `?view=starred`, `?action=add` | Legacy Vault shortcut forwarded into its frame |
+| `?view=starred`, `?action=add` | Legacy PWA shortcuts: the starred filter, the platform's file picker |
 
 Consumed queries are removed. Hash changes route in place. Links resolve against
 local browser data; sharing a link does not share its document. RO has a tab route
@@ -87,8 +97,8 @@ but no implemented record-ID hash router.
 
 ## 3. File Vault
 
-Implementation: [app.js](vault/app.js), [db.js](vault/db.js),
-[blob-integrity.js](vault/blob-integrity.js); the strict backup validator is
+Implementation: [src/features/files/](src/features/files/) (`app.js`, the
+repos adapter `db.js`, `blob-integrity.js`); the strict backup validator is
 [src/core/formats/fvault.js](src/core/formats/fvault.js) and the VIN/FIN
 classifier [src/core/vin.js](src/core/vin.js) (see §10).
 
@@ -155,8 +165,8 @@ receives a batch, while Media can queue later files behind **Next file**.
 
 ## 4. LI Documents
 
-[li/index.html](li/index.html) is the markup, [li/app.js](li/app.js) the app
-and [li/styles.css](li/styles.css) its styles; JSZip is the page script
+[src/features/documents/](src/features/documents/) is the feature (`markup.js`,
+`app.js`, `styles.css`); JSZip is the page script
 `vendor/jszip.min.js`, PDF.js the shared on-demand copy, the OCR worker pool
 and folder sync the shared services (§10). Text normalization, the document-number matchers and
 the text-to-record extraction are the shared [src/core](src/core/) modules
@@ -212,11 +222,10 @@ on existing records. Inventory uses shell messages and the shared `tools`,
 
 ## 6. Toolbox
 
-Implementation: [toolbox/index.html](toolbox/index.html) holds the tab bar;
-each tool is one file under [toolbox/tools/](toolbox/tools/) that mounts its
-own panel markup and wires it up; [toolbox/app.js](toolbox/app.js) is tab
-switching and the platform integration, [toolbox/styles.css](toolbox/styles.css)
-the styles. pdf-lib and JSZip are page scripts from `vendor/`; PDF.js is the
+Implementation: [src/features/toolbox/](src/features/toolbox/): `markup.js`
+holds the tab bar; each tool is one file under `tools/` exporting its panel
+markup and `init(root)`; `app.js` is tab switching and the platform integration,
+`styles.css` the styles. pdf-lib and JSZip are page scripts from `vendor/`; PDF.js is the
 shared on-demand copy (§10).
 
 | Key | Tool | Capabilities |
@@ -232,15 +241,15 @@ shared on-demand copy (§10).
 | `img` | Image Tools | Format conversion, batch ZIP, crop/rotate/resize, EXIF view/strip, GPS map link |
 | `pdf` | PDF Toolkit | Merge/organize/reorder/rotate/delete, images-to-PDF, page-image extraction, LI renaming with OCR fallback |
 
-Standalone tool hashes use `#<key>`; the shell uses `#toolbox/<key>`. Bridge inputs
-select a tab and inject files into its input. Output download helpers offer
+The route is `#toolbox/<key>`. Files sent from Files arrive as a `toolbox-intake`
+job that selects a tab and injects them into its input. Output download helpers offer
 **Save to File Vault**. Browser codecs and API support constrain available media
 and filesystem operations. A ZIP target cannot make an indivisible oversized
 source file arbitrarily small.
 
 ## 7. Repair Orders
 
-[ros/index.html](ros/index.html) stores records in `repair-orders/ros` separately
+[src/features/ros/](src/features/ros/) stores records in `repair-orders/ros` separately
 from Vault. Fields are RO number, vehicle text, VIN, tag, mileage in, colour, open
 date, customer, service advisor, phone, e-mail, collection association, story
 lines, and timestamps; a record created from a scan also keeps that scan's
@@ -330,7 +339,7 @@ Mechanics that matter:
 | LI import, Toolbox LI rename | `readSmart` with `accept` = a document number was found; later pages reuse page 1's angle |
 | Toolbox Image to Text | `readUpright` — one image at a time, so accuracy over speed |
 
-Every app degrades to a plain read if `ocr.js` is missing from the cache.
+Every feature degrades to a plain read if `ocr.js` is missing from the cache.
 
 ## 8. Backup formats and Extract
 
@@ -347,8 +356,9 @@ empty collections), source sync timestamps, RO records, or logs. A structurally
 validated import is not a single atomic transaction for every restored record;
 write failures can still interrupt restoration. The app does not encrypt backups.
 
-[viewer.html](viewer.html) reads all three formats plus legacy Vault JSON without
-restoring app databases. It lists entries and downloads them individually or in a
+The Extract feature ([src/features/extract/](src/features/extract/) — the
+platform's Extract tab, and [viewer.html](viewer.html) standalone) reads all
+three formats plus `.fdb` and legacy Vault JSON without restoring app databases. It lists entries and downloads them individually or in a
 STORE ZIP with CRC32 and UTF-8 names. Vault output uses collection folders; LI uses
 readable document filenames; Inventory outputs `tools.csv`, `tools.json`, and
 `photos/`. Thumbnails and application settings are not extracted as user files.
@@ -383,10 +393,17 @@ requeues jobs a dead page left running.
 | `migrate.js` | `status()` / `run()`: `file-vault`, `LIDocsDB`, `tool-inventory`, `repair-orders` → one generation; a legacy database counts as holding data when any of its stores does; anything already in the live generation (a skipped migration, a restore) is carried into the merged one first and legacy records whose ids it already holds are skipped; files in an RO's collection become links; colliding RO numbers keep the older record's key |
 
 Jobs today: `thumb`, `vin-detect` (the quick, OCR-free read on arrival) and
-`vin-scan` (the manual scan) run in the Files app; `li-import` in LI Documents;
-`toolbox-intake` in the Toolbox. The shell loads the app that runs a queued job.
+`vin-scan` (the manual scan) run in the Files feature; `li-import` in LI
+Documents; `toolbox-intake` in the Toolbox. The shell mounts the feature that
+runs a queued job.
 
-### Shell message families
+### Cross-feature messages
+
+The contract the iframes spoke over `postMessage`, kept verbatim as function
+calls: a feature's `shell.send(msg)` is the shell's inbound handler, the shell's
+`deliver(app, msg)` is the feature instance's `receive(msg)` (queued until the
+feature has mounted). Phase 5 turns these into direct repo/feature calls
+(REWRITE-PLAN.md Appendix A).
 
 | Message | Direction | Effect |
 | --- | --- | --- |
@@ -397,7 +414,6 @@ Jobs today: `thumb`, `vin-detect` (the quick, OCR-free read on arrival) and
 | `shell-open-picker` | App → shell | Open top-bar picker |
 | `shell-toast {app, msg}`, `li-changed` | App → shell | Notifications/badge refresh |
 | `shell-switch {n}`, `shell-quickopen`, `shell-pin-vehicle {vin}` | App → shell | Keyboard/navigation/vehicle context |
-| `platform-theme {mode}` | Shell → frames | System/light/dark |
 | `platform-backup` | Shell → Vault/LI/Inventory | Per-app exports |
 | `toolbox-open {tab}` | Shell → Toolbox | Select utility |
 | `li-open`, `li-search`, `li-filter`, `li-restore` | Shell → LI | Document navigation, filters, backup restore |
@@ -427,19 +443,20 @@ current listeners must not be described as enforcing sender-origin validation.
 | localStorage `fd-app`, `fd-vehicle` | Shell | Last tab and pinned VIN/series |
 
 These are origin/profile scoped for hosted use. `file://` behavior depends on the
-browser and launcher configuration. Every page on the origin opens the same
-generation; the standalone app pages remain until Phase 4 and share it.
+browser and launcher configuration. The page and the standalone `viewer.html`
+share the origin's storage.
 
 ### Theme and debug log
 
-All seven HTML entry pages (shell plus six apps) read the shared theme before
-paint and support embedded theme updates. The shell and standalone Vault expose
-the theme cycle; other apps do not all have their own theme-toggle control.
+The page reads the shared theme before paint; the shell's toggle cycles it and
+[src/styles/tokens.css](src/styles/tokens.css) restyles every feature at once
+(the Vault's own toggle is hidden).
 
-[debug.js](debug.js) is loaded by the shell, Vault, LI, Inventory, and Toolbox,
-not RO or Extract. It records uncaught errors, rejected promises, resource errors,
-console warnings/errors, and explicit `FVDebug` calls. It labels the five supported
-pages by app, with entry fields `{t, level, app, src, msg, stack}`.
+[debug.js](debug.js) is loaded once by the page, before everything else. It
+records uncaught errors, rejected promises, resource errors, console
+warnings/errors, and explicit `FVDebug` calls, labelling each entry with the
+feature on screen at the time (`app`), with entry fields
+`{t, level, app, src, msg, stack}`.
 Periodic trimming reduces over-600-entry logs to 400; an in-memory fallback is
 available when IndexedDB fails. Ctrl+Shift+D or `FVDebug.open()` opens the viewer,
 with filtering, copying, downloading, and clearing. Vault/LI/Inventory also have
@@ -486,23 +503,20 @@ keep it that way.
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| Platform root | [sw.js](sw.js) | `platform-shell-v22`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract, the services and `vendor/`; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
-| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v34` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
-| LI | [li/sw.js](li/sw.js) | `li-db-shell-v7`, `li-db-runtime-v1` | Tolerant precache (its scripts, styles, JSZip and PDF.js from `vendor/`); network-first navigation; same-origin assets and OCR hosts cached with background refresh |
-| Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v11` | App-shell precache; network-first navigation; cache-first assets |
+| The page | [sw.js](sw.js) | `file-database-v1`, `platform-runtime-v1` | Required core (the page, the shell, the theme); every feature, service, vendor runtime and icon precached tolerantly on install (generated list, verified against the tree); network-first navigation; cache-first assets |
 
-Workers prune their own cache prefixes; the root also removes old pre-platform
-`file-vault-*` caches. User databases are not stored in service-worker caches.
+One visit precaches the whole platform, every feature included. The worker
+prunes its own old caches and everything the pre-Phase-4 workers left behind
+(`platform-shell-*`, `file-vault-*`, `vault-app-*`, `li-db-*`,
+`tool-inventory-*`). User databases are not stored in service-worker caches.
 Tolerant precaching means an install can succeed with an optional asset missing.
-Open required apps/features online and verify offline before relying on them.
-Toolbox/RO/Extract have no independent worker registration for a first standalone visit.
 
 OCR is the optional external runtime dependency in Vault, LI, Toolbox and
 Repair Orders:
 Tesseract.js 5.1.1, core 5.1.0, and language data from jsDelivr/Project Naptha.
 `__TESS_LIB`, `__TESS_WORK`, `__TESS_CORE`, and `__TESS_LANG` override resource paths;
-they do not themselves package the resources for offline use. The LI and platform
-workers cache the OCR hosts, but full offline OCR is not guaranteed across apps. The Inventory
+they do not themselves package the resources for offline use. The worker caches
+the OCR hosts once fetched, but full offline OCR is not guaranteed. The Inventory
 catalog probe is a same-origin fetch. Clicking Toolbox's EXIF GPS link sends the
 coordinates to OpenStreetMap. There is no application file-upload backend.
 
@@ -519,7 +533,9 @@ See the README and [portable guide](portable/START-HERE.txt) for launcher limits
 binary-backup and Blob-integrity checks, then [run-e2e.mjs](tools/run-e2e.mjs).
 E2E discovery uses Git-tracked `tools/e2e*.mjs`, excluding the browser and
 database helpers, sorts the list, and stops at the first failure. There are
-currently **25 browser suites**; they read and seed the shared database through
+currently **25 browser suites**; they drive the one page (a feature's elements
+are addressed through its panel, `page.locator("#view-li").locator(…)`, which
+pierces the shadow root) and read and seed the shared database through
 [tools/e2e-db.mjs](tools/e2e-db.mjs). Git metadata, Node/npm, Python 3, and
 Playwright-managed Chromium are required for the full workflow.
 
