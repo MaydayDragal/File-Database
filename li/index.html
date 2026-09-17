@@ -448,7 +448,19 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
 <script src="../src/core/li-parse.js"></script>
 <script src="../debug.js"></script>
 <script src="../ocr.js"></script>
-<script src="../bridge.js"></script>
+<script src="../src/core/hash.js"></script>
+<script src="../src/core/formats/container.js"></script>
+<script src="../src/core/formats/fdb.js"></script>
+<script src="../src/data/schema.js"></script>
+<script src="../src/data/bus.js"></script>
+<script src="../src/data/db.js"></script>
+<script src="../src/data/repos.js"></script>
+<script src="../src/data/jobs.js"></script>
+<script src="../src/data/intake.js"></script>
+<script src="../src/data/backup.js"></script>
+<script src="../src/data/migrate.js"></script>
+<script src="../src/data/boot.js"></script>
+<script src="../src/ui/migrate-dialog.js"></script>
 <script>
 /* ===== LI Document Database app ===== */
 (function () {
@@ -608,32 +620,20 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     }).catch(function () { var li0 = detectLI(file.name) || detectLIFuzzy(file.name); return { li: li0, ver: detectVersion(file.name, li0), title: "", reason: "", fgroup: "", date: "", validity: "", text: "", pages: 0, ocr: false, noText: true, err: true }; });
   }
 
-  // ---------- IndexedDB ----------
-  var DB;
-  function openDB() {
-    return new Promise(function (res, rej) {
-      var r = indexedDB.open("LIDocsDB", 2);
-      r.onupgradeneeded = function (e) { var db = e.target.result; if (!db.objectStoreNames.contains("docs")) db.createObjectStore("docs", { keyPath: "id" }); if (!db.objectStoreNames.contains("files")) db.createObjectStore("files", { keyPath: "id" }); if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "k" }); };
-      r.onblocked = function () { $("empty").innerHTML = '<div class="empty">The database is open in another tab.<br><span class="muted">Close other tabs running this file, then reload.</span></div>'; };
-      r.onsuccess = function (e) { res(e.target.result); };
-      r.onerror = function () { rej(r.error); };
-    });
-  }
-  function tx(stores, mode) { return DB.transaction(stores, mode); }
-  function reqP(req) { return new Promise(function (res, rej) { req.onsuccess = function () { res(req.result); }; req.onerror = function () { rej(req.error); }; }); }
-  // Settle a transaction promise on complete/error/abort — an abort that fires
-  // no bubbling request error must still reject, or the caller would hang.
-  function txDone(t) { return new Promise(function (res, rej) { t.oncomplete = function () { res(); }; t.onerror = function () { rej(t.error || new Error("transaction error")); }; t.onabort = function () { rej(t.error || new Error("transaction aborted")); }; }); }
-  function putDoc(meta, blob) { return new Promise(function (res, rej) { try { var t = tx(["docs", "files"], "readwrite"); t.objectStore("docs").put(meta); if (blob) t.objectStore("files").put({ id: meta.id, blob: blob }); txDone(t).then(res, rej); } catch (e) { rej(e); } }); }
-  // Atomically write a (possibly re-id'd) doc and remove the old record + file
-  // in a single transaction, so a corrected LI/version can't orphan its blob.
-  function migrateDoc(oldId, meta, blob) { return new Promise(function (res, rej) { try { var t = tx(["docs", "files"], "readwrite"); t.objectStore("docs").put(meta); if (blob) t.objectStore("files").put({ id: meta.id, blob: blob }); if (oldId !== meta.id) { t.objectStore("docs").delete(oldId); t.objectStore("files").delete(oldId); } txDone(t).then(res, rej); } catch (e) { rej(e); } }); }
-  function allDocs() { return reqP(tx(["docs"], "readonly").objectStore("docs").getAll()); }
-  function getFile(id) { return reqP(tx(["files"], "readonly").objectStore("files").get(id)).then(function (r) { return r ? r.blob : null; }); }
-  function delDoc(id) { return new Promise(function (res, rej) { try { var t = tx(["docs", "files"], "readwrite"); t.objectStore("docs").delete(id); t.objectStore("files").delete(id); txDone(t).then(res, rej); } catch (e) { rej(e); } }); }
-  function getSetting(k) { return reqP(tx(["settings"], "readonly").objectStore("settings").get(k)).then(function (r) { return r ? r.v : null; }); }
-  function putSetting(k, v) { return new Promise(function (res, rej) { try { var t = tx(["settings"], "readwrite"); t.objectStore("settings").put({ k: k, v: v }); txDone(t).then(res, rej); } catch (e) { rej(e); } }); }
-  function delSetting(k) { var t = tx(["settings"], "readwrite"); t.objectStore("settings").delete(k); return new Promise(function (res) { t.oncomplete = res; t.onerror = res; }); }
+  // ---------- storage (shared: ../src/data) ----------
+  // Documents, their PDFs and this app's settings live in the platform
+  // database (REWRITE-PLAN.md Phase 2). A document's PDF is a `files`
+  // record it owns (hidden from the Files app until "Add to File Vault").
+  var R = function () { return FDData.repos; };
+  function putDoc(meta, blob) { return R().documents.putWithFile(meta, blob || null); }
+  // Re-key a document (a corrected LI/version) atomically with the old record's removal.
+  function migrateDoc(oldId, meta, blob) { return R().documents.putWithFile(meta, blob || null, { oldId: oldId }); }
+  function allDocs() { return R().documents.list(); }
+  function getFile(id) { return R().documents.getBlob(id); }
+  function delDoc(id) { return R().documents.removeWithFile(id); }
+  function getSetting(k) { return R().settings.getValue("li." + k, null); }
+  function putSetting(k, v) { return R().settings.setValue("li." + k, v); }
+  function delSetting(k) { return R().settings.removeKey("li." + k).catch(function () {}); }
   function estimate() { return navigator.storage && navigator.storage.estimate ? navigator.storage.estimate() : Promise.resolve(null); }
 
   // ---------- state / render ----------
@@ -935,7 +935,7 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     var oldId = snap.id, newId = curDoc.li ? (curDoc.li + "_" + (curDoc.ver || "0")) : oldId;
     var save;
     if (newId !== oldId && !docs.some(function (d) { return d.id === newId; })) {
-      save = getFile(oldId).then(function (blob) { curDoc.id = newId; return migrateDoc(oldId, curDoc, blob); });
+      curDoc.id = newId; save = migrateDoc(oldId, curDoc, null);
     } else {
       save = putDoc(curDoc, null);
     }
@@ -1737,6 +1737,28 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     var arr = Array.prototype.slice.call(fileList).filter(function (f) { return /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); });
     if (!arr.length) { toast("No PDF files found."); return Promise.resolve(); }
     if (importing) { toast("An import is already running — wait for it to finish."); return Promise.reject(new Error("import busy")); }
+    return runImport(arr.map(function (f) { return { file: f }; }));
+  }
+  // PDFs that are already stored (handed over by the platform intake or the
+  // Files app as an "li-import" job): read each from the shared store and
+  // file the document against that same record — no second copy of the bytes.
+  function importStored(ids) {
+    return R().files.getMany(ids).then(function (recs) {
+      var have = recs.filter(Boolean);
+      return Promise.all(have.map(function (r) { return R().files.getBlob(r.id); })).then(function (blobs) {
+        var srcs = [];
+        have.forEach(function (r, i) {
+          if (!blobs[i]) return;
+          srcs.push({ file: new File([blobs[i]], r.name || "document.pdf", { type: "application/pdf", lastModified: r.updatedAt || 0 }), fileId: r.id, fileRec: r });
+        });
+        if (!srcs.length) return null;
+        return waitIdle().then(function () { return runImport(srcs); });
+      });
+    });
+  }
+  function waitIdle() { return new Promise(function (res) { (function poll() { if (!importing) res(); else setTimeout(poll, 150); })(); }); }
+  function runImport(srcs) {
+    var arr = srcs.map(function (x) { return x.file; });
     importing = true;
     $("impProg").style.display = "block";
     var added = 0, updated = 0, failed = 0, quota = false, cursor = 0, done = 0, aborted = false;
@@ -1769,9 +1791,20 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
           ["title", "reason", "fgroup", "date", "validity"].forEach(function (k) { if (ed[k] && prev[k]) meta[k] = prev[k]; });
           if (prev.edited) meta.edited = prev.edited;
         }
-        return putDoc(meta, f).then(function () {
+        var src = srcs[arr.indexOf(f)] || {};
+        if (src.fileId) meta.fileId = src.fileId;
+        // A stored record re-imported under an id that already had another
+        // file: that older PDF is dropped if it was ours, unhooked if it is a
+        // Files-app record.
+        var stale = (prev && src.fileId && prev.fileId && prev.fileId !== src.fileId) ? prev.fileId : null;
+        return putDoc(meta, src.fileId ? null : f).then(function () {
           if (prev) { updated++; var di = docs.indexOf(prev); if (di >= 0) docs[di] = meta; }
           else { added++; docs.push(meta); }
+          if (!stale) return null;
+          return R().files.get(stale).then(function (old) {
+            if (!old) return null;
+            return old.inFiles ? R().files.update(stale, { docId: null }) : R().files.removeFull(stale);
+          }).catch(function () {});
         }, function (e) { failed++; if (e && e.name === "QuotaExceededError") { quota = true; aborted = true; } });
       });
       return commitChain;
@@ -2129,63 +2162,42 @@ var Gr=Object.defineProperty;var Mi=je=>{throw TypeError(je)};var Wr=(je,Be,Ue)=
     }
     if (d.type === "li-open" || d.type === "li-search" || d.type === "li-filter" || d.type === "li-restore" || d.type === "platform-backup") handleShellNav(d);
   });
-  openDB().then(function (db) { DB = db; if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); return refresh(); }).then(function () {
+  FDData.boot().then(function () { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); return refresh(); }).then(function () {
     bootReady = true;
     if (pendingNav.length) pendingNav.splice(0).forEach(handleShellNav);
     else if (!docs.length) $("importOverlay").classList.add("show");
     openFromHash(); // deep-link: open the document named in #LI… if present
     return Promise.all([resumeAutosave(), resumeSyncDir()]);
   }).catch(function (e) { $("empty").innerHTML = '<div class="empty">Couldn\'t open the local database.<br><span class="muted">' + esc(e && e.message) + "</span></div>"; });
-  // ===== File Vault bridge integration =====
+  // ===== Platform integration (shared database) =====
   (function () {
-    if (!window.VaultBridge) return;
+    if (!window.FDData) return;
     var embedded = false;
     try { embedded = window.parent && window.parent !== window; } catch (e) { embedded = true; }
-    // Import PDFs handed over from File Vault or the platform's unified "Add
-    // files". The bridge delivers one file per nudge, but importFiles() refuses
-    // to run concurrently — so buffer a burst and flush it as ONE batch (its
-    // worker pool handles many PDFs at once), and never start while one runs.
-    // Each buffered file carries its bridge resolver/rejector; the whole batch's
-    // resolvers settle together once importFiles() commits, so the bridge only
-    // acknowledges (deletes) items after they're actually stored.
-    var incoming = [], flushT = null;
-    function flushIncoming() {
-      flushT = null;
-      if (!incoming.length) return;
-      if (importing) { flushT = setTimeout(flushIncoming, 150); return; }
-      var batch = incoming.splice(0);
-      importFiles(batch.map(function (x) { return x.f; })).then(function () {
-        batch.forEach(function (x) { x.resolve(); });
-      }, function (err) {
-        batch.forEach(function (x) { x.reject(err); });
-      });
-    }
-    window.VaultBridge.receive("li", function (item) {
-      return new Promise(function (resolve, reject) {
-        var f;
-        try { f = new File([item.blob], item.name || "document.pdf", { type: item.type || "application/pdf" }); }
-        catch (e) { f = item.blob; }
-        incoming.push({ f: f, resolve: resolve, reject: reject });
-        clearTimeout(flushT);
-        flushT = setTimeout(flushIncoming, 80);
-      });
-    });
-    // "Add to File Vault" from the document view.
+    // PDFs handed over by the platform's unified "Add files" or the Files
+    // app arrive as "li-import" jobs naming stored records; one job is one
+    // batch through the same import path as a manual import. The job is
+    // acknowledged only once importFiles() has committed — a failed file is
+    // never reported as filed.
+    FDData.jobs.register("li-import", function (job) { return importStored(job.inputIds); });
+    // Other tabs' changes: reload the list (own writes already refreshed it).
+    var refreshT = null;
+    FDData.bus.on("documents:changed", function (d) { if (!d.remote) return; clearTimeout(refreshT); refreshT = setTimeout(function () { refresh(); }, 200); });
+    // "Add to File Vault" from the document view: the same record becomes
+    // visible in the Files app (collection LI Documents, tagged) — nothing is
+    // copied.
     var sv = $("dSendVault");
     if (sv) sv.addEventListener("click", function () {
       if (!curDoc) { toast("Open a document first."); return; }
-      getFile(curDoc.id).then(function (b) {
-        if (!b) { toast("No file stored for this document."); return; }
-        var d = collectDetail();
-        var models = [];
-        try { models = modelsOf(curDoc) || []; } catch (e) {}
-        return window.VaultBridge.send("vault", {
-          name: rlName(d), // already ends in .pdf — do not append again
-          type: "application/pdf",
-          blob: b,
-          meta: { li: d.li, title: d.title, fgroup: d.fgroup, date: d.date, validity: d.validity, ver: d.ver, modelSeries: models }
-        }).then(function () { toast("Added to File Vault ✓"); });
-      });
+      if (!curDoc.fileId) { toast("No file stored for this document."); return; }
+      var d = collectDetail();
+      var models = [];
+      try { models = modelsOf(curDoc) || []; } catch (e) {}
+      var tags = [d.li, d.fgroup].filter(Boolean).concat(models.map(function (m) { return "Model " + m; }));
+      R().files.update(curDoc.fileId, {
+        inFiles: 1, collection: FDData.repos.LI_COLLECTION, name: rlName(d),
+        tags: Array.from(new Set(tags)), note: d.title ? ("LI: " + d.title) : "",
+      }).then(function () { toast("Added to File Vault ✓"); }, function (e) { toast("Couldn't add to File Vault — " + ((e && e.message) || e)); });
     });
     // Back link: inside the shell, switch views instead of navigating the iframe.
     var back = $("backToVault");

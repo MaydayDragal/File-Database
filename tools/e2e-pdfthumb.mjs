@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles, fdbAll, fdbDelete } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -77,49 +78,16 @@ check((await page.locator("#results .card").count()) >= 1 || (await waitThumb(30
 check(await waitThumb(), "imported PDF shows a rendered first-page thumbnail (naturalWidth > 0)");
 
 // The thumbnail is persisted as a real image blob in IndexedDB
-const thumbSize = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const db = r.result;
-    const c = db.transaction("files").objectStore("files").getAll();
-    c.onsuccess = () => { const rec = c.result.find((x) => x.kind === "pdf"); res(rec && rec.thumb ? (rec.thumb.size || 0) : 0); };
-    c.onerror = () => res(0);
-  };
-  r.onerror = () => res(0);
-}));
+const pdfThumbSize = async () => { const pdf = (await vaultFiles(page)).find((x) => x.kind === "pdf"); if (!pdf) return 0; const t = (await fdbAll(page, "thumbs")).find((x) => x.id === pdf.id); return t && t.blob ? t.blob.size : 0; };
+const thumbSize = await pdfThumbSize();
 check(thumbSize > 0, `PDF thumbnail is stored in IndexedDB (${thumbSize} bytes)`);
 
 // --- Backfill path: clear the stored thumb, reload, and it regenerates ---
-await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const db = r.result;
-    const store = db.transaction("files", "readwrite").objectStore("files");
-    const c = store.getAll();
-    c.onsuccess = () => {
-      const rec = c.result.find((x) => x.kind === "pdf");
-      if (!rec) return res();
-      delete rec.thumb;
-      store.put(rec);
-    };
-    db.transaction("files", "readwrite").oncomplete = () => res();
-    setTimeout(res, 500);
-  };
-  r.onerror = () => res();
-}));
+await (async () => { const pdf = (await vaultFiles(page)).find((x) => x.kind === "pdf"); if (pdf) await fdbDelete(page, "thumbs", pdf.id); })();
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 check(await waitThumb(), "background backfill regenerates a missing PDF thumbnail after reload");
-const thumbSize2 = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const db = r.result;
-    const c = db.transaction("files").objectStore("files").getAll();
-    c.onsuccess = () => { const rec = c.result.find((x) => x.kind === "pdf"); res(rec && rec.thumb ? (rec.thumb.size || 0) : 0); };
-    c.onerror = () => res(0);
-  };
-  r.onerror = () => res(0);
-}));
+const thumbSize2 = await pdfThumbSize();
 check(thumbSize2 > 0, "backfilled thumbnail is persisted back to IndexedDB");
 
 const realErrors = errors.filter((e) => !/favicon|manifest|the server responded|404|pdf|worker|Warning|Setting up fake/i.test(e));

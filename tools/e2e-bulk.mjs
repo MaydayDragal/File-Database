@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -76,12 +77,7 @@ check(await waitFor(async () => (await page.locator("#bulk-count").textContent()
 dialogAnswers = ["Bulk Jobs"];
 await page.click("#bulk-collection");
 await page.waitForTimeout(500);
-const colls = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.map((x) => x.collection)); }; g.onerror = () => { db.close(); res([]); }; };
-  r.onerror = () => res([]);
-}));
+const colls = (await vaultFiles(page)).map((x) => x.collection);
 check(colls.length === 4 && colls.every((c) => c === "Bulk Jobs"), "bulk collection applied to all 4 files");
 
 // ---------- bulk VIN ----------
@@ -89,12 +85,7 @@ await page.keyboard.press("Control+a");
 dialogAnswers = ["W1K2140471A068698"];
 await page.click("#bulk-vin");
 await page.waitForTimeout(500);
-const vinned = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.filter((x) => (x.vins || []).includes("W1K2140471A068698")).length); }; g.onerror = () => { db.close(); res(0); }; };
-  r.onerror = () => res(0);
-}));
+const vinned = (await vaultFiles(page)).filter((x) => (x.vins || []).includes("W1K2140471A068698")).length;
 check(vinned === 4, `bulk VIN tagged all files (${vinned}/4) — they join the By VIN group`);
 
 // ---------- bulk tags + star ----------
@@ -105,12 +96,8 @@ await page.waitForTimeout(400);
 await page.keyboard.press("Control+a");
 await page.click("#bulk-star");
 await page.waitForTimeout(400);
-const meta = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res({ tagged: g.result.filter((x) => (x.tags || []).includes("audit") && (x.tags || []).includes("q3")).length, starred: g.result.filter((x) => x.starred).length }); }; g.onerror = () => { db.close(); res({}); }; };
-  r.onerror = () => res({});
-}));
+const metaAll = await vaultFiles(page);
+const meta = { tagged: metaAll.filter((x) => (x.tags || []).includes("audit") && (x.tags || []).includes("q3")).length, starred: metaAll.filter((x) => x.starred).length };
 check(meta.tagged === 4, "bulk tags applied");
 check(meta.starred === 4, "bulk star applied");
 check(await waitFor(async () => (await page.locator("#bulk-star").textContent()) === "☆ Unstar"), "star button flips to Unstar when all selected are starred");

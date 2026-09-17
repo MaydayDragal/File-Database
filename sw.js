@@ -1,7 +1,7 @@
 /* File Database platform shell service worker — offline shell + toolbox.
    The vault, LI and inventory apps register their own service workers for
    their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v20";
+const CACHE = "platform-shell-v21";
 // The text-recognition engine the Repair Orders scanner downloads on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see loadTess() in ros/index.html). Their files
@@ -17,7 +17,6 @@ const CORE = [
 // …while these are nice-to-have offline (the 2.3 MB toolbox page especially
 // must not be able to fail the whole install on a flaky connection).
 const EXTRAS = [
-  "./bridge.js",
   "./debug.js",
   "./ocr.js",
   "./src/core/text.js",
@@ -30,6 +29,18 @@ const EXTRAS = [
   "./src/core/formats/fvault.js",
   "./src/core/formats/tidb.js",
   "./src/core/formats/lidb.js",
+  "./src/core/hash.js",
+  "./src/core/formats/fdb.js",
+  "./src/data/schema.js",
+  "./src/data/bus.js",
+  "./src/data/db.js",
+  "./src/data/repos.js",
+  "./src/data/jobs.js",
+  "./src/data/intake.js",
+  "./src/data/backup.js",
+  "./src/data/migrate.js",
+  "./src/data/boot.js",
+  "./src/ui/migrate-dialog.js",
   "./viewer.html",
   "./manifest.webmanifest",
   "./toolbox/index.html",

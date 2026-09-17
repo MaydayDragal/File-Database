@@ -2,7 +2,7 @@
  * app.js — File Vault application logic.
  *
  * A dependency-free, offline-first personal file database. All state lives in
- * IndexedDB (see db.js). This file wires up the UI: importing files, generating
+ * the platform's shared database (db.js adapts it to this app's verbs). This file wires up the UI: importing files, generating
  * thumbnails, searching/filtering, previewing, editing metadata and backups.
  */
 (function () {
@@ -22,7 +22,7 @@
   let onShellNav = (d) => { shellNavQueue.push(d); };
   window.addEventListener("message", (e) => {
     const d = e.data || {};
-    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-rename-collection" || d.type === "vault-ro-apply" || d.type === "vault-ro-import") onShellNav(d);
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-ro-import") onShellNav(d);
   });
 
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
@@ -230,38 +230,43 @@
     }
   }
 
-  // Generate missing previews for PDFs already in the vault, gently in the
-  // background: one at a time, persisted as we go (without touching updatedAt
-  // so nothing jumps in "Recent"), and drawn into any card on screen.
-  let _thumbRunning = false, _thumbT = null;
+  // Previews are made here, as "thumb" jobs: for files that just arrived
+  // (queued by the intake) and, on boot, for PDFs that never got one. One
+  // at a time, persisted as we go (a preview never touches updatedAt, so
+  // nothing jumps in "Recent"), and drawn into any card on screen.
+  let _thumbT = null;
   function scheduleThumbBackfill() {
-    if (_thumbRunning) return;
     clearTimeout(_thumbT);
-    _thumbT = setTimeout(runThumbBackfill, 400);
+    _thumbT = setTimeout(async () => {
+      const pending = items.filter((it) => it.kind === "pdf" && !it.thumb && !it._noThumb).map((it) => it.id);
+      if (!pending.length) return;
+      try {
+        const queued = new Set();
+        (await FDData.jobs.listActive("thumb")).forEach((j) => j.inputIds.forEach((id) => queued.add(id)));
+        const todo = pending.filter((id) => !queued.has(id));
+        if (todo.length) await FDData.jobs.enqueue("thumb", todo);
+      } catch (e) {}
+    }, 400);
   }
-  async function runThumbBackfill() {
-    if (_thumbRunning) return;
-    const pending = items.filter((it) => it.kind === "pdf" && !it.thumb && !it._noThumb).map((it) => it.id);
-    if (!pending.length) return;
-    _thumbRunning = true;
-    try {
-      for (const id of pending) {
-        const it = items.find((x) => x.id === id);
-        if (!it || it.thumb || it._noThumb) continue;
-        let rec = null;
-        try { rec = await DB.get(id); } catch (e) {}
-        if (!rec || !rec.blob) { it._noThumb = true; continue; }
-        if (rec.thumb) { it.thumb = rec.thumb; refreshCardThumb(id, rec.thumb); continue; }
-        let thumb = null;
-        try { thumb = await makePdfThumb(rec.blob); } catch (e) {}
-        if (!thumb) { it._noThumb = true; continue; } // encrypted / broken — keep the icon
-        rec.thumb = thumb;
-        try { await DB.put(rec); } catch (e) {} // put, not update: preserves updatedAt
-        it.thumb = thumb;
-        refreshCardThumb(id, thumb);
-        await new Promise((r) => setTimeout(r, 25)); // breathe between pages
-      }
-    } finally { _thumbRunning = false; }
+  async function thumbJob(job, ctl) {
+    for (const id of job.inputIds) {
+      if (ctl.cancelled()) return;
+      await thumbFor(id);
+      await new Promise((r) => setTimeout(r, 25)); // breathe between pages
+    }
+  }
+  async function thumbFor(id) {
+    const it = items.find((x) => x.id === id);
+    if (it && (it.thumb || it._noThumb)) return;
+    let rec = null;
+    try { rec = await DB.get(id); } catch (e) {}
+    if (!rec || !rec.blob) { if (it) it._noThumb = true; return; }
+    if (rec.thumb) { if (it) { it.thumb = rec.thumb; refreshCardThumb(id, rec.thumb); } return; }
+    let thumb = null;
+    try { thumb = await makeThumb(rec.blob, rec.kind); } catch (e) {}
+    if (!thumb) { if (it) it._noThumb = true; return; } // encrypted / broken — keep the icon
+    try { await FDData.repos.files.setThumb(id, thumb); } catch (e) { return; }
+    if (it) { it.thumb = thumb; refreshCardThumb(id, thumb); }
   }
   function refreshCardThumb(id, thumb) {
     const box = document.querySelector('.card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .card__thumb');
@@ -275,82 +280,36 @@
   }
 
   // ---------- Import ----------
-  // A dropped/picked File is a LAZY handle to its source — if that source is a
-  // OneDrive/network placeholder, a locked file, or an app's temp export, a
-  // later read (when IndexedDB serializes it) can silently store garbage.
-  // Read the bytes eagerly at add time so a bad source fails loudly instead.
-  const MATERIALIZE_MAX = 256 * 1024 * 1024;
-  async function materializeFile(file) {
-    if (file.size > MATERIALIZE_MAX) return file; // keep the handle (memory)
-    const buf = await file.arrayBuffer();
-    if (file.size && !buf.byteLength) throw new Error("empty read");
-    return new Blob([buf], { type: file.type || "application/octet-stream" });
-  }
-  // After writing, read the stored copy back and compare size + leading bytes
-  // with the source — storage corruption becomes an immediate error, not a
-  // "Failed to load" surprise weeks later.
-  async function verifyStored(record) {
-    try {
-      const back = await DB.get(record.id);
-      if (!back || !back.blob) return false;
-      // Full-byte comparison (chunked): a first-few-bytes check missed
-      // same-size mid-file corruption, exactly the failure mode this machine
-      // has shown. equalBlobs also handles the size check.
-      return await window.FileVaultIntegrity.equalBlobs(record.blob, back.blob);
-    } catch (e) { return false; }
+  // The data layer's intake reads each file's bytes eagerly (a dropped File
+  // is a lazy handle — a OneDrive placeholder or a locked file can read as
+  // garbage later), stores and verifies them, and queues the thumbnail and
+  // quick-VIN jobs this page runs below. A file that fails to read or store
+  // is reported and never counted as added. Resolves the ids stored.
+  async function storeFiles(files, opts) {
+    let out;
+    try { out = await FDData.intake.ingest("vault", files, Object.assign({ source: "files" }, opts || {})); }
+    catch (e) { console.error(e); toast("Couldn't save the files. Storage may be full."); return []; }
+    out.results.filter((r) => !r.ok).forEach((r) => {
+      if (opts && opts.quiet) return;
+      toast(r.error.indexOf("read") === 0
+        ? 'Couldn’t read “' + r.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'
+        : "Couldn't save “" + r.name + "”" + (r.quota ? " — browser storage is full." : " — " + r.error));
+    });
+    if (out.ids.length) {
+      const recs = await FDData.repos.files.getMany(out.ids);
+      recs.forEach((r) => { if (r && !items.some((x) => x.id === r.id)) { r.thumb = null; items.push(r); } });
+    }
+    return out.ids;
   }
   async function addFiles(fileList) {
     const files = Array.from(fileList).filter(Boolean);
     if (!files.length) return;
     const collection = state.filter.startsWith("collection:") ? state.filter.slice(11) : "";
-    let added = 0;
-    const newRecs = [];
     toast(`Adding ${files.length} file${files.length > 1 ? "s" : ""}…`);
-    for (const file of files) {
-      let bytes;
-      try { bytes = await materializeFile(file); }
-      catch (e) {
-        toast('Couldn’t read “' + file.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.');
-        continue;
-      }
-      const kind = classify(file);
-      const thumb = await makeThumb(file, kind);
-      const now = Date.now();
-      const record = {
-        id: uid(),
-        name: file.name || "Untitled",
-        type: file.type || "application/octet-stream",
-        kind,
-        size: bytes.size,
-        blob: bytes,
-        thumb,
-        tags: [],
-        collection,
-        note: "",
-        starred: false,
-        createdAt: now,
-        updatedAt: now,
-      };
-      record.searchText = DB.buildSearchText(record);
-      try {
-        await DB.put(record);
-        if (!(await verifyStored(record))) {
-          try { await DB.remove(record.id); } catch (e2) {}
-          toast("“" + file.name + "” didn't store correctly and was removed — try adding it again.");
-          continue;
-        }
-        items.push(stripBlob(record));
-        newRecs.push(record);
-        added++;
-      } catch (e) {
-        console.error(e);
-        toast("Couldn't save “" + file.name + "”. Storage may be full.");
-      }
-    }
+    const ids = await storeFiles(files, { collection });
     render();
     updateStorage();
-    if (added) toast(`Added ${added} file${added > 1 ? "s" : ""}${collection ? " to " + collection : ""}.`);
-    autoDetectBatch(newRecs);
+    if (ids.length) toast(`Added ${ids.length} file${ids.length > 1 ? "s" : ""}${collection ? " to " + collection : ""}.`);
   }
 
   // ---------- Automatic VIN detection on intake ----------
@@ -383,14 +342,19 @@
     if (!quiet && vins.length) toast(`Filed “${stored.name}” under ${vins[0]}${vins.length > 1 ? " +" + (vins.length - 1) : ""} — see 🚗 By VIN.`);
     return vins.length ? 1 : 0;
   }
-  function autoDetectBatch(recs) {
-    if (!recs.length) return;
-    const quiet = recs.length > 3;
-    (async () => {
-      let hits = 0;
-      for (const rec of recs) { try { hits += await autoDetectVins(rec, quiet); } catch (e) {} }
-      if (quiet && hits) toast(`Detected VINs in ${hits} of the new files — see 🚗 By VIN.`);
-    })();
+  // The "vin-detect" job: the quick, OCR-free read for files that just
+  // arrived (from this page, the shell, the RO tab or another tab).
+  async function vinDetectJob(job) {
+    let hits = 0;
+    const quiet = !!(job.meta && job.meta.quiet);
+    for (const id of job.inputIds) {
+      const rec = await DB.get(id);
+      if (!rec || !rec.blob) continue;
+      if (!items.some((x) => x.id === id)) { items.push(stripBlob(rec)); render(); }
+      try { hits += await autoDetectVins(rec, quiet); } catch (e) {}
+    }
+    if (quiet && hits) toast(`Detected VINs in ${hits} of the new files — see 🚗 By VIN.`);
+    return { hits };
   }
 
   function stripBlob(r) {
@@ -574,13 +538,13 @@
     const allStarred = sel.length > 0 && sel.every((it) => it.starred);
     $("#bulk-star").textContent = allStarred ? "☆ Unstar" : "★ Star";
     const pdfs = sel.filter((it) => it.kind === "pdf").length;
-    $("#bulk-send-li").disabled = !window.VaultBridge || pdfs === 0;
+    $("#bulk-send-li").disabled = !window.FDData || pdfs === 0;
     $("#bulk-send-li").textContent = "🗄️ Send to LI" + (pdfs && pdfs !== sel.length ? " (" + pdfs + ")" : "");
     const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
     const oneTab = tabs.size === 1 && !sel.some((it) => !toolboxTabFor(it));
     const tab = oneTab ? tabs.values().next().value : null;
     const tbBtn = $("#bulk-send-toolbox");
-    tbBtn.disabled = !window.VaultBridge || !oneTab || !supportsToolboxBulk(tab);
+    tbBtn.disabled = !window.FDData || !oneTab || !supportsToolboxBulk(tab);
     tbBtn.title = oneTab && !supportsToolboxBulk(tab)
       ? "The " + tab.toUpperCase() + " tool takes one file at a time — open files individually to use it. Bulk sends work for images, video and PDFs."
       : "Send the selection to the matching Toolbox tool (files must be one kind — images, video or PDFs)";
@@ -649,31 +613,25 @@
       toast(`Deleted ${ids.length} file(s).`);
     };
     $("#bulk-send-li").onclick = async () => {
-      if (!window.VaultBridge) return;
+      if (!window.FDData) return;
       const ids = items.filter((it) => selection.has(it.id) && it.kind === "pdf").map((it) => it.id);
       if (!ids.length) { toast("No PDFs in the selection."); return; }
+      // The PDFs are already stored: LI Documents reads them from the same
+      // records and files a document against each (no second copy).
       let sent = 0;
-      for (const id of ids) {
-        const rec = await DB.get(id);
-        if (!rec || !rec.blob) continue;
-        try { await window.VaultBridge.send("li", { name: rec.name, type: rec.type, blob: rec.blob, meta: {} }); sent++; } catch (e) {}
-      }
+      try { await FDData.jobs.enqueue("li-import", ids, { source: "files" }); sent = ids.length; } catch (e) { console.error(e); }
       toast(`Sent ${sent} PDF(s) to LI Documents — it reads and files them automatically.`);
       if (embedded && sent) { try { window.parent.postMessage({ type: "shell-nav", app: "li" }, "*"); } catch (e) {} }
     };
     $("#bulk-send-toolbox").onclick = async () => {
-      if (!window.VaultBridge) return;
+      if (!window.FDData) return;
       const sel = items.filter((it) => selection.has(it.id));
       const tabs = new Set(sel.map((it) => toolboxTabFor(it)).filter(Boolean));
       if (tabs.size !== 1 || sel.some((it) => !toolboxTabFor(it))) { toast("Pick files of one kind — a mixed selection can't target a single tool."); return; }
       const tab = tabs.values().next().value;
       if (!supportsToolboxBulk(tab)) { toast("The " + tab.toUpperCase() + " tool accepts one file at a time. Open files individually to use it."); return; }
       let sent = 0;
-      for (const it of sel) {
-        const rec = await DB.get(it.id);
-        if (!rec || !rec.blob) continue;
-        try { await window.VaultBridge.send("toolbox", { name: rec.name, type: rec.type, blob: rec.blob, meta: { tab } }); sent++; } catch (e) {}
-      }
+      try { await FDData.jobs.enqueue("toolbox-intake", sel.map((it) => it.id), { tab, keep: true }); sent = sel.length; } catch (e) { console.error(e); }
       toast(`Sent ${sent} file(s) to the Toolbox.`);
       if (embedded && sent) { try { window.parent.postMessage({ type: "shell-nav", app: "toolbox", tab }, "*"); } catch (e) {} }
     };
@@ -1097,9 +1055,9 @@
     starBtn.classList.toggle("on", !!rec.starred);
 
     // "Send to LI" only makes sense for PDFs.
-    $("#d-send-li").hidden = !(rec.kind === "pdf" && window.VaultBridge);
+    $("#d-send-li").hidden = !(rec.kind === "pdf" && window.FDData);
     // "Send to Toolbox" only when a Toolbox tool exists for this file.
-    $("#d-send-toolbox").hidden = !(window.VaultBridge && toolboxTabFor(rec));
+    $("#d-send-toolbox").hidden = !(window.FDData && toolboxTabFor(rec));
     // No VIN "Detect" for videos — the scan skips them too.
     $("#d-scan-vin").hidden = !!VIN_SKIP_KIND[rec.kind];
 
@@ -1229,12 +1187,12 @@
 
   // ---------- Cross-app: hand a PDF to the LI Database ----------
   async function sendCurrentToLI() {
-    if (!window.VaultBridge) { toast("The LI bridge isn't available."); return; }
+    if (!window.FDData) { toast("LI Documents isn't available."); return; }
     const rec = await DB.get(state.currentId);
     if (!rec) return;
     if (rec.kind !== "pdf") { toast("Only PDFs can go to the LI Database."); return; }
     try {
-      await window.VaultBridge.send("li", { name: rec.name, type: rec.type || "application/pdf", blob: rec.blob });
+      await FDData.jobs.enqueue("li-import", [rec.id], { source: "files" });
       closeDetail();
       // Ask the platform shell to switch to the LI app so the user sees it import.
       if (embedded) {
@@ -1264,13 +1222,13 @@
   const TOOLBOX_BULK_TABS = new Set(["media", "pdf"]);
   function supportsToolboxBulk(tab) { return TOOLBOX_BULK_TABS.has(tab); }
   async function sendCurrentToToolbox() {
-    if (!window.VaultBridge) { toast("The Toolbox bridge isn't available."); return; }
+    if (!window.FDData) { toast("The Toolbox isn't available."); return; }
     const rec = await DB.get(state.currentId);
     if (!rec) return;
     const tab = toolboxTabFor(rec);
     if (!tab) { toast("The Toolbox has no tool for this file type."); return; }
     try {
-      await window.VaultBridge.send("toolbox", { name: rec.name, type: rec.type, blob: rec.blob, meta: { tab } });
+      await FDData.jobs.enqueue("toolbox-intake", [rec.id], { tab, keep: true });
       // Ask the platform shell to switch to the Toolbox on the right tool tab.
       if (embedded) {
         try { window.parent.postMessage({ type: "shell-nav", app: "toolbox", tab }, "*"); } catch (e) {}
@@ -1283,55 +1241,24 @@
     }
   }
 
-  // ---------- Cross-app: receive a file handed over from another app ----------
-  const LI_COLLECTION = "LI Documents";
-  async function addIncomingFile(item) {
-    const blob = item.blob;
-    const name = item.name || "document.pdf";
-    const file = new File([blob], name, { type: item.type || blob.type || "application/pdf" });
-    const kind = classify(file);
-    const thumb = await makeThumb(file, kind);
-    const now = Date.now();
-    const m = item.meta || {};
-    // Files handed over from the platform's unified "Add files" are generic —
-    // don't force them into the LI collection. Real LI hand-offs carry m.li.
-    const collection = m.collection || (m.li ? LI_COLLECTION : "");
-    const tags = [];
-    if (m.li) tags.push(m.li);
-    if (m.fgroup) tags.push(m.fgroup);
-    (m.modelSeries || []).forEach && (m.modelSeries || []).forEach((s) => tags.push("Model " + s));
-    const record = {
-      id: uid(),
-      name,
-      type: file.type,
-      kind,
-      size: file.size,
-      blob: file,
-      thumb,
-      tags: Array.from(new Set(tags)),
-      collection,
-      note: m.title ? ("LI: " + m.title) : "",
-      starred: false,
-      // A pinned active vehicle tags every front-door file with its VIN.
-      vins: m.vin ? [String(m.vin).toUpperCase()] : [],
-      fins: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    record.searchText = DB.buildSearchText(record);
-    await DB.put(record);
-    if (!(await verifyStored(record))) {
-      try { await DB.remove(record.id); } catch (e2) {}
-      toast("“" + name + "” didn't store correctly and was removed — try adding it again.");
-      return;
-    }
-    items.push(stripBlob(record));
-    render();
-    updateStorage();
-    toast('Added “' + name + '” to File Vault' + (collection ? ' (' + collection + ')' : '') + '.');
-    // Files from the platform's unified intake get an immediate (no-OCR) VIN
-    // read so vehicle paperwork lands grouped under its car automatically.
-    if (m.fromShell) autoDetectBatch([record]);
+  // ---------- Cross-context changes ----------
+  // Files stored by another context (the shell's intake, the RO tab, LI
+  // Documents, another tab) announce themselves on the bus; own writes have
+  // already updated `items`, so only remote events reload the list.
+  let _refreshT = null;
+  function onFilesChanged(d) {
+    if (!d.remote) return;
+    clearTimeout(_refreshT);
+    _refreshT = setTimeout(async () => {
+      try {
+        const fresh = await DB.listMeta();
+        const flags = new Map(items.filter((x) => x._noThumb).map((x) => [x.id, true]));
+        items = fresh.map((r) => { if (flags.has(r.id)) r._noThumb = true; return r; });
+        if (state.currentId && !items.some((x) => x.id === state.currentId)) closeDetail();
+        render();
+        updateStorage();
+      } catch (e) {}
+    }, 150);
   }
 
   // ---------- Storage meter ----------
@@ -1812,32 +1739,13 @@
 
   // Import synced files into a collection named after the folder, tracking the
   // source modified-time so a later scan won't re-import an unchanged file.
+  // The intake does the eager read + verify (a cloud-placeholder or locked
+  // source fails there, not silently as stored garbage).
   async function syncImport(files, collection) {
     let added = 0;
     for (const file of files) {
-      // Same eager-read + verify as addFiles: a cloud-placeholder or locked
-      // source must fail here, not silently store garbage.
-      let bytes;
-      try { bytes = await materializeFile(file); } catch (e) { continue; }
-      const kind = classify(file);
-      let thumb = null; try { thumb = await makeThumb(file, kind); } catch (e) {}
-      const now = Date.now();
-      const record = {
-        id: uid(),
-        name: file.name || "Untitled",
-        type: file.type || "application/octet-stream",
-        kind, size: bytes.size, blob: bytes, thumb,
-        tags: [], collection, note: "", starred: false,
-        createdAt: now, updatedAt: now,
-        srcMtime: file.lastModified || 0, srcSync: true,
-      };
-      record.searchText = DB.buildSearchText(record);
-      try {
-        await DB.put(record);
-        if (!(await verifyStored(record))) { try { await DB.remove(record.id); } catch (e2) {} continue; }
-        items.push(stripBlob(record));
-        added++;
-      } catch (e) { console.error(e); }
+      const ids = await storeFiles([file], { collection, quiet: true, meta: { srcMtime: file.lastModified || 0, srcSync: true } });
+      added += ids.length;
     }
     if (added) {
       if (!extraCollections.includes(collection)) { extraCollections.push(collection); DB.setMeta("collections", extraCollections); }
@@ -2121,20 +2029,29 @@
   // pure waste. Everything else (images, PDFs, text/CSV, filenames) is scanned.
   const VIN_SKIP_KIND = { video: true };
   async function scanVins(force) {
-    if (vinScanning) { toast("A VIN scan is already running…"); return; }
-    const todo = items.filter((it) => !VIN_SKIP_KIND[it.kind] && (force || !it.vinScan));
+    if ((await FDData.jobs.listActive("vin-scan")).length) { toast("A VIN scan is already running…"); return; }
+    const todo = items.filter((it) => !VIN_SKIP_KIND[it.kind] && (force || !it.vinScan)).map((it) => it.id);
     if (!todo.length) {
       toast("Every file has already been scanned for VINs. Shift-click the menu item to rescan everything.");
       return;
     }
+    // A job: it resumes after a reload and runs in whichever tab holds the lock.
+    await FDData.jobs.enqueue("vin-scan", todo, { force: !!force });
+  }
+  async function runVinScan(ids, force, ctl) {
+    if (vinScanning) return;
+    const todo = ids.map((id) => items.find((it) => it.id === id)).filter((it) => it && !VIN_SKIP_KIND[it.kind]);
+    if (!todo.length) return { found: 0 };
     vinScanning = true; vinCancel = false; ocrGaveUp = false;
     const total = todo.length;
     let found = 0, done = 0, needOcr = 0, failed = 0, lastP = 0;
+    const cancelled = () => vinCancel || (ctl && ctl.cancelled());
     const progress = () => {
       const t = Date.now();
       if (t - lastP < 150 && done < total) return; // throttle DOM churn on big vaults
       lastP = t;
       toast(`Scanning for VINs… ${done}/${total}`, "Stop", () => { vinCancel = true; });
+      if (ctl) ctl.progress(done / total, done + "/" + total);
     };
 
     // Process one file using this lane's OCR worker (created on first need).
@@ -2175,7 +2092,7 @@
       const ctx = { worker: null }; // this lane's OCR worker
       try {
         let it;
-        while (!vinCancel && (it = nextItem())) await handle(it, ctx);
+        while (!cancelled() && (it = nextItem())) await handle(it, ctx);
       } finally { laneFree(ctx); }
     }
     try {
@@ -2186,10 +2103,11 @@
       vinScanning = false;
     }
     render();
-    let msg = `VIN scan ${vinCancel ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN`;
+    let msg = `VIN scan ${cancelled() ? "stopped" : "finished"} — ${found} file${found === 1 ? "" : "s"} with a VIN`;
     if (needOcr) msg += ` · ${needOcr} need OCR (unavailable now — reconnect and scan again)`;
     if (failed) msg += ` · ${failed} unreadable`;
     toast(msg + ".");
+    return { found, needOcr, failed, cancelled: cancelled() };
   }
 
   // Detail-drawer "Detect" button: scan just the open file and fill the field.
@@ -2237,61 +2155,6 @@
   // Move every file in one collection to another name — used by the Repair
   // Orders app when an RO number is edited, so its files stay linked. Rebuilds
   // searchText through DB.put so the rename is done DB-safely (not a raw write).
-  async function renameCollection(from, to) {
-    if (!from || !to || from === to) return;
-    let moved = 0;
-    for (const it of items.slice()) {
-      if (it.collection !== from) continue;
-      const rec = await DB.get(it.id);
-      if (!rec) continue;
-      rec.collection = to;
-      rec.updatedAt = Date.now();
-      rec.searchText = DB.buildSearchText(rec);
-      await DB.put(rec);
-      const i = items.findIndex((x) => x.id === it.id);
-      if (i !== -1) items[i] = stripBlob(rec);
-      moved++;
-    }
-    const fi = extraCollections.indexOf(from);
-    if (fi !== -1) extraCollections.splice(fi, 1);
-    if (to && !extraCollections.includes(to)) extraCollections.push(to);
-    DB.setMeta("collections", extraCollections);
-    if (state.filter === "collection:" + from) setFilter("collection:" + to);
-    else render();
-    if (moved) updateStorage();
-  }
-
-  // Repair-Orders file wiring (driven by the ROs tab): assign files to an RO's
-  // collection, stamp the RO's VIN onto files that have none, or unassign
-  // (remove from the RO) — all DB-safely through DB.put so searchText stays
-  // correct. add/stampVin/remove are arrays of file ids.
-  async function roApply(d) {
-    const coll = String(d.coll || "");
-    const vin = d.vin ? String(d.vin).toUpperCase() : "";
-    const addSet = new Set(d.add || []);
-    const stampSet = new Set(d.stampVin || []);
-    const remSet = new Set(d.remove || []);
-    const ids = new Set([].concat(d.add || [], d.stampVin || [], d.remove || []));
-    let changed = 0;
-    for (const id of ids) {
-      const rec = await DB.get(id);
-      if (!rec) continue;
-      if (remSet.has(id)) rec.collection = "";
-      else if (addSet.has(id)) rec.collection = coll;
-      if (stampSet.has(id) && vin) {
-        rec.vins = Array.from(new Set([vin].concat(rec.vins || [])));
-        rec.vinScan = Date.now();
-      }
-      rec.updatedAt = Date.now();
-      rec.searchText = DB.buildSearchText(rec);
-      await DB.put(rec);
-      const i = items.findIndex((x) => x.id === id);
-      if (i !== -1) items[i] = stripBlob(rec);
-      changed++;
-    }
-    if (coll && (d.add || []).length && !extraCollections.includes(coll)) { extraCollections.push(coll); DB.setMeta("collections", extraCollections); }
-    if (changed) { render(); updateStorage(); }
-  }
 
   // ---- "Add to RO" import mode (driven from the Repair Orders tab) ----
   // The RO tab sends us here so files are picked with the normal vault screen
@@ -2349,6 +2212,7 @@
       rec.updatedAt = Date.now();
       rec.searchText = DB.buildSearchText(rec);
       await DB.put(rec);
+      if (target.roId) { try { await FDData.repos.links.link("ro", target.roId, "file", it.id, "attachment"); } catch (e) {} }
       const i = items.findIndex((x) => x.id === it.id);
       if (i !== -1) items[i] = stripBlob(rec);
       moved++;
@@ -2386,6 +2250,7 @@
 
   // ---------- Boot ----------
   async function boot() {
+    await FDData.boot();
     wire();
     initDnD();
     // restore prefs
@@ -2424,10 +2289,13 @@
     render();
     updateStorage();
 
-    // Cross-app bridge: receive files handed over from other apps.
-    if (window.VaultBridge) {
-      window.VaultBridge.receive("vault", (item) => addIncomingFile(item));
-    }
+    // Files stored by other contexts announce themselves on the bus.
+    FDData.bus.on("files:changed", onFilesChanged);
+    // The follow-up work for new files runs here as jobs (it needs this
+    // page's PDF renderer and OCR pool) and resumes after a reload.
+    FDData.jobs.register("thumb", thumbJob);
+    FDData.jobs.register("vin-detect", vinDetectJob);
+    FDData.jobs.register("vin-scan", (job, ctl) => runVinScan(job.inputIds, !!(job.meta && job.meta.force), ctl));
     // Follow the platform shell's theme (the shell persists the choice).
     window.addEventListener("message", (e) => {
       const d = e.data || {};
@@ -2450,8 +2318,6 @@
         render();
       } else if (d.type === "vault-restore" && d.file) importVault(d.file);
       else if (d.type === "platform-backup") exportVault();
-      else if (d.type === "vault-rename-collection" && d.from != null && d.to != null) renameCollection(String(d.from), String(d.to));
-      else if (d.type === "vault-ro-apply") roApply(d);
       else if (d.type === "vault-ro-import") enterRoImport(d);
     };
     shellNavQueue.splice(0).forEach(onShellNav);

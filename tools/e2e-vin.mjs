@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -159,15 +160,7 @@ check(await waitFor(async () => /VIN scan finished|already been scanned/.test(aw
 check(/1 need OCR|already been scanned/.test(await toastText() || ""), "second scan retries only the unscanned (OCR-pending) file");
 
 // --- Stored records carry vins + vinScan ---
-const stored = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const c = r.result.transaction("files").objectStore("files").getAll();
-    c.onsuccess = () => res(c.result.map((x) => ({ name: x.name, vins: x.vins || [], vinScan: x.vinScan || 0 })));
-    c.onerror = () => res([]);
-  };
-  r.onerror = () => res([]);
-}));
+const stored = (await vaultFiles(page)).map((x) => ({ name: x.name, vins: x.vins || [], vinScan: x.vinScan || 0 }));
 const noVin = stored.find((s) => s.name === "no-vin-here.txt");
 check(!!noVin && noVin.vinScan > 0 && noVin.vins.length === 0, "no-VIN file is marked scanned with an empty VIN list");
 const img = stored.find((s) => s.name === "vin-photo.png");

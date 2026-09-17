@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -56,11 +57,7 @@ await page.locator("#more-btn").click();
 await page.locator('#more-menu button[data-action="scan-vins"]').click({ modifiers: ["Shift"] });
 check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "")), "scan completes");
 
-const rec = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const x = c.result[0] || {}; res({ vins: x.vins || [], fins: x.fins || [] }); }; c.onerror = () => res({}); };
-  r.onerror = () => res({});
-}));
+const rec = await (async () => { const x = (await vaultFiles(page))[0] || {}; return { vins: x.vins || [], fins: x.fins || [] }; })();
 const all = (rec.vins || []).concat(rec.fins || []);
 check(rec.vins.length === 1 && rec.vins[0] === VIN, `real VIN detected (${JSON.stringify(rec.vins)})`);
 check(!all.includes(ENGINE), "engine number 112600009311006RE was NOT tagged (invalid WMI)");

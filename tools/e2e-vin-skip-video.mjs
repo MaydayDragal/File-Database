@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { fdbSeed, vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -41,24 +42,17 @@ async function waitFor(fn, ms = 10000) { const t0 = Date.now(); while (Date.now(
 await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
 
 // Seed a video record (VIN in its filename) + a text record (VIN in content),
-// straight into IndexedDB, then reload so the app loads them into its list.
-await page.evaluate(({ vinVideo, vinText }) => new Promise((res, rej) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const db = r.result;
-    const now = Date.now();
-    const tx = db.transaction("files", "readwrite");
-    const os = tx.objectStore("files");
-    os.put({ id: "vid1", name: `dashcam-${vinVideo}.mp4`, type: "video/mp4", kind: "video", size: 999999999,
-      blob: new Blob(["not-a-real-video"], { type: "video/mp4" }), thumb: null, tags: [], collection: "", note: "",
-      starred: false, createdAt: now, updatedAt: now });
-    os.put({ id: "txt1", name: "repair-order.txt", type: "text/plain", kind: "text", size: 40,
-      blob: new Blob([`Vehicle ${vinText} received.`], { type: "text/plain" }), thumb: null, tags: [], collection: "", note: "",
-      starred: false, createdAt: now, updatedAt: now });
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  };
-  r.onerror = () => rej(r.error);
-}), { vinVideo: VIN_VIDEO, vinText: VIN_TEXT });
+// straight into the shared database, then reload so the app loads them into its list.
+await fdbSeed(page, {
+  files: [
+    { id: "vid1", name: `dashcam-${VIN_VIDEO}.mp4`, type: "video/mp4", kind: "video", size: 999999999 },
+    { id: "txt1", name: "repair-order.txt", type: "text/plain", kind: "text", size: 40 },
+  ],
+  blobs: [
+    { id: "vid1", text: "not-a-real-video", type: "video/mp4" },
+    { id: "txt1", text: `Vehicle ${VIN_TEXT} received.`, type: "text/plain" },
+  ],
+});
 
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(400);
@@ -77,18 +71,11 @@ check(!vinList.includes(VIN_VIDEO), "the video's filename VIN is NOT listed (vid
 check((await page.locator("#nav-vins .nav__item").count()) === 1, "exactly one VIN group (only the text file)");
 
 // The stored video record was never scanned (vinScan stays 0, no vins).
-const rec = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => {
-    const c = r.result.transaction("files").objectStore("files").getAll();
-    c.onsuccess = () => {
-      const v = c.result.find((x) => x.id === "vid1"), t = c.result.find((x) => x.id === "txt1");
-      res({ vidScan: v ? (v.vinScan || 0) : -1, vidVins: v ? (v.vins || []).length : -1, txtScan: t ? (t.vinScan || 0) : -1 });
-    };
-    c.onerror = () => res(null);
-  };
-  r.onerror = () => res(null);
-}));
+const rec = await (async () => {
+  const all = await vaultFiles(page);
+  const v = all.find((x) => x.id === "vid1"), t = all.find((x) => x.id === "txt1");
+  return { vidScan: v ? (v.vinScan || 0) : -1, vidVins: v ? (v.vins || []).length : -1, txtScan: t ? (t.vinScan || 0) : -1 };
+})();
 check(rec && rec.vidScan === 0 && rec.vidVins === 0, "video record was never scanned (vinScan=0, no vins)");
 check(rec && rec.txtScan > 0, "text record WAS scanned");
 

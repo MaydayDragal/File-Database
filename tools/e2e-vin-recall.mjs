@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -113,19 +114,10 @@ await page.locator('#more-menu button[data-action="scan-vins"]').click();
 // The scan does a cold-start OCR (tesseract) that can outlast the transient
 // "finished" toast's poll window; treat completion as the toast OR all four
 // records carrying a vinScan stamp, with a generous timeout for the download.
-const allScanned = () => page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => { const a = c.result; res(a.length === 4 && a.every((x) => x.vinScan)); }; c.onerror = () => res(false); };
-  r.onerror = () => res(false);
-}));
+const allScanned = async () => { const a = await vaultFiles(page); return a.length === 4 && a.every((x) => x.vinScan); };
 check(await waitFor(async () => /VIN scan finished/.test(await toastText() || "") || (await allScanned()), 60000), "scan completes");
 
-const vinList = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onsuccess = () => { const c = r.result.transaction("files").objectStore("files").getAll(); c.onsuccess = () => res(c.result.map((x) => ({ name: x.name, vins: x.vins || [] }))); c.onerror = () => res([]); };
-  r.onerror = () => res([]);
-}));
+const vinList = (await vaultFiles(page)).map((x) => ({ name: x.name, vins: x.vins || [] }));
 const vinsOf = (frag) => (vinList.find((x) => x.name.includes(frag)) || { vins: [] }).vins;
 
 check(vinsOf("recall-split").includes(VIN_SPLIT), `space-split VIN recovered from text (${VIN_SPLIT})`);

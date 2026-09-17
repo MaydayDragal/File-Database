@@ -1,11 +1,12 @@
 // Integration test for the cross-app handoffs through the File Database shell:
-// vault → LI, LI → vault and vault → Toolbox over bridge.js, with the shell
+// vault → LI, LI → vault and vault → Toolbox over the shared database, with the shell
 // (root index.html) owning tabs/navigation and each app living in its iframe.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { fdbAll } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -65,11 +66,11 @@ if (await li.locator("#importOverlay.show").count()) {
   await page.waitForTimeout(200);
 }
 
-// --- Bridge is present in BOTH app frames (evaluated inside each iframe) ---
+// --- The data layer is present in BOTH app frames (evaluated inside each iframe) ---
 const vaultFrame = frameFor("/vault/");
 const liFrame = frameFor("/li/");
-check(!!vaultFrame && await vaultFrame.evaluate(() => !!window.VaultBridge), "bridge loaded inside the vault iframe");
-check(!!liFrame && await liFrame.evaluate(() => !!window.VaultBridge), "bridge loaded inside the LI iframe");
+check(!!vaultFrame && await vaultFrame.evaluate(() => !!(window.FDData && window.FDData.repos)), "data layer loaded inside the vault iframe");
+check(!!liFrame && await liFrame.evaluate(() => !!(window.FDData && window.FDData.repos)), "data layer loaded inside the LI iframe");
 
 // --- Add a PDF to File Vault, then 'Send to LI' ---
 await page.click("#tab-vault");
@@ -84,35 +85,21 @@ await vault.locator(".card").first().click();
 await page.waitForTimeout(300);
 check(await vault.locator("#d-send-li").isVisible(), "'Send to LI' button shows for a PDF");
 
-// Intercept the bridge to confirm the payload is queued for the LI app.
-// (IndexedDB is origin-shared, so the shell page sees the same "vault-bridge" DB.)
+// The hand-off is an "li-import" job on the stored record (the shell page
+// reads the same database).
 await vault.locator("#d-send-li").click();
 await page.waitForTimeout(400);
-const outboxToLi = await page.evaluate(() => new Promise((resolve) => {
-  const r = indexedDB.open("vault-bridge");
-  r.onsuccess = () => {
-    const db = r.result;
-    if (!db.objectStoreNames.contains("outbox")) return resolve([]);
-    const all = db.transaction("outbox", "readonly").objectStore("outbox").getAll();
-    all.onsuccess = () => resolve(all.result.map((x) => ({ target: x.target, name: x.name, type: x.type, hasBlob: !!x.blob })));
-    all.onerror = () => resolve([]);
-  };
-  r.onerror = () => resolve([]);
-}));
-// It may already be drained by the (loaded) LI iframe — either queued OR consumed is correct.
+const outboxToLi = (await fdbAll(page, "jobs")).filter((j) => j.type === "li-import").map((j) => ({ type: j.type, state: j.state, files: j.inputIds.length }));
+// The (loaded) LI iframe may already have run it — queued, running or done are all correct.
 check(await page.locator("#tab-li.is-active").count() === 1, "'Send to LI' switches the shell to the LI tab");
 check(await page.locator("#view-li:not([hidden])").count() === 1, "LI panel visible after the handoff");
-console.log("    (bridge outbox snapshot:", JSON.stringify(outboxToLi) + ")");
+check(outboxToLi.length >= 1, "an li-import job was queued for the stored PDF (" + JSON.stringify(outboxToLi) + ")");
 
-// --- LI -> File Vault: drive the bridge from inside the LI frame with a real blob ---
+// --- LI -> File Vault: store from inside the LI frame through the shared intake ---
 await liFrame.evaluate(async () => {
   const blob = new Blob(["%PDF-1.4 li->vault"], { type: "application/pdf" });
-  await window.VaultBridge.send("vault", {
-    name: "LI54.10-P-071499 Steering column.pdf",
-    type: "application/pdf",
-    blob,
-    meta: { li: "LI54.10-P-071499", fgroup: "54 Electrical", title: "Steering column", modelSeries: ["205"] },
-  });
+  const file = new File([blob], "LI54.10-P-071499 Steering column.pdf", { type: "application/pdf" });
+  await window.FDData.intake.ingest("vault", [file], { collection: "LI Documents", meta: { tags: ["LI54.10-P-071499", "54 Electrical", "Model 205"], note: "LI: Steering column" } });
 });
 await page.waitForTimeout(700);
 // Switch back to the file list (the user's natural next step) to see the arrival.
@@ -123,7 +110,7 @@ await page.waitForTimeout(200);
 await vault.locator("#search-input").fill("LI54.10-P-071499");
 await page.waitForTimeout(300);
 let recvCount = 0;
-for (let i = 0; i < 25; i++) {           // bridge delivery is async — poll
+for (let i = 0; i < 25; i++) {           // the vault hears the change on the bus — poll
   recvCount = await vault.locator(".card:visible").count();
   if (recvCount === 1) break;
   await page.waitForTimeout(200);
@@ -157,7 +144,7 @@ check(await page.locator("#view-toolbox:not([hidden])").count() === 1, "Toolbox 
 const toolbox = page.frameLocator("#frame-toolbox");
 await toolbox.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
 let media = { active: false, name: "" };
-for (let i = 0; i < 40; i++) {           // frame lazy-loads + bridge drains async — poll
+for (let i = 0; i < 40; i++) {           // frame lazy-loads + the job runs async — poll
   media = await page.evaluate(() => {
     const doc = document.querySelector("#frame-toolbox")?.contentDocument;
     if (!doc) return { active: false, name: "" };

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -48,12 +49,7 @@ let nextDialog = null;
 page.on("dialog", (d) => { if (nextDialog === "dismiss") d.dismiss(); else d.accept(); nextDialog = null; });
 
 // Read all vault files (id, name, vins, collection) from the page context.
-const vaultAll = () => page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res([]); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.map((x) => ({ name: x.name, vins: x.vins || [], collection: x.collection || "" }))); }; g.onerror = () => { db.close(); res([]); }; };
-  r.onerror = () => res([]);
-}));
+const vaultAll = async () => (await vaultFiles(page)).map((x) => ({ id: x.id, name: x.name, vins: x.vins || [], collection: x.collection || "" }));
 const fileByName = async (n) => (await vaultAll()).find((f) => f.name === n) || null;
 
 // ---------- Phase A: standalone — RO + multiple story lines ----------

@@ -1,170 +1,77 @@
 /*
- * db.js — IndexedDB storage layer for File Vault.
+ * db.js — the File Vault's storage API (window.VaultDB), now an adapter over
+ * the platform data layer (REWRITE-PLAN.md Phase 2).
  *
- * All data (file blobs + metadata) lives on this device inside the browser's
- * IndexedDB. Nothing is uploaded anywhere. This module exposes a small async
- * API used by app.js.
+ * app.js keeps calling put/get/remove/listMeta/update/each/getMeta/setMeta
+ * exactly as before; underneath, records live in the unified database:
+ * metadata in `files`, bytes in `blobs` (content-addressed, immutable) and
+ * previews in `thumbs`. A record handed out by get() carries the stored Blob
+ * objects; putting it back with the same Blob writes metadata only (no
+ * re-hash, no re-copy), while a new Blob is hashed, stored and verified.
  */
 (function (global) {
   "use strict";
 
-  const DB_NAME = "file-vault";
-  const DB_VERSION = 1;
-  const STORE = "files";
-  const META = "meta";
+  const PREFIX = "vault.";
+  const knownBlobs = new WeakMap();  // Blob -> file id it was read for
+  const knownThumbs = new WeakMap(); // Blob -> file id it was read for
 
-  let _db = null;
-
-  function open() {
-    if (_db) return Promise.resolve(_db);
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e) => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          const os = db.createObjectStore(STORE, { keyPath: "id" });
-          os.createIndex("kind", "kind", { unique: false });
-          os.createIndex("collection", "collection", { unique: false });
-          os.createIndex("starred", "starred", { unique: false });
-          os.createIndex("updatedAt", "updatedAt", { unique: false });
-          os.createIndex("tags", "tags", { unique: false, multiEntry: true });
-        }
-        if (!db.objectStoreNames.contains(META)) {
-          db.createObjectStore(META, { keyPath: "key" });
-        }
-      };
-      req.onsuccess = () => {
-        _db = req.result;
-        _db.onversionchange = () => { _db.close(); _db = null; };
-        resolve(_db);
-      };
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  function tx(mode, storeName) {
-    return open().then((db) => {
-      const t = db.transaction(storeName || STORE, mode);
-      return t.objectStore(storeName || STORE);
-    });
-  }
-
-  function reqAsPromise(request) {
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+  function repos() { return global.FDData.repos; }
+  function remember(rec) {
+    if (rec && rec.blob instanceof Blob) knownBlobs.set(rec.blob, rec.id);
+    if (rec && rec.thumb instanceof Blob) knownThumbs.set(rec.thumb, rec.id);
+    return rec;
   }
 
   const DB = {
     /** Persist a full record (creates or replaces by id). */
     async put(record) {
-      const store = await tx("readwrite");
-      await reqAsPromise(store.put(record));
+      const files = repos().files;
+      const isStoredBlob = record.blob instanceof Blob && knownBlobs.get(record.blob) === record.id;
+      if (record.blob instanceof Blob && !isStoredBlob) {
+        await files.putFull(record, { verify: true });
+        remember(record);
+        return record;
+      }
+      const { blob, thumb, ...meta } = record;
+      await files.put(meta);
+      if (thumb instanceof Blob && knownThumbs.get(thumb) !== record.id) {
+        await files.setThumb(record.id, thumb);
+        knownThumbs.set(thumb, record.id);
+      }
       return record;
     },
 
-    /** Fetch one record (including blob) by id. */
-    async get(id) {
-      const store = await tx("readonly");
-      return reqAsPromise(store.get(id));
-    },
+    /** Fetch one record (including blob and thumb) by id. */
+    async get(id) { return remember(await repos().files.getFull(id)); },
 
-    /** Delete a record by id. */
-    async remove(id) {
-      const store = await tx("readwrite");
-      return reqAsPromise(store.delete(id));
-    },
+    /** Delete a record with its bytes, preview and links. */
+    async remove(id) { return repos().files.removeFull(id); },
 
-    /**
-     * Return lightweight metadata for every file (no blob payloads) so the
-     * grid stays fast even with large collections. Blobs are loaded on demand.
-     */
+    /** Lightweight metadata for every Files record (thumbs attached, no bytes). */
     async listMeta() {
-      const store = await tx("readonly");
-      return new Promise((resolve, reject) => {
-        const out = [];
-        const cursorReq = store.openCursor();
-        cursorReq.onerror = () => reject(cursorReq.error);
-        cursorReq.onsuccess = (e) => {
-          const cur = e.target.result;
-          if (!cur) return resolve(out);
-          const v = cur.value;
-          out.push({
-            id: v.id,
-            name: v.name,
-            type: v.type,
-            kind: v.kind,
-            size: v.size,
-            tags: v.tags || [],
-            collection: v.collection || "",
-            note: v.note || "",
-            starred: !!v.starred,
-            createdAt: v.createdAt,
-            updatedAt: v.updatedAt,
-            thumb: v.thumb || null, // small Blob or null
-            srcMtime: v.srcMtime,   // folder-sync source mtime (if imported by sync)
-            vins: v.vins || [],     // VINs detected in the file (VIN scan)
-            fins: v.fins || [],     // FIN / datacard numbers detected (kept apart from VINs)
-            vinScan: v.vinScan || 0,// when the file was last scanned for VINs (0 = never)
-          });
-          cur.continue();
-        };
-      });
+      const list = await repos().files.listMeta({ inFiles: 1 });
+      list.forEach(remember);
+      return list;
     },
 
     /** Merge partial metadata changes into an existing record. */
-    async update(id, patch) {
-      const store = await tx("readwrite");
-      const existing = await reqAsPromise(store.get(id));
-      if (!existing) throw new Error("Not found: " + id);
-      const merged = Object.assign(existing, patch, { updatedAt: Date.now() });
-      merged.searchText = DB.buildSearchText(merged);
-      await reqAsPromise(store.put(merged));
-      return merged;
-    },
+    async update(id, patch) { return repos().files.update(id, patch); },
 
-    buildSearchText(r) {
-      return [r.name, r.collection, r.note, (r.tags || []).join(" "), (r.vins || []).join(" "), (r.fins || []).join(" ")]
-        .join(" ")
-        .toLowerCase();
-    },
+    buildSearchText(r) { return repos().files.buildSearchText(r); },
 
-    async count() {
-      const store = await tx("readonly");
-      return reqAsPromise(store.count());
-    },
+    async count() { return repos().files.countInFiles(); },
 
     async clearAll() {
-      const store = await tx("readwrite");
-      return reqAsPromise(store.clear());
+      const ids = (await repos().files.listMeta({ inFiles: 1 })).map((r) => r.id);
+      return repos().files.removeManyFull(ids);
     },
 
     /** Iterate every full record (with blobs) — used for export/backup. */
-    async each(cb) {
-      const store = await tx("readonly");
-      return new Promise((resolve, reject) => {
-        const cursorReq = store.openCursor();
-        cursorReq.onerror = () => reject(cursorReq.error);
-        cursorReq.onsuccess = (e) => {
-          const cur = e.target.result;
-          if (!cur) return resolve();
-          cb(cur.value);
-          cur.continue();
-        };
-      });
-    },
+    async each(cb) { return repos().files.eachFull((r) => cb(remember(r)), { inFiles: 1 }); },
 
-    async getMeta(key, fallback) {
-      const store = await tx("readonly", META);
-      const v = await reqAsPromise(store.get(key));
-      return v ? v.value : fallback;
-    },
-
-    async setMeta(key, value) {
-      const store = await tx("readwrite", META);
-      return reqAsPromise(store.put({ key, value }));
-    },
+    async getMeta(key, fallback) { return repos().settings.getValue(PREFIX + key, fallback); },
+    async setMeta(key, value) { return repos().settings.setValue(PREFIX + key, value); },
   };
 
   global.VaultDB = DB;

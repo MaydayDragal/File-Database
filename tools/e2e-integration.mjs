@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser, launchPersistent } from "./e2e-browser.mjs";
+import { vaultFiles } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -94,15 +95,8 @@ await page.goto(base, { waitUntil: "load" });
 await page.waitForTimeout(500);
 await page.setInputFiles("#shell-file-input", path.join(FIX, vinName));
 const vinDetected = await waitFor(async () => {
-  // Guarded read-only peek (same pattern as the shell's badges): must NEVER
-  // create the app's database before the app itself does.
-  const vins = await page.evaluate(() => new Promise((res) => {
-    const r = indexedDB.open("file-vault");
-    r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-    r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res([]); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.flatMap((x) => x.vins || [])); }; g.onerror = () => { db.close(); res([]); }; };
-    r.onerror = () => res([]);
-    r.onblocked = () => res([]);
-  }));
+  // Read the shared database from the shell page.
+  const vins = (await vaultFiles(page)).flatMap((x) => x.vins || []);
   return vins.includes("WDD2130461A123456");
 });
 check(vinDetected, "a file added through the front door is auto-read for its VIN (no OCR, no clicks)");
@@ -169,11 +163,13 @@ check(await page.locator("#quickopen[hidden]").count() === 1, "Escape closes qui
 const downloads = [];
 page.on("download", (d) => downloads.push(d.suggestedFilename()));
 await page.click("#backup-all-btn");
-await waitFor(async () => downloads.length >= 2, 20000);
-await page.waitForTimeout(1500);
-check(downloads.some((n) => /\.fvault$/.test(n)), `backup-all produced a vault backup (${downloads.join(", ")})`);
+// One .fdb with everything, then the per-app exports (.fvault, .tidb; LI is
+// empty, so it reports rather than downloads — that's the contract).
+await waitFor(async () => downloads.length >= 3, 20000);
+await page.waitForTimeout(500);
+check(downloads.some((n) => /\.fdb$/.test(n)), `backup-all produced the whole-platform backup (${downloads.join(", ")})`);
+check(downloads.some((n) => /\.fvault$/.test(n)), "backup-all produced a vault backup");
 check(downloads.some((n) => /\.tidb$/.test(n)), "backup-all produced an inventory backup");
-// LI is empty, so it reports rather than downloads — that's the contract.
 
 // ---------- 8. Toast relay from a background tab ----------
 // Stay on the inventory tab; drop a MIXED batch (so the shell stays put — a
@@ -226,12 +222,7 @@ check(vaultCards === 1, `Files is filtered to the pinned vehicle (${vaultCards} 
 fs.writeFileSync(path.join(FIX, "receipt-no-vin.txt"), "parts receipt, no vehicle number here");
 await page.setInputFiles("#shell-file-input", path.join(FIX, "receipt-no-vin.txt"));
 const taggedWithPin = await waitFor(async () => {
-  const rec = await page.evaluate(() => new Promise((res) => {
-    const r = indexedDB.open("file-vault");
-    r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-    r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res(null); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); res(g.result.find((x) => x.name === "receipt-no-vin.txt") || null); }; g.onerror = () => { db.close(); res(null); }; };
-    r.onerror = () => res(null);
-  }));
+  const rec = (await vaultFiles(page)).find((x) => x.name === "receipt-no-vin.txt") || null;
   return !!(rec && rec.vins && rec.vins.includes("WDD2130461A123456"));
 });
 check(taggedWithPin, "a front-door file with no VIN of its own is tagged with the pinned vehicle");
@@ -255,12 +246,7 @@ await page.waitForTimeout(400);
 await vault.locator("#more-btn").click();
 await vault.locator('[data-action="scan-vins"]').click();
 await page.waitForTimeout(3000);
-const tagSurvivedScan = await page.evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); const rec = g.result.find((x) => x.name === "receipt-no-vin.txt"); res(!!(rec && (rec.vins || []).includes("WDD2130461A123456"))); }; g.onerror = () => { db.close(); res(false); }; };
-  r.onerror = () => res(false);
-}));
+const tagSurvivedScan = await (async () => { const rec = (await vaultFiles(page)).find((x) => x.name === "receipt-no-vin.txt"); return !!(rec && (rec.vins || []).includes("WDD2130461A123456")); })();
 check(tagSurvivedScan, "manual 'Scan files for VINs' preserves the intake-tagged VIN (union, not clobber)");
 
 // ---------- 12. PDF preview survives the post-add auto-detect render ----------
@@ -321,12 +307,7 @@ await li.locator("#dLi").dispatchEvent("input");
 const newName = (await li.locator("#dNewName").textContent()) || "";
 check(newName.endsWith(".pdf") && !newName.endsWith(".pdf.pdf"), `LI generated filename has one .pdf suffix (${newName})`);
 await li.locator("#dSendVault").click();
-const readVaultName = () => page.frames().find((f) => f.url().includes("/vault/")).evaluate(() => new Promise((res) => {
-  const r = indexedDB.open("file-vault");
-  r.onupgradeneeded = () => { try { r.transaction.abort(); } catch (e) {} };
-  r.onsuccess = () => { const db = r.result; if (!db.objectStoreNames.contains("files")) { db.close(); return res(null); } const g = db.transaction("files", "readonly").objectStore("files").getAll(); g.onsuccess = () => { db.close(); const rec = g.result.find((x) => /LI54\.10-P-070001/.test(x.name)); res(rec ? rec.name : null); }; g.onerror = () => { db.close(); res(null); }; };
-  r.onerror = () => res(null);
-}));
+const readVaultName = async () => { const r = (await vaultFiles(page)).find((x) => x.collection === "LI Documents"); return r ? r.name : null; };
 await waitFor(async () => !!(await readVaultName()), 15000);
 const vaultName = await readVaultName();
 check(!!vaultName && vaultName.endsWith(".pdf") && !vaultName.endsWith(".pdf.pdf"), `LI→Vault record has exactly one .pdf suffix (${vaultName})`);

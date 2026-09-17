@@ -8,6 +8,7 @@
 <script>(function(){try{var t=localStorage.getItem("fv-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <script>(function(){var e=false;try{e=window.parent!==window}catch(x){e=true}if(e)document.documentElement.classList.add("embedded");})();</script>
 <script src="src/core/formats/container.js"></script>
+<script src="src/core/formats/fdb.js"></script>
 <script src="src/core/formats/zip.js"></script>
 <script src="src/core/formats/fvault.js"></script>
 <script src="src/core/formats/tidb.js"></script>
@@ -80,7 +81,7 @@
     <div class="big">Drop a .fvault / .lidb / .tidb file here</div>
     <div class="hint">or click to choose one</div>
   </div>
-  <input type="file" id="pick" accept=".fvault,.lidb,.tidb,.json,.zip" hidden />
+  <input type="file" id="pick" accept=".fdb,.fvault,.lidb,.tidb,.json,.zip" hidden />
 
   <div id="result" hidden>
     <div class="summary">
@@ -176,11 +177,12 @@
     file.slice(0, 4).arrayBuffer().then(function (buf) {
       var b = new Uint8Array(buf);
       var magic = String.fromCharCode.apply(null, b);
+      if (magic === "FDBK") return openFdb(file);
       if (magic === "FVLT") return openFvault(file);
       if (magic === "TIDB") return openTidb(file);
       if (b[0] === 0x50 && b[1] === 0x4b) return openZip(file);      // "PK" — .lidb
       if (b[0] === 0x7b || b[0] === 0xef) return openJson(file);     // "{" or BOM — legacy JSON backup
-      throw new Error("Not a recognized File Database backup (.fvault / .lidb / .tidb).");
+      throw new Error("Not a recognized File Database backup (.fdb / .fvault / .lidb / .tidb).");
     }).then(function () {
       show();
     }).catch(function (e) {
@@ -213,6 +215,36 @@
         entries.push({ path: dedupe(used, folder + safeName(f.name, "file")), blob: en.blob, type: f.type || "" });
       });
       $("#kindLabel").textContent = "📁 File Vault backup (legacy)";
+    });
+  }
+  // The whole-platform backup (.fdb): files under Files/, an LI document's
+  // PDF under LI Documents/, tool photos, plus the tables as CSV/JSON.
+  function openFdb(file) {
+    return FDCore.formats.fdb.parse(file).then(function (r) {
+      var recs = r.meta.records || {};
+      var blobs = {};
+      r.payloads.forEach(function (p) { blobs[p.store + ":" + p.id] = p.blob; });
+      var used = {};
+      var docsByFile = {};
+      (recs.documents || []).forEach(function (d) { if (d.fileId) docsByFile[d.fileId] = d; });
+      (recs.files || []).forEach(function (f) {
+        var b = blobs["blobs:" + f.id];
+        if (!b) return;
+        var d = docsByFile[f.id];
+        var path = d
+          ? "LI Documents/" + safeName(FDCore.formats.lidb.readableName(d, "files/" + (f.name || "document.pdf")), "document.pdf")
+          : "Files/" + (f.collection ? safeName(f.collection, "collection") + "/" : "") + safeName(f.name, "file");
+        entries.push({ path: dedupe(used, path), blob: b, type: f.type || "" });
+      });
+      (recs.tools || []).length && entries.push({ path: "tools.csv", blob: new Blob([FDCore.formats.tidb.toolsCsv(recs.tools)], { type: "text/csv" }), type: "text/csv" });
+      Object.keys(blobs).forEach(function (k) {
+        if (k.indexOf("photos:") !== 0) return;
+        entries.push({ path: dedupe(used, "photos/" + safeName(k.slice(7), "photo") + ".png"), blob: blobs[k], type: "image/png" });
+      });
+      ["files", "documents", "tools", "ros", "links", "settings"].forEach(function (k) {
+        if ((recs[k] || []).length) entries.push({ path: "tables/" + k + ".json", blob: new Blob([JSON.stringify(recs[k], null, 1)], { type: "application/json" }), type: "application/json" });
+      });
+      $("#kindLabel").textContent = "🗃️ File Database backup";
     });
   }
   function openTidb(file) {
