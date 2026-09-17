@@ -53,7 +53,7 @@ const vaultAll = async () => (await vaultFiles(page)).map((x) => ({ id: x.id, na
 const fileByName = async (n) => (await vaultAll()).find((f) => f.name === n) || null;
 
 // ---------- Phase A: standalone — RO + multiple story lines ----------
-await page.goto(base + "ros/index.html", { waitUntil: "load" });
+await page.goto(base + "#ros", { waitUntil: "load" });
 await page.waitForTimeout(400);
 check(await page.locator("#empty-main:not([hidden])").count() === 1, "empty state shows with no repair orders");
 await page.click("#new-btn");
@@ -79,7 +79,7 @@ check((await page.evaluate(() => window.__ros.count())) === 1, "exactly one repa
 await page.goto(base + "#ros", { waitUntil: "load" });
 await page.waitForTimeout(600);
 check(await page.locator("#tab-ros.is-active").count() === 1, "deep link #ros activates the Repair Orders tab");
-const ro = page.frameLocator("#frame-ros");
+const ro = page.locator("#view-ros");
 await waitFor(async () => (await ro.locator("#ro-no").inputValue().catch(() => "")) === "7654321");
 // Give the RO a VIN.
 await ro.locator("#ro-vin").fill(RO_VIN);
@@ -107,7 +107,7 @@ check(autofilled, "an uploaded file with no VIN is saved to the RO and stamped w
 // Import happens on the NORMAL Vault screen: the RO's Import button sends us
 // there in "select for RO" mode; pick with the Vault's multi-select, then click
 // its ➕ Add to RO button.
-const vaultF = page.frameLocator("#frame-vault");
+const vaultF = page.locator("#view-vault");
 async function importIntoRO(name, dialog) {
   await ro.locator("#import-btn").click();
   await waitFor(async () => (await page.locator("#tab-vault.is-active").count()) === 1 && (await vaultF.locator("#ro-import-banner:not([hidden])").count()) === 1);
@@ -166,7 +166,7 @@ check(migrated, "editing the RO number moves all its files to the new collection
 await ro.locator("#open-vault-btn").click();
 await page.waitForTimeout(700);
 check(await page.locator("#tab-vault.is-active").count() === 1, "Open in Vault switches to Files");
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 check(/RO 7654399/.test((await vault.locator("#view-title").textContent()) || ""), "Files is filtered to the RO's collection");
 
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");

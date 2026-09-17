@@ -48,7 +48,7 @@ page.on("dialog", (d) => {
 });
 
 // Standalone vault (selection is app-level, shell not required)
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(500);
 await page.setInputFiles("#file-input", names.map((n) => path.join(FIX, n)));
 await waitFor(async () => (await page.locator(".card").count()) === 4);
@@ -143,7 +143,7 @@ check(await waitFor(async () => (await page.locator(".card").count()) === 2), "b
 
 // ---------- bulk send to Toolbox arrives as ONE multi-file batch ----------
 await page.goto(base + "#vault", { waitUntil: "networkidle" });
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 await waitFor(async () => (await vault.locator(".card").count()) === 2);
 // select both remaining files (txt → no toolbox tool; add two images instead)
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64");
@@ -162,7 +162,7 @@ await vault.locator(".card__select").nth(pngIdx[1]).click();
 await vault.locator("#bulk-send-toolbox").click();
 await page.waitForTimeout(1500);
 check(await page.locator("#tab-toolbox.is-active").count() === 1, "bulk send switches to the Toolbox");
-const toolboxFrame = page.frames().find((f) => f.url().includes("/toolbox/"));
+const toolboxFrame = { evaluate: (fn) => page.evaluate((src) => { const document = { getElementById: (id) => window.document.querySelector("#view-toolbox").shadowRoot.getElementById(id) }; return new Function("document", "return (" + src + ")()")(document); }, fn.toString()) };
 // The media tool must actually CONSUME both: first file loaded, second queued.
 const loaded = await waitFor(async () => {
   const s = await toolboxFrame.evaluate(() => ({

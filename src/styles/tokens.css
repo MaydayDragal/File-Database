@@ -1,0 +1,173 @@
+/*
+ * src/styles/tokens.css — the one theme (REWRITE-PLAN.md Phase 4).
+ *
+ * Every colour, radius and shadow the platform uses, light and dark, defined
+ * once at :root and inherited into every feature's shadow root. The names
+ * the apps grew up with are kept: the shell's set is primary, the LI /
+ * Inventory / Toolbox names (--panel, --muted, --accent…) are aliases of it,
+ * and the per-feature extras (table headers, badges, diff colours…) follow.
+ * A feature stylesheet defines no colours of its own.
+ */
+:root {
+  /* shared */
+  --brand: #5b8cff;
+  --brand-strong: #4a7bf0;
+  --brand-2: #47d18f;
+  --bg: #f4f6fb;
+  --bg-elev: #ffffff;
+  --bg-sunken: #eef1f8;
+  --text: #1b2333;
+  --text-dim: #647089;
+  --border: #e2e6ef;
+  --border-strong: #ccd2e0;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .08);
+  --shadow-lg: 0 12px 48px rgba(16, 24, 40, .22);
+  --danger: #dc2626;
+  --radius: 12px;
+  --radius-sm: 9px;
+  --shellbar-h: 50px;
+  /* aliases */
+  --panel: var(--bg-elev);
+  --panel-2: var(--bg-sunken);
+  --muted: var(--text-dim);
+  --accent: var(--brand);
+  --accent-strong: var(--brand-strong);
+  --accent-2: var(--brand-2);
+  /* feature extras */
+  --th-bg: #eef1f8;
+  --row-hover: #f0f4fb;
+  --star: #f5c542;
+  --topbar-h: 60px;
+  --sidebar-w: 258px;
+  --th: #eef1f8;
+  --th-hover: #e2e6ef;
+  --sel: #e3ebff;
+  --badge-bg: #e3ebff;
+  --badge-text: #3b63c9;
+  --preview-bg: #eef1f8;
+  --overlay: rgba(15,23,42,.45);
+  --menu-shadow: rgba(15,23,42,.18);
+  --drop-hover: #e8eefc;
+  --diff-del-bg: #fde8ea;
+  --diff-ins-bg: #e2f7ec;
+  --diff-del-text: #b91c1c;
+  --diff-ins-text: #15803d;
+  --toast-bg: #ffffff;
+  --badge-ct-bg: #dbe6ff;
+  --badge-ct-fg: #3a66d4;
+  --badge-note-bg: #d8f3e5;
+  --badge-note-fg: #1d8a58;
+  --badge-mm-bg: #fbf0d2;
+  --badge-mm-fg: #8a6a06;
+  --badge-a-bg: #ebe4fa;
+  --badge-a-fg: #6a49c8;
+  --badge-offer-bg: #dbeffb;
+  --offer: #0d6fae;
+  --mode-active: #e8eefc;
+  --chip-bg: #e3ebfc;
+  --ok-bg: #e2f7ec;
+  --ok-text: #148a55;
+  --err-bg: #fde8ea;
+  --row-alt: #0b1e3c08;
+  --stage-bg: #dfe4ee;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1420;
+  --bg-elev: #171d2b;
+  --bg-sunken: #1e2637;
+  --text: #e6ebf5;
+  --text-dim: #98a3b8;
+  --border: #2a3346;
+  --border-strong: #3a465e;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  --shadow-lg: 0 18px 60px rgba(0,0,0,.55);
+  --danger: #ff6b6b;
+  --th-bg: #232c3f;
+  --row-hover: #1c2333;
+  --th: #232c3f;
+  --th-hover: #2a3550;
+  --sel: #1c2740;
+  --badge-bg: #223154;
+  --badge-text: #5b8cff;
+  --preview-bg: #0c1018;
+  --overlay: rgba(4,8,16,.72);
+  --menu-shadow: #00000088;
+  --drop-hover: #202b42;
+  --diff-del-bg: #3a1d22;
+  --diff-ins-bg: #16321f;
+  --diff-del-text: #ff9ba6;
+  --diff-ins-text: #7ee2a8;
+  --toast-bg: #0b111c;
+  --badge-ct-bg: #223154;
+  --badge-ct-fg: #5b8cff;
+  --badge-note-bg: #1f3b2e;
+  --badge-note-fg: #47d18f;
+  --badge-mm-bg: #3a2f16;
+  --badge-mm-fg: #f5c542;
+  --badge-a-bg: #2a2340;
+  --badge-a-fg: #b79bff;
+  --badge-offer-bg: #16324a;
+  --offer: #6fd0ff;
+  --mode-active: #1c2740;
+  --chip-bg: #223154;
+  --ok-bg: #16321f;
+  --ok-text: #47d18f;
+  --err-bg: #3a1d22;
+  --row-alt: #ffffff06;
+  --stage-bg: #0c1018;
+  --warn: #fbbf24;
+  --warn-bg: #3a2e10;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420;
+    --bg-elev: #171d2b;
+    --bg-sunken: #1e2637;
+    --text: #e6ebf5;
+    --text-dim: #98a3b8;
+    --border: #2a3346;
+    --border-strong: #3a465e;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --shadow-lg: 0 18px 60px rgba(0,0,0,.55);
+    --danger: #ff6b6b;
+    --th-bg: #232c3f;
+    --row-hover: #1c2333;
+    --th: #232c3f;
+    --th-hover: #2a3550;
+    --sel: #1c2740;
+    --badge-bg: #223154;
+    --badge-text: #5b8cff;
+    --preview-bg: #0c1018;
+    --overlay: rgba(4,8,16,.72);
+    --menu-shadow: #00000088;
+    --drop-hover: #202b42;
+    --diff-del-bg: #3a1d22;
+    --diff-ins-bg: #16321f;
+    --diff-del-text: #ff9ba6;
+    --diff-ins-text: #7ee2a8;
+    --toast-bg: #0b111c;
+    --badge-ct-bg: #223154;
+    --badge-ct-fg: #5b8cff;
+    --badge-note-bg: #1f3b2e;
+    --badge-note-fg: #47d18f;
+    --badge-mm-bg: #3a2f16;
+    --badge-mm-fg: #f5c542;
+    --badge-a-bg: #2a2340;
+    --badge-a-fg: #b79bff;
+    --badge-offer-bg: #16324a;
+    --offer: #6fd0ff;
+    --mode-active: #1c2740;
+    --chip-bg: #223154;
+    --ok-bg: #16321f;
+    --ok-text: #47d18f;
+    --err-bg: #3a1d22;
+    --row-alt: #ffffff06;
+    --stage-bg: #0c1018;
+    --warn: #fbbf24;
+    --warn-bg: #3a2e10;
+    color-scheme: dark;
+  }
+}

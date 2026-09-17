@@ -34,7 +34,7 @@ const OTHER_VENDOR = [
   ["vendor/pdf-lib.min.js", "pdf-lib v1.17.1"],
 ];
 // Pages that once carried an inline copy; none may again.
-const PAGES = ["li/index.html", "toolbox/index.html", "ros/index.html", "vault/index.html", "index.html", "viewer.html"];
+const PAGES = ["index.html", "viewer.html"];
 
 function fail(msg) { console.error("✗ " + msg); process.exit(1); }
 function okay(msg) { console.log("✓ " + msg); }

@@ -5,7 +5,7 @@ Two layers, both run by `npm test` and by CI (`.github/workflows/qa.yml`):
 | Layer | Command | Runs where | What |
 | --- | --- | --- | --- |
 | Unit | `npm run test:unit` | Node only, seconds | `tests/unit/*.test.mjs` under `node --test` |
-| Browser | `npm run test:e2e` | Playwright Chromium | `tools/e2e-*.mjs`, one suite per feature or flow |
+| Browser | `npm run test:e2e` | Playwright Chromium | `tools/e2e-*.mjs`, one suite per feature or flow, all against the one page (a feature's elements are reached through its panel: `page.locator("#view-li").locator(…)`) |
 
 `tools/test-*.mjs` are the older Node checks (static policy, backup format,
 blob integrity, LI number) and stay as they are. The static policy also refuses

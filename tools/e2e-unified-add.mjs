@@ -52,11 +52,11 @@ await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // ---------- the single front door lives in the shell top bar ----------
-check(await page.locator("#add-btn").isVisible(), "shell top bar has one global 'Add files' button");
+check(await page.locator("#shell-add-btn").isVisible(), "shell top bar has one global 'Add files' button");
 check((await page.locator("#shell-file-input").count()) === 1, "shell owns a single hidden file input");
 check((await page.locator("#shell-drop").count()) === 1, "shell has a full-window drop zone");
 // The default (Files) app no longer shows its own redundant Add button.
-const vault = page.frameLocator("#frame-vault");
+const vault = page.locator("#view-vault");
 await vault.locator("#empty").waitFor({ timeout: 8000 });
 check(await vault.locator("#add-btn").isHidden(), "embedded Vault hides its own 'Add files' button (shell owns it)");
 
@@ -89,7 +89,7 @@ check(switched, "an all-LI batch surfaces the LI Documents tab");
 check(await waitFor(async () => (await fdbCount(page, "documents")) >= 3), "the extra LI PDF was stored (3 total)");
 
 // ---------- the LI app's own import button is gone when embedded ----------
-const li = page.frameLocator("#frame-li");
+const li = page.locator("#view-li");
 await li.locator("header.topbar").waitFor({ timeout: 8000 });
 check(await li.locator("#importBtn").isHidden(), "embedded LI hides its own 'Import PDFs' button");
 

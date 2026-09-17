@@ -98,7 +98,7 @@ await page.addInitScript((vin) => {
   };
 }, VIN);
 
-await page.goto(base + "vault/index.html", { waitUntil: "load" });
+await page.goto(base + "#vault", { waitUntil: "load" });
 await page.waitForTimeout(400);
 check(await page.evaluate(() => typeof window.OcrOrient === "object"), "the Vault loads the shared OCR helper");
 

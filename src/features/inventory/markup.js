@@ -1,0 +1,109 @@
+/* Tool Inventory — the panel markup (what used to be the page's <body>; REWRITE-PLAN.md Phase 4). */
+export default `
+  <header class="topbar">
+    <h1><img src="icons/favicon-64.png" alt="" /> Tool Inventory</h1>
+    <span class="sub" id="sub"></span>
+    <span class="spacer"></span>
+    <div class="actions">
+      <a class="btn btn-ghost btn-sm" id="backBtn" href="../index.html#vault" title="Open the File Database platform" hidden>⌂ File Database</a>
+      <button class="btn btn-ghost btn-sm" id="installBtn" title="Install as an app" hidden>📌 Install</button>
+      <div class="menu-wrap">
+        <button class="btn btn-ghost btn-sm" id="menuBtn" aria-haspopup="true">☰ Menu</button>
+        <div class="menu" id="appMenu" hidden role="menu">
+          <div class="menu-label">Database</div>
+          <button class="menu-item" id="openDbBtn">📂 Open database…</button>
+          <button class="menu-item" id="saveDbBtn">💾 Save database (.tidb)</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Data</div>
+          <button class="menu-item" id="importCsvBtn">⬆ Import CSV…</button>
+          <button class="menu-item" id="exportCsvBtn">⬇ Export CSV (filtered)</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item" id="legendBtn">❔ Legend &amp; notes</button>
+          <button class="menu-item" id="debugBtn" title="Errors and warnings recorded on this device (Ctrl+Shift+D)">🐞 Debug log</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label class="search">
+      <span class="muted">🔍</span>
+      <input type="text" id="search" placeholder="Search tool number, description, location…" autocomplete="off" spellcheck="true" />
+    </label>
+    <select id="fGrp" title="Service group"></select>
+    <select id="fCt" title="Category"></select>
+    <select id="fNote" title="Note"></select>
+    <button class="btn btn-ghost btn-sm" id="offeredFilter" title="Show only tools we offer (from the XENTRY catalog)">🛒 Offered</button>
+    <button class="btn btn-ghost btn-sm" id="starFilter" title="Show starred only">★ Starred</button>
+    <button class="btn btn-ghost btn-sm" id="modelChip" title="Filtering by model series — click to clear" hidden></button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="main">
+    <table class="lib" id="table">
+      <thead id="thead">
+        <tr>
+          <th class="photocell">Photo</th>
+          <th class="starcell" data-sort="star" title="Starred">★</th>
+          <th data-sort="toolNo">Tool Number</th>
+          <th data-sort="desc">Description</th>
+          <th class="col-grp" data-sort="svcGrp">Svc Grp</th>
+          <th data-sort="ct">Ct</th>
+          <th data-sort="location">Location</th>
+          <th class="num" data-sort="price">Dlr Net</th>
+          <th data-sort="note">Note</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">Loading…</div>
+  </div>
+
+  <!-- Detail modal -->
+  <div class="overlay" id="detail">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+      <div class="modal-head">
+        <button class="dstar" id="dStar" title="Star">☆</button>
+        <h2 id="dTitle" class="mono"></h2>
+        <button class="x" data-close aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-photo" id="dPhoto" style="display:none"></div>
+        <div class="kv-grid" id="dGrid"></div>
+        <div id="dExtra"></div>
+        <div class="field"><label>Quantity</label><input id="eQty" /></div>
+        <div class="field"><label>Location / Bin</label><input id="eLoc" /></div>
+        <div class="field"><label>Note</label><input id="eNote" placeholder="R / A / MM" /></div>
+        <div class="field"><label>Comment</label><textarea id="eComment" rows="2"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" id="dCopy">Copy tool #</button>
+        <button class="btn btn-ghost btn-sm" id="dLiGroup" hidden></button>
+        <button class="btn btn-ghost btn-sm" id="dLiFind" title="Search the LI documents' full text for this tool number">🗄️ Find in LI docs</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-close>Close</button>
+        <button class="btn btn-primary btn-sm" id="dSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend modal -->
+  <div class="overlay" id="legend">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="legendTitle">
+      <div class="modal-head"><h2 id="legendTitle">Legend &amp; notes</h2><button class="x" data-close aria-label="Close">×</button></div>
+      <div class="modal-body legend">
+        <p id="legendUpdated" class="muted"></p>
+        <p>These lists define the <strong>required M‑B Special Tools</strong> — primarily service categories <strong>Ct A</strong> and <strong>B</strong>, sometimes <strong>C</strong> and <strong>K</strong> — that authorized dealers keep to perform service, maintenance, diagnosis and minor repairs.</p>
+        <p><span class="code">MM</span> Maintenance‑Manual tools — required tools specifically described in the M‑B Maintenance Manuals.</p>
+        <p><span class="code">R</span> Required tools — additionally designated by DCAG.</p>
+        <p><span class="code">A</span> Additional tools — additionally designated by MBUSA.</p>
+        <p><span class="code">Ct</span> Service category of the tool (A / B / C / K).</p>
+        <p class="muted">Prices are for reference only and can change; some tools are ISO‑controlled or no longer available new (dealer should already stock them). Workshop equipment from the Standard Service Equipment program is not listed here.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <input type="file" id="csvInput" accept=".csv,text/csv" />
+  <input type="file" id="dbInput" accept=".tidb,.json,application/json" />
+`;

@@ -507,7 +507,7 @@ Done as written, with these notes:
   is Phase 4's one page and one boot, not six pages each with its own
   `FDData.boot()` racing the logger.
 
-### Phase 4 — Collapse the shell · L
+### Phase 4 — Collapse the shell · L — **done**
 
 Goal: one page. This is the phase users notice — faster tab switches, one
 install, one theme, drops and paste work everywhere.
@@ -534,6 +534,51 @@ install, one theme, drops and paste work everywhere.
 Acceptance: Lighthouse PWA installable; offline works after one visit with no
 "open each tab" caveat; all ported E2E suites pass; `README.md` "Apps" table no
 longer lists per-app entry points.
+
+Done as written, with these notes:
+
+- Each feature mounts into its panel's **shadow root** (`src/features/index.js`
+  `mountInto`): its former `<body>` becomes `.fd-root`, its stylesheet loads
+  inside the root, and `document`-wide lookups became root lookups. That is
+  what let six apps with seventeen colliding element IDs and six sets of
+  `.btn`/`.topbar`/`body` rules share one page without a rename or a CSS
+  rewrite, and it keeps every browser-suite selector. The panel has
+  `contain: layout paint`, so a feature's fixed-position overlays and toasts
+  cover the panel as they covered the iframe and never the top bar.
+- `src/styles/tokens.css` is the one theme: the union of every app's tokens
+  with the shell's values for the shared names (`--bg`, `--text`, …), the
+  LI/Inventory/Toolbox names (`--panel`, `--muted`, `--accent`…) as aliases
+  of them, and the per-feature extras (badges, diff colours…). Repair Orders
+  moves from its indigo palette to the platform's; nothing else changes.
+- The cross-feature contract is **kept as messages**, now function calls:
+  `shell.send(msg)` in a feature is the shell's old `message` handler,
+  `deliver(app, msg)` is the instance's `receive(msg)`, queued until the
+  feature has mounted. Appendix A's direct calls are Phase 5's, on top of a
+  working page.
+- Shortcuts: a feature's keydown handlers listen on its shadow root; the shell
+  focuses the panel on activation and re-dispatches a key pressed with the
+  focus outside the feature into it, so `/`, `a`, `g`, `l`, Escape reach the
+  feature on screen as they reached the app's document inside its frame.
+  Alt+N and Ctrl+K are the shell's alone (the six forwarders are gone).
+- Drops and pastes are the shell's window handlers alone; a feature's own
+  drop zone marks its drop handled, the feature on screen adds context
+  (`dropContext()` → the open Vault collection) or claims the files
+  (`intake()` → Extract opens a backup it is shown).
+- One gotcha worth recording: after dispatch, an event from inside a shadow
+  root reports the host as its `target`, so a debounced handler must read
+  the input it was attached to (`e.currentTarget`), not `e.target` later.
+- `src/core|data|services/index.js` are ES-module facades over the classic
+  scripts (the pages still load those first); the features import through
+  them. Turning the classic scripts themselves into modules waits for Phase
+  6's bundling step, where the Node tests move to real imports too.
+- `viewer.html` stays as a standalone host of the Extract feature (a copy
+  next to a backup can always get the files out); `vault/`, `li/`,
+  `inventory/`, `toolbox/`, `ros/` and their workers, manifests and icons
+  are deleted (D1). `sw.js` precaches a generated list; `debug.js` labels
+  entries with the feature on screen.
+- Not done here: a Lighthouse run (not in the toolchain); `tools/sw-manifest.mjs
+  --check` (Phase 6) still has to be written so the precache list cannot go
+  stale.
 
 ### Phase 5 — Use the unified model · M
 

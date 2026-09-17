@@ -1,75 +1,102 @@
-/* File Database platform shell service worker — offline shell + toolbox.
-   The vault, LI and inventory apps register their own service workers for
-   their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v22";
-// The text-recognition engine the Repair Orders scanner downloads on first use.
+/* File Database — the one service worker (REWRITE-PLAN.md Phase 4, §3.5).
+   One page, one cache, one precache list: everything the platform needs to
+   open and run with no network. User data lives in IndexedDB and never
+   touches this cache. `tools/sw-manifest.mjs --check` verifies the list is
+   complete against the tree. */
+const CACHE = "file-database-v1";
+// The text-recognition engine the scanners download on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
-// Hosts that engine comes from (see loadTess() in ros/index.html). Their files
-// are versioned and immutable, so cache-first is safe.
+// Hosts that engine comes from (see src/services/ocr.js). Their files are
+// versioned and immutable, so cache-first is safe.
 const RUNTIME_HOSTS = ["cdn.jsdelivr.net", "tessdata.projectnaptha.com"];
-// The shell can't start without these…
+// The page can't start without these…
 const CORE = [
   "./",
   "./index.html",
-  "./shell.css",
-  "./shell.js",
+  "./src/styles/tokens.css",
+  "./src/styles/shell.css",
+  "./src/main.js",
+  "./src/shell/index.js",
+  "./src/features/index.js",
 ];
-// …while these are nice-to-have offline (the vendored PDF.js and pdf-lib
-// especially must not be able to fail the whole install on a flaky connection).
+// …while these are cached tolerantly: a single hiccup (a proxy blip, one
+// unreachable icon) must never fail the whole install and strand the user on
+// a stale, un-updatable worker. Everything is fetched on use anyway.
 const EXTRAS = [
-  "./debug.js",
-  "./ocr.js",
-  "./src/core/text.js",
-  "./src/core/ids.js",
-  "./src/core/li-parse.js",
-  "./src/core/vin.js",
-  "./src/core/ro-parse.js",
   "./src/core/formats/container.js",
-  "./src/core/formats/zip.js",
-  "./src/core/formats/fvault.js",
-  "./src/core/formats/tidb.js",
-  "./src/core/formats/lidb.js",
-  "./src/core/hash.js",
   "./src/core/formats/fdb.js",
-  "./src/data/schema.js",
+  "./src/core/formats/fvault.js",
+  "./src/core/formats/lidb.js",
+  "./src/core/formats/tidb.js",
+  "./src/core/formats/zip.js",
+  "./src/core/hash.js",
+  "./src/core/ids.js",
+  "./src/core/index.js",
+  "./src/core/li-parse.js",
+  "./src/core/ro-parse.js",
+  "./src/core/text.js",
+  "./src/core/vin.js",
+  "./src/data/backup.js",
+  "./src/data/boot.js",
   "./src/data/bus.js",
   "./src/data/db.js",
-  "./src/data/repos.js",
-  "./src/data/jobs.js",
+  "./src/data/index.js",
   "./src/data/intake.js",
-  "./src/data/backup.js",
+  "./src/data/jobs.js",
   "./src/data/migrate.js",
-  "./src/data/boot.js",
-  "./src/ui/migrate-dialog.js",
-  "./src/services/vendor.js",
-  "./src/services/pdf.js",
-  "./src/services/ocr.js",
-  "./src/services/thumbs.js",
+  "./src/data/repos.js",
+  "./src/data/schema.js",
+  "./src/features/documents/app.js",
+  "./src/features/documents/index.js",
+  "./src/features/documents/markup.js",
+  "./src/features/documents/styles.css",
+  "./src/features/extract/app.js",
+  "./src/features/extract/index.js",
+  "./src/features/extract/markup.js",
+  "./src/features/extract/styles.css",
+  "./src/features/files/app.js",
+  "./src/features/files/blob-integrity.js",
+  "./src/features/files/db.js",
+  "./src/features/files/index.js",
+  "./src/features/files/markup.js",
+  "./src/features/files/styles.css",
+  "./src/features/inventory/app.js",
+  "./src/features/inventory/index.js",
+  "./src/features/inventory/markup.js",
+  "./src/features/inventory/styles.css",
+  "./src/features/ros/app.js",
+  "./src/features/ros/index.js",
+  "./src/features/ros/markup.js",
+  "./src/features/ros/styles.css",
+  "./src/features/toolbox/app.js",
+  "./src/features/toolbox/index.js",
+  "./src/features/toolbox/markup.js",
+  "./src/features/toolbox/styles.css",
+  "./src/features/toolbox/tools/calc.js",
+  "./src/features/toolbox/tools/convert.js",
+  "./src/features/toolbox/tools/csv.js",
+  "./src/features/toolbox/tools/elec.js",
+  "./src/features/toolbox/tools/img.js",
+  "./src/features/toolbox/tools/media.js",
+  "./src/features/toolbox/tools/ocr.js",
+  "./src/features/toolbox/tools/pdf.js",
+  "./src/features/toolbox/tools/text.js",
+  "./src/features/toolbox/tools/zip.js",
   "./src/services/folder-sync.js",
+  "./src/services/index.js",
+  "./src/services/ocr.js",
+  "./src/services/pdf.js",
+  "./src/services/thumbs.js",
+  "./src/services/vendor.js",
+  "./src/ui/migrate-dialog.js",
+  "./debug.js",
+  "./ocr.js",
   "./vendor/pdf.min.js",
   "./vendor/pdf.worker.min.js",
   "./vendor/jszip.min.js",
   "./vendor/pdf-lib.min.js",
   "./viewer.html",
-  "./viewer.css",
-  "./viewer.js",
   "./manifest.webmanifest",
-  "./toolbox/index.html",
-  "./toolbox/styles.css",
-  "./toolbox/app.js",
-  "./toolbox/tools/zip.js",
-  "./toolbox/tools/media.js",
-  "./toolbox/tools/ocr.js",
-  "./toolbox/tools/convert.js",
-  "./toolbox/tools/elec.js",
-  "./toolbox/tools/text.js",
-  "./toolbox/tools/calc.js",
-  "./toolbox/tools/csv.js",
-  "./toolbox/tools/img.js",
-  "./toolbox/tools/pdf.js",
-  "./ros/index.html",
-  "./ros/styles.css",
-  "./ros/app.js",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -86,15 +113,14 @@ self.addEventListener("install", (e) => {
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    // Prune our own old caches, plus the legacy root File Vault caches
-    // ("file-vault-*") left behind by the pre-platform service worker this one
-    // replaces. Doing it here (not in the vault's SW) means the legacy cache
-    // is only removed once the new root SW has actually taken over — an
-    // existing user offline mid-migration keeps a working old shell.
-    // Everything else in CacheStorage belongs to the app SWs — leave it alone.
+    // Prune our own old caches and everything the pre-Phase-4 workers left
+    // behind: the platform shell's, the standalone Vault's, LI's and the
+    // Inventory's. (Their registrations at /vault/, /li/ and /inventory/ are
+    // harmless — those pages are gone, D1.)
     caches.keys()
       .then((keys) => Promise.all(keys
-        .filter((k) => (k.startsWith("platform-shell-") && k !== CACHE) || k.startsWith("file-vault-"))
+        .filter((k) => k !== CACHE && k !== RUNTIME_CACHE)
+        .filter((k) => /^(file-database-|platform-shell-|file-vault-|vault-app-|li-db-|tool-inventory-)/.test(k))
         .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
@@ -103,10 +129,10 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  // Keep the OCR engine once it has been fetched, so scanning an RO keeps
-  // working with no connection. An opaque cross-origin response can't be
-  // inspected, so cache it but revalidate in the background — a bad one that
-  // slipped in can never stick.
+  // Keep the OCR engine once it has been fetched, so scanning keeps working
+  // with no connection. An opaque cross-origin response can't be inspected,
+  // so cache it but revalidate in the background — a bad one that slipped in
+  // can never stick.
   if (RUNTIME_HOSTS.includes(url.hostname)) {
     e.respondWith(
       caches.match(req).then((hit) => {
@@ -124,20 +150,16 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (url.origin !== self.location.origin) return;
-  // The embedded apps ship their own service workers — leave their assets alone.
-  if (url.pathname.includes("/vault/") || url.pathname.includes("/li/") || url.pathname.includes("/inventory/")) return;
   if (req.mode === "navigate") {
-    // Network-first; each navigation (shell root, toolbox iframe) is cached
-    // under its own URL so one can't clobber the other.
+    // Network-first; the page is cached under its own URL so a reload offline
+    // still opens (the hash route is client-side).
     e.respondWith(
       fetch(req).then((res) => {
         if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
       }).catch(() =>
         caches.match(req, { ignoreSearch: true }).then((m) => m || caches.match(
-          url.pathname.includes("/toolbox/") ? "./toolbox/index.html"
-            : url.pathname.includes("/ros/") ? "./ros/index.html"
-            : "./index.html"
+          url.pathname.endsWith("/viewer.html") ? "./viewer.html" : "./index.html"
         ))
       )
     );

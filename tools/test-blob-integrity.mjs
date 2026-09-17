@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const src = fs.readFileSync(path.join(ROOT, "vault", "blob-integrity.js"), "utf8");
+const src = fs.readFileSync(path.join(ROOT, "src", "features", "files", "blob-integrity.js"), "utf8");
 const sandbox = {};
 new Function("self", src)(sandbox);
 const { equalBlobs } = sandbox.FileVaultIntegrity;

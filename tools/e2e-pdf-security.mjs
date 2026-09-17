@@ -39,7 +39,7 @@ page.on("request", (r) => { const u = r.url(); if (!u.startsWith(base) && !u.sta
 let failures = 0;
 const check = (c, l) => { console.log((c ? "  ✓ " : "  ✗ ") + l); if (!c) failures++; };
 
-await page.goto(base + "vault/index.html", { waitUntil: "networkidle" });
+await page.goto(base + "#vault", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
 // 1) The vendored library reports the pinned major/version and disables eval.
