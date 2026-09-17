@@ -129,106 +129,12 @@
   const hide = (el) => { el.hidden = true; };
 
   // ---------- Thumbnail generation ----------
-  function makeImageThumb(file) {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const max = 360;
-          const scale = Math.min(1, max / Math.max(img.width, img.height));
-          const w = Math.max(1, Math.round(img.width * scale));
-          const h = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = w; canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          canvas.toBlob((b) => { URL.revokeObjectURL(url); resolve(b); }, "image/jpeg", 0.78);
-        } catch (e) { URL.revokeObjectURL(url); resolve(null); }
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-      img.src = url;
-    });
-  }
-  function makeVideoThumb(file) {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const v = document.createElement("video");
-      v.muted = true; v.preload = "metadata"; v.src = url;
-      let done = false;
-      const finish = (blob) => { if (done) return; done = true; URL.revokeObjectURL(url); resolve(blob); };
-      v.onloadeddata = () => {
-        try { v.currentTime = Math.min(1, (v.duration || 2) / 2); } catch (e) { finish(null); }
-      };
-      v.onseeked = () => {
-        try {
-          const max = 360;
-          const scale = Math.min(1, max / Math.max(v.videoWidth || 1, v.videoHeight || 1));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round((v.videoWidth || 320) * scale));
-          canvas.height = Math.max(1, Math.round((v.videoHeight || 180) * scale));
-          canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob((b) => finish(b), "image/jpeg", 0.72);
-        } catch (e) { finish(null); }
-      };
-      v.onerror = () => finish(null);
-      setTimeout(() => finish(null), 6000); // safety timeout
-    });
-  }
-  async function makeThumb(file, kind) {
-    try {
-      if (kind === "image") return await makeImageThumb(file);
-      if (kind === "video") return await makeVideoThumb(file);
-      if (kind === "pdf") return await makePdfThumb(file);
-    } catch (e) { /* ignore */ }
-    return null;
-  }
-
-  // ---------- PDF thumbnails (first page rendered with a vendored pdf.js) ----------
-  // pdf.js is ~1.5 MB, so it's loaded on demand the first time a PDF needs a
-  // preview — vaults with no PDFs never pay for it.
-  let _pdfjs = null, _pdfjsLoading = null;
-  function ensurePdfjs() {
-    if (_pdfjs) return Promise.resolve(_pdfjs);
-    if (_pdfjsLoading) return _pdfjsLoading;
-    _pdfjsLoading = new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "vendor/pdf.min.js";
-      s.onload = () => {
-        // The v4 bundle finishes initializing in a microtask — wait for the
-        // readiness promise it publishes instead of reading the global directly.
-        Promise.resolve(window.pdfjsLibPromise || window.pdfjsLib).then((lib) => {
-          lib = lib || window.pdfjsLib;
-          if (!lib) { reject(new Error("pdf.js unavailable")); return; }
-          try { lib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; } catch (e) {}
-          _pdfjs = lib; resolve(lib);
-        }).catch(reject);
-      };
-      s.onerror = () => { _pdfjsLoading = null; reject(new Error("pdf.js failed to load")); };
-      document.head.appendChild(s);
-    });
-    return _pdfjsLoading;
-  }
-  async function makePdfThumb(file) {
-    const lib = await ensurePdfjs();
-    const buf = await file.arrayBuffer();
-    const doc = await lib.getDocument({ data: buf, isEvalSupported: false, disableAutoFetch: true, disableStream: true }).promise;
-    try {
-      const page = await doc.getPage(1);
-      const unit = page.getViewport({ scale: 1 });
-      const max = 360;
-      const scale = Math.min(2, max / Math.max(unit.width, unit.height) || 1);
-      const vp = page.getViewport({ scale });
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.ceil(vp.width));
-      canvas.height = Math.max(1, Math.ceil(vp.height));
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); // PDFs are transparent
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      return await new Promise((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.75));
-    } finally {
-      try { doc.destroy(); } catch (e) {}
-    }
-  }
+  // Canvas images, video frame grabs and first-page PDF renders are the shared
+  // service (src/services/thumbs.js); PDF.js itself is loaded on demand by
+  // src/services/pdf.js the first time a PDF needs a preview — vaults with no
+  // PDFs never pay for it.
+  const makeThumb = (file, kind) => FDServices.thumbs.make(file, kind);
+  const ensurePdfjs = () => FDServices.pdf.load();
 
   // Previews are made here, as "thumb" jobs: for files that just arrived
   // (queued by the intake) and, on boot, for PDFs that never got one. One
@@ -1659,88 +1565,42 @@
   }
 
   // ---------- Folder sync (import new/changed files from a linked folder) ----------
-  // Link a folder once; the handle is stored (and restored on every launch).
-  // "Sync a folder" scans it and imports anything new or changed; "Auto-sync"
-  // repeats that scan on a timer (and on focus) while the app is open. Files
-  // are matched by name + size + modified-time so nothing imports twice.
-  let syncDir = null, syncAuto = false, syncTimer = null, syncing = false;
-  const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
-
-  function syncMenuLabels() {
-    const s = $("#sync-action"), a = $("#autosync-action");
-    if (s) s.textContent = syncDir ? "Scan “" + (syncDir.name || "folder") + "” now" : "Sync a folder…";
-    if (a) a.textContent = "Auto-sync: " + (syncAuto ? "on" : "off");
-  }
-
-  async function pickSyncFolder() {
-    if (!window.showDirectoryPicker) { toast("Folder sync needs Microsoft Edge or Chrome."); return null; }
-    let h;
-    try { h = await window.showDirectoryPicker({ id: "vault-sync", mode: "read" }); }
-    catch (e) { return null; } // user cancelled the picker
-    syncDir = h;
-    try { await DB.setMeta("syncDir", h); } catch (e) {}
-    syncMenuLabels();
-    return h;
-  }
-
-  async function ensureSyncPerm(silent) {
-    if (!syncDir) return false;
-    const q = syncDir.queryPermission ? await syncDir.queryPermission({ mode: "read" }) : "granted";
-    if (q === "granted") return true;
-    if (silent) return false; // never prompt without a user gesture (auto path)
-    const p = syncDir.requestPermission ? await syncDir.requestPermission({ mode: "read" }) : "denied";
-    return p === "granted";
-  }
-
-  // Recursively gather file handles, bounded so a huge tree can't hang.
-  async function collectFolderFiles(dir, out, depth) {
-    out = out || []; depth = depth || 0;
-    if (depth > 8 || out.length > 20000) return out;
-    try {
-      for await (const entry of dir.values()) {
-        if (out.length > 20000) break;
-        if (entry.kind === "file") out.push(entry);
-        else if (entry.kind === "directory") { try { await collectFolderFiles(entry, out, depth + 1); } catch (e) {} }
-      }
-    } catch (e) {} // unreadable folder — keep what we have
-    return out;
-  }
-
-  async function runFolderSync(quiet) {
-    if (syncing) { if (!quiet) toast("A folder sync is already running…"); return; }
-    if (!syncDir) { const h = await pickSyncFolder(); if (!h) return; }
-    const ok = await ensureSyncPerm(quiet);
-    if (!ok) { if (!quiet) toast("Couldn't read that folder — link it again."); return; }
-    syncing = true;
-    try {
-      if (!quiet) toast("Scanning “" + (syncDir.name || "folder") + "”…");
-      const handles = await collectFolderFiles(syncDir, []);
-      // Build a name -> [{size, mtime}] index of what's already in the vault.
-      // Read straight from the DB (not the in-memory list) so a second open
-      // instance's imports are seen and files aren't imported twice.
+  // The scan / dedup / auto-sync machinery is the shared service
+  // (src/services/folder-sync.js, one copy for this app and LI Documents);
+  // this app supplies where the handle is kept, what is already stored and
+  // how synced files are imported.
+  const folderSync = FDServices.folderSync.create({
+    pickerId: "vault-sync",
+    load: async () => ({ dir: (await DB.getMeta("syncDir", null)) || null, auto: !!(await DB.getMeta("syncAuto", false)) }),
+    save: (key, value) => DB.setMeta(key === "dir" ? "syncDir" : "syncAuto", value),
+    // Read straight from the DB (not the in-memory list) so a second open
+    // instance's imports are seen and files aren't imported twice.
+    known: async () => {
       let existing = items;
       try { existing = await DB.listMeta(); } catch (e) {}
       const known = {};
       existing.forEach((it) => { (known[it.name] = known[it.name] || []).push({ size: it.size, mtime: it.srcMtime }); });
-      const fresh = [];
-      for (const fh of handles) {
-        let f; try { f = await fh.getFile(); } catch (e) { continue; }
-        const cand = known[f.name] || [];
-        const dup = cand.some((k) => k.size === f.size && (k.mtime == null || k.mtime === (f.lastModified || 0)));
-        if (!dup) fresh.push(f);
-      }
-      if (!fresh.length) { if (!quiet) toast("“" + (syncDir.name || "folder") + "” is up to date — nothing new."); return; }
-      await syncImport(fresh, syncDir.name || "Synced");
-    } catch (e) {
-      console.error(e);
-      if (!quiet) toast("Folder sync failed.");
-    } finally { syncing = false; }
+      return known;
+    },
+    import: (files, folderName) => syncImport(files, folderName),
+    toast,
+    onChange: syncMenuLabels,
+  });
+
+  function syncMenuLabels() {
+    const s = $("#sync-action"), a = $("#autosync-action");
+    if (s) s.textContent = folderSync.dir ? "Scan “" + (folderSync.dir.name || "folder") + "” now" : "Sync a folder…";
+    if (a) a.textContent = "Auto-sync: " + (folderSync.auto ? "on" : "off");
   }
+  const runFolderSync = (quiet) => folderSync.run(quiet);
+  const toggleAutoSync = () => folderSync.toggleAuto();
+  const resumeSync = () => folderSync.resume();
 
   // Import synced files into a collection named after the folder, tracking the
   // source modified-time so a later scan won't re-import an unchanged file.
   // The intake does the eager read + verify (a cloud-placeholder or locked
-  // source fails there, not silently as stored garbage).
+  // source fails there, not silently as stored garbage) and queues the
+  // thumbnail and quick-VIN jobs, exactly as for a dropped file.
   async function syncImport(files, collection) {
     let added = 0;
     for (const file of files) {
@@ -1753,36 +1613,6 @@
       updateStorage();
       toast("Synced " + added + " new file" + (added > 1 ? "s" : "") + " into “" + collection + "”.");
     }
-  }
-
-  function startAutoSync() {
-    stopAutoSync();
-    if (!syncAuto || !syncDir) return;
-    syncTimer = setInterval(() => runFolderSync(true), SYNC_INTERVAL);
-    // A prompt-free catch-up shortly after enabling / launching.
-    setTimeout(() => runFolderSync(true), 1500);
-  }
-  function stopAutoSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } }
-
-  async function toggleAutoSync() {
-    if (!syncDir) { const h = await pickSyncFolder(); if (!h) return; }
-    syncAuto = !syncAuto;
-    try { await DB.setMeta("syncAuto", syncAuto); } catch (e) {}
-    syncMenuLabels();
-    if (syncAuto) { startAutoSync(); toast("Auto-sync on — “" + (syncDir.name || "folder") + "” is checked every 5 minutes while the app is open."); }
-    else { stopAutoSync(); toast("Auto-sync off."); }
-  }
-
-  async function resumeSync() {
-    try {
-      syncDir = (await DB.getMeta("syncDir", null)) || null;
-      syncAuto = !!(await DB.getMeta("syncAuto", false));
-    } catch (e) { syncDir = null; syncAuto = false; }
-    syncMenuLabels();
-    if (syncAuto && syncDir) startAutoSync();
-    // Re-scan when the app regains attention (covers files added while away).
-    window.addEventListener("focus", () => { if (syncAuto && syncDir) runFolderSync(true); });
-    document.addEventListener("visibilitychange", () => { if (!document.hidden && syncAuto && syncDir) runFolderSync(true); });
   }
 
   // ---------- VIN scan & grouping ----------
@@ -1805,32 +1635,15 @@
   // means a blocked/offline engine fails once for every lane, not once per file.
   const POOL_MAX = window.__VIN_OCR_WORKERS ||
     Math.max(1, Math.min((navigator.hardwareConcurrency || 4) - 1, 4));
-  let _tessLibP = null;
-  function loadTess() {
-    if (window.Tesseract) return Promise.resolve(window.Tesseract);
-    if (_tessLibP) return _tessLibP;
-    const CDN = "https://cdn.jsdelivr.net/npm";
-    const lib = window.__TESS_LIB || (CDN + "/tesseract.js@5.1.1/dist/tesseract.min.js");
-    _tessLibP = new Promise((res, rej) => {
-      const s = document.createElement("script");
-      s.src = lib;
-      s.onload = () => (window.Tesseract ? res(window.Tesseract) : rej(new Error("OCR init failed")));
-      s.onerror = () => { _tessLibP = null; rej(new Error("OCR engine unavailable (needs internet once).")); };
-      document.head.appendChild(s);
-    });
-    return _tessLibP;
-  }
+  // The engine and its worker/core/language paths are the shared service
+  // (src/services/ocr.js — one loader for every app; window.__TESS_* still
+  // override the resource paths).
+  const loadTess = () => FDServices.tess.load();
   // One worker per lane (ctx.worker), reused for every file that lane handles.
   // The call site wraps this in vinGuard so a hung load/create can't wedge.
   async function laneWorker(ctx) {
     if (ctx.worker) return ctx.worker;
-    const T = await loadTess();
-    const CDN = "https://cdn.jsdelivr.net/npm";
-    ctx.worker = await T.createWorker("eng", 1, {
-      workerPath: window.__TESS_WORK || (CDN + "/tesseract.js@5.1.1/dist/worker.min.js"),
-      corePath: window.__TESS_CORE || (CDN + "/tesseract.js-core@5.1.0/tesseract-core-simd.wasm.js"),
-      langPath: window.__TESS_LANG || "https://tessdata.projectnaptha.com/4.0.0",
-    });
+    ctx.worker = await FDServices.tess.createWorker("eng");
     return ctx.worker;
   }
   function laneFree(ctx) {

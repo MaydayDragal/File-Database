@@ -283,7 +283,8 @@ its own parsers and ZIP implementation. Deflated LI ZIP entries require browser
 Files are processed locally; the application has no file-upload backend, analytics,
 or account system. It does make requests for hosted application assets and the
 optional same-origin inventory catalog. It includes third-party libraries:
-PDF.js is vendored, with JSZip and pdf-lib inlined where used.
+PDF.js, JSZip and pdf-lib are vendored under `vendor/`, one copy each; PDF.js is
+loaded on demand by the page that first needs it.
 
 OCR in **Vault, LI Documents, and Toolbox** loads Tesseract.js, its worker/WASM
 runtime, and language data from `cdn.jsdelivr.net` and
@@ -393,8 +394,10 @@ node tools/e2e-migrate.mjs
 ```
 
 `npm run icons` regenerates icons using Python. `npm run vendor:pdfjs` regenerates
-Vault's PDF.js files and LI/Toolbox's inline bundles from pinned `pdfjs-dist@4.2.67`;
-`node tools/vendor-pdfjs.mjs --check` verifies the generated artifacts.
+`vendor/pdf.min.js` and `vendor/pdf.worker.min.js` from pinned `pdfjs-dist@4.2.67`;
+`node tools/vendor-pdfjs.mjs --check` verifies them, the JSZip and pdf-lib pins,
+and that no page inlines a library (the static check also refuses any source
+file over 300 KB outside `vendor/`).
 
 [qa.yml](.github/workflows/qa.yml) runs on pushes to
 `claude/pwa-file-database-hqbppy` and on pull requests. It installs dependencies,
@@ -412,9 +415,11 @@ and path-filtered on pushes to that branch.
 | `debug.js` | Shared local logger |
 | `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, hashing, backup formats — loaded by every page, unit-tested from Node |
 | `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the first-launch migration dialog — loaded by every page, unit-tested from Node with fake-indexeddb |
-| `vault/` | File Vault, its adapter over the shared repos, Blob verification, PDF.js vendor files |
-| `li/`, `inventory/`, `toolbox/`, `ros/` | Other application pages and assets |
-| `viewer.html` | Standalone backup extractor |
+| `src/services/` | Shared browser machinery: the on-demand PDF.js, the OCR engine loader and worker pool, thumbnails, folder sync |
+| `vendor/` | The vendored runtimes, one copy each: PDF.js main + worker, JSZip, pdf-lib |
+| `vault/` | File Vault, its adapter over the shared repos, Blob verification |
+| `li/`, `inventory/`, `toolbox/`, `ros/` | The other applications: each a page of markup, its script(s) and its stylesheet (the Toolbox: one file per tool under `toolbox/tools/`) |
+| `viewer.html`, `viewer.js`, `viewer.css` | Standalone backup extractor |
 | `inventory-data/` | Source catalog JSON and photos; build input, not automatically imported |
 | `portable/` | Portable launchers and user guide |
 | `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |

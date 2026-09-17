@@ -50,20 +50,12 @@ check(offenders.length === 0, "no suite depends on a fixed /opt browser path", o
 // ---------- 4. PDF.js source policy ----------
 // (a) no app source may still carry the vulnerable 3.x PDF.js build, and
 // (b) every application getDocument({...}) call must disable eval.
-// The vendored bundles themselves (vault/vendor/*, and the generated
-// <script id="pdfjs-lib">/<script id="pdfjs-worker"> blocks in the
-// single-file apps) are the library, not call sites — strip them first.
-function stripGeneratedBlocks(html) {
-  return html
-    .replace(/<script id="pdfjs-lib">[\s\S]*?<\/script>/, "")
-    .replace(/<script type="text\/js-worker" id="pdfjs-worker">[\s\S]*?<\/script>/, "");
-}
-const appSources = tracked(["*.js", "*.html"]).filter((f) => !f.startsWith("tools/") && !f.startsWith("vault/vendor/"));
+// The vendored runtimes under vendor/ are the library, not call sites.
+const appSources = tracked(["*.js", "*.html"]).filter((f) => !f.startsWith("tools/") && !f.startsWith("vendor/"));
 const oldPdfjs = [];
 const unsafeCalls = [];
 for (const f of appSources) {
-  let src = fs.readFileSync(path.join(ROOT, f), "utf8");
-  if (f.endsWith(".html")) src = stripGeneratedBlocks(src);
+  const src = fs.readFileSync(path.join(ROOT, f), "utf8");
   if (src.includes("3.11.174")) oldPdfjs.push(f);
   const re = /getDocument\(\s*\{/g;
   let m;
@@ -72,12 +64,24 @@ for (const f of appSources) {
     if (!/isEvalSupported\s*:\s*false/.test(slice)) unsafeCalls.push(f + " @" + m.index);
   }
 }
-for (const f of tracked(["vault/vendor/*.js"])) {
+for (const f of tracked(["vendor/*.js"])) {
   const src = fs.readFileSync(path.join(ROOT, f), "utf8");
   if (src.includes("3.11.174")) oldPdfjs.push(f);
 }
 check(oldPdfjs.length === 0, "no PDF.js 3.11.174 artifacts remain", oldPdfjs.join(", "));
 check(unsafeCalls.length === 0, "every app getDocument({...}) call passes isEvalSupported: false", unsafeCalls.slice(0, 5).join(", "));
+
+// ---------- 5. Nothing inlined: no source file over 300 KB outside vendor/ ----------
+// A page or script that big is carrying a library (REWRITE-PLAN.md Phase 3
+// moved them all to vendor/, where they are loaded on demand).
+const SIZE_LIMIT = 300 * 1024;
+const tooBig = [];
+for (const f of tracked(["*.js", "*.mjs", "*.html", "*.css"])) {
+  if (f.startsWith("vendor/")) continue;
+  const size = fs.statSync(path.join(ROOT, f)).size;
+  if (size > SIZE_LIMIT) tooBig.push(f + " (" + Math.round(size / 1024) + " KB)");
+}
+check(tooBig.length === 0, "no source file over 300 KB outside vendor/", tooBig.join(", "));
 
 console.log(failures === 0 ? "\nSTATIC CHECKS PASSED ✅" : `\n${failures} STATIC CHECK(S) FAILED ❌`);
 process.exit(failures === 0 ? 0 : 1);

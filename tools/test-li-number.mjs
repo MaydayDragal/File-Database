@@ -30,7 +30,7 @@ const NB = "‑";    // non-breaking hyphen (what the new exports use)
 const NBSP = " ";  // no-break space
 const EN = "–";
 
-// Lift a source region out of a single-file app and evaluate it in isolation.
+// Lift a source region out of an app script and evaluate it in isolation.
 function lift(file, startMark, endMark) {
   const src = fs.readFileSync(path.join(ROOT, file), "utf8");
   const a = src.indexOf(startMark);
@@ -76,12 +76,12 @@ const PRELUDE = `
   eq(normText(`an em — dash and a${NBSP}space`), "an em — dash and a space", "em dashes survive normalization");
 
   // The app pages and the Toolbox must all load the shared file, not a copy.
-  for (const page of ["li/index.html", "toolbox/index.html", "index.html", "vault/index.html", "inventory/index.html"]) {
+  for (const page of ["li/index.html", "toolbox/index.html", "index.html", "vault/index.html", "inventory/index.html", "ros/index.html"]) {
     const html = fs.readFileSync(path.join(ROOT, page), "utf8");
     check(/src\/core\/ids\.js/.test(html), `${page} loads src/core/ids.js`);
   }
   const literal = /\\b\[A-Z\]\{2\}\\d\{2\}\\\.\\d\{2\}-\[A-Z\]-\\d\{5,7\}/;
-  for (const f of ["shell.js", "vault/app.js", "toolbox/index.html"]) {
+  for (const f of ["shell.js", "vault/app.js", "li/app.js", "toolbox/tools/pdf.js", "toolbox/app.js"]) {
     check(!literal.test(fs.readFileSync(path.join(ROOT, f), "utf8")), `${f} carries no private copy of the document-number pattern`);
   }
 }
@@ -93,9 +93,9 @@ const PRELUDE = `
 // or typed lowercase — keyed its own group and split the document into two
 // rows. The key is canonicalized now.
 {
-  console.log("\nversion grouping (li/index.html)");
-  const html = fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8");
-  const block = lift("li/index.html", "// ---------- LI extraction", "// OCR (lazy, from CDN");
+  console.log("\nversion grouping (li/app.js)");
+  const html = fs.readFileSync(path.join(ROOT, "li/app.js"), "utf8");
+  const block = lift("li/app.js", "// ---------- LI extraction", "// OCR runs automatically");
   const groupDocs = new Function(PRELUDE + block +
     /function verNum\([\s\S]*?\n/.exec(html)[0] +
     /  function groupDocs\(list\) \{[\s\S]*?\n  \}/.exec(html)[0] +
@@ -126,8 +126,8 @@ const PRELUDE = `
 // different place. Fragments of one word must rejoin before the two versions
 // are compared, or unchanged text reads as a deletion plus an insertion.
 {
-  console.log("\nversion diff (li/index.html)");
-  const html = fs.readFileSync(path.join(ROOT, "li/index.html"), "utf8");
+  console.log("\nversion diff (li/app.js)");
+  const html = fs.readFileSync(path.join(ROOT, "li/app.js"), "utf8");
   const grab = (re) => re.exec(html)[0];
   const F = new Function(
     grab(/  var WRAP_HYPHEN[\s\S]*?\n  \}\n(?=  function paintWords)/) +

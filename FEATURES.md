@@ -97,7 +97,7 @@ classifier [src/core/vin.js](src/core/vin.js) (see §10).
 | Intake | Picker, drag/drop, paste and linked-folder import all go through the shared intake; embedded intake forwards through the shell; files stored by other contexts appear through the change bus |
 | Stored-file checks | The intake materializes ordinary additions up to 256 MiB, hashes them (SHA-256), re-reads the stored bytes and compares the hash; a failed verification removes the record and reports the file |
 | Classification | Images, videos, audio, PDFs, documents, spreadsheets, presentations, text/code, archives, other |
-| Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders, made by `thumb` jobs this app runs (queued by the intake, and on boot for PDFs without one) |
+| Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders ([src/services/thumbs.js](src/services/thumbs.js)), made by `thumb` jobs this app runs (queued by the intake, and on boot for PDFs without one) |
 | Preview | Image/video/audio, native PDF iframe, text up to 512 KiB, fallback icon for unsupported types |
 | Organization | One collection per file, tags, note, star, editable filename, VINs and FINs |
 | Search/filter | Metadata search; type/collection/tag/VIN filters; All, Starred, Recent, By VIN; active-filter chips |
@@ -108,9 +108,10 @@ classifier [src/core/vin.js](src/core/vin.js) (see §10).
 | Keyboard | `/` search, `a` add, `g` grid, `l` list, Escape overlays/selection |
 
 PDF.js is pinned to **4.2.67**, generated from the npm package by
-[tools/vendor-pdfjs.mjs](tools/vendor-pdfjs.mjs). Vault lazy-loads its vendored
-runtime; loading the shell alone does not cache it. Preview support is distinct
-from accepting and storing a file.
+[tools/vendor-pdfjs.mjs](tools/vendor-pdfjs.mjs) into `vendor/` — one copy for
+every page, loaded on demand by [src/services/pdf.js](src/services/pdf.js) the
+first time a page needs it (§10). Preview support is distinct from accepting and
+storing a file.
 
 ### VIN scan and grouping
 
@@ -133,8 +134,11 @@ retry. `__VIN_OCR_WORKERS` and `__VIN_OCR_*` globals support controlled override
 
 ### Folder sync
 
-A chosen directory handle is stored in `meta.syncDir`; auto mode in `syncAuto`.
-Scans recurse with depth/file-count limits and match filename, size, and source
+One implementation, [src/services/folder-sync.js](src/services/folder-sync.js),
+serves this app and LI Documents; each supplies where its handle is kept, what it
+already holds and how it imports. Vault stores the handle in `vault.syncDir`
+and auto mode in `vault.syncAuto` (LI: `li.syncDir`, `li.autoSyncOn`). Scans
+recurse with depth/file-count limits and match filename, size, and source
 modification time. Imports go into a collection named after the folder. A fresh
 DB read helps deduplication but does not constitute a transactional cross-window
 uniqueness guarantee. Changed files can create new records; removals are not mirrored.
@@ -151,8 +155,10 @@ receives a batch, while Media can queue later files behind **Next file**.
 
 ## 4. LI Documents
 
-[li/index.html](li/index.html) contains the app plus inlined JSZip and generated
-PDF.js main/worker bundles. Text normalization, the document-number matchers and
+[li/index.html](li/index.html) is the markup, [li/app.js](li/app.js) the app
+and [li/styles.css](li/styles.css) its styles; JSZip is the page script
+`vendor/jszip.min.js`, PDF.js the shared on-demand copy, the OCR worker pool
+and folder sync the shared services (§10). Text normalization, the document-number matchers and
 the text-to-record extraction are the shared [src/core](src/core/) modules
 `text.js`, `ids.js` and `li-parse.js` (§10); the Toolbox's LI renamer runs the same code.
 
@@ -206,8 +212,12 @@ on existing records. Inventory uses shell messages and the shared `tools`,
 
 ## 6. Toolbox
 
-Implementation: [toolbox/index.html](toolbox/index.html), with inlined JSZip,
-pdf-lib, and generated PDF.js main/worker bundles.
+Implementation: [toolbox/index.html](toolbox/index.html) holds the tab bar;
+each tool is one file under [toolbox/tools/](toolbox/tools/) that mounts its
+own panel markup and wires it up; [toolbox/app.js](toolbox/app.js) is tab
+switching and the platform integration, [toolbox/styles.css](toolbox/styles.css)
+the styles. pdf-lib and JSZip are page scripts from `vendor/`; PDF.js is the
+shared on-demand copy (§10).
 
 | Key | Tool | Capabilities |
 | --- | --- | --- |
@@ -262,8 +272,8 @@ PDFs, up to four pages, all parsed as one document.
 
 | Stage | Implementation |
 | --- | --- |
-| Read | PDF text layer first (pdf.js from `vault/vendor/`, `isEvalSupported: false`), rebuilt into positioned rows from each text item's transform (x, y flipped to count down the page); under 200 letters it is treated as a scan and pages render at scale 2.2 for OCR. Recognized pages contribute the same rows from `data.lines` bounding boxes |
-| Recognize | Tesseract.js 5.1.1 from `cdn.jsdelivr.net`, overridable with `window.__TESS_LIB/_WORK/_CORE/_LANG`; one worker per scan, terminated on success and on failure. Reads go through [ocr.js](ocr.js) in page-segmentation mode 3 at a 2200–3300 px long edge |
+| Read | PDF text layer first (the shared PDF.js, `isEvalSupported: false`), rebuilt into positioned rows from each text item's transform (x, y flipped to count down the page); under 200 letters it is treated as a scan and pages render at scale 2.2 for OCR. Recognized pages contribute the same rows from `data.lines` bounding boxes |
+| Recognize | Tesseract.js 5.1.1 through the shared loader ([src/services/ocr.js](src/services/ocr.js): from `cdn.jsdelivr.net`, overridable with `window.__TESS_LIB/_WORK/_CORE/_LANG`); one worker per scan, terminated on success and on failure. Reads go through [ocr.js](ocr.js) in page-segmentation mode 3 at a 2200–3300 px long edge |
 | Orientation | [ocr.js](ocr.js) `readUpright`: page 1 of each scan is probed, later pages follow its answer. A scan is a deliberate action, so it always pays for the probe rather than settling for a first read |
 | Parse | `parseScan(text, pages)` — labelled values run until the next known label on the row, and every occurrence of a label is a candidate so a field can be taken from the row beneath its own empty cell; a value is cut at a column rule (`\|`, `*`, `¢`, a stray `:`). VIN uses the Vault's MB-WMI rules plus the same I→1 / O→0 OCR repair |
 | VIN | Read twice. The whole-page read is joined by a second, closer read of the row the VIN sits on: cropped out, enlarged, page-segmentation mode 7, and the engine restricted to a VIN's own alphabet (no I, O or Q). ISO 3779's check digit at character 9 picks the winner — of the readings one marginal scan gave for a real VIN, only the correct one passes it. The digit only ever PREFERS a reading, never rejects the only one there is, and the review flags a VIN that fails it. Which magnification works is not predictable (the same strip read correctly at 2x and 4x and wrongly at 3x on one scan), so it is read at each until one checks out. When a scan loses the number AND its own `VIN` label, there is no row to go back to: the header rows wide enough to hold seventeen characters are swept instead, one magnification each, and only a reading that passes the check digit is taken — a guess that cannot check itself is worse than nothing there |
@@ -286,8 +296,9 @@ names, but not the separate RO stories/vehicle records.
 
 ### Reading a scan (shared by every app)
 
-[ocr.js](ocr.js) is loaded by Vault, LI, Toolbox and Repair Orders (and inlined
-into the standalone LI build) so all four read scans the same way. It exists
+[ocr.js](ocr.js) is loaded by Vault, LI, Toolbox and Repair Orders so all four
+read scans the same way; the engine itself comes from one loader,
+[src/services/ocr.js](src/services/ocr.js). It exists
 because the engine is wrong twice by default on workshop paperwork, and neither
 failure is reported — both come back as a thin, plausible-looking read.
 
@@ -409,7 +420,7 @@ current listeners must not be described as enforcing sender-origin validation.
 | `ros`, `links` | RO | RO fields and story lines; typed relations (`ro → file attachment`) |
 | `jobs` | every app | Queued/running/done work with progress and attempts |
 | `settings` | every app | `vault.*`, `li.*`, `inventory.*`, `migration`, `backup.restored` (folder handles included; not exported) |
-| `log` | (reserved) | The logger still writes `fv-debug` until Phase 3 |
+| `log` | (reserved) | The logger still writes `fv-debug`; it moves here when the pages collapse into one (Phase 4), so one boot gates its writes |
 | IndexedDB `fv-debug`: `entries` | Logger | Local error/warning/app entries |
 | localStorage `fdb.generation` | Data layer | The live generation's name |
 | localStorage `fv-theme` | Shell / standalone Vault | Light/dark; absent means system |
@@ -451,13 +462,33 @@ checks in `tests/` prove it.
 | `hash.js` | SHA-256 of a Blob/bytes/string: WebCrypto up to 256 MiB, a streaming JS implementation above | every page |
 | `formats/` | `container.js` (magic + version + JSON + payloads), `zip.js`, `fvault.js` (strict and loose readers, legacy JSON), `tidb.js`, `lidb.js`, `fdb.js` (the whole-platform backup, strict) | every page (`fdb`), Vault, Extract |
 
+### Shared services (`src/services/`)
+
+Browser-side machinery the apps used to carry in copies, moved out in Phase 3
+(classic scripts on `window.FDServices`; they touch the DOM and the network, so
+the browser suites cover them).
+
+| Module | Owns | Loaded by |
+| --- | --- | --- |
+| `vendor.js` | where `vendor/` is (from its own script URL) and a cached one-shot script loader | every page that loads a service |
+| `pdf.js` | the one PDF.js: `load()` injects `vendor/pdf.min.js` on first use, points it at `vendor/pdf.worker.min.js`, resolves with the library; `window.__PDFJS_SRC/_WORKER` override | Vault, LI, Toolbox, Repair Orders |
+| `ocr.js` | `tess.load()` / `tess.createWorker(lang, opts)` for Tesseract.js (`window.__TESS_*` override the resource paths) and `ocrPool.create()` — LI's capped, reusable worker pool | Vault, LI, Toolbox, Repair Orders |
+| `thumbs.js` | `make(file, kind)`: image re-encode, video frame grab, first PDF page | Vault |
+| `folder-sync.js` | link a folder, scan it with depth/count limits, dedupe by name + size + mtime, auto-sync on a timer/focus/visibility; the feature supplies persistence, its index and its import | Vault, LI |
+
+The vendored runtimes are real files under `vendor/` — PDF.js main + worker
+(generated by [tools/vendor-pdfjs.mjs](tools/vendor-pdfjs.mjs)), JSZip 3.10.1,
+pdf-lib 1.17.1 — never inlined into a page; `vendor-pdfjs --check` and the
+static policy's 300 KB rule ([tools/test-static.mjs](tools/test-static.mjs))
+keep it that way.
+
 ## 11. Offline assets and network dependencies
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| Platform root | [sw.js](sw.js) | `platform-shell-v21`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
-| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v33` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
-| LI | [li/sw.js](li/sw.js) | `li-db-shell-v6`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
+| Platform root | [sw.js](sw.js) | `platform-shell-v22`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract, the services and `vendor/`; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
+| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v34` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
+| LI | [li/sw.js](li/sw.js) | `li-db-shell-v7`, `li-db-runtime-v1` | Tolerant precache (its scripts, styles, JSZip and PDF.js from `vendor/`); network-first navigation; same-origin assets and OCR hosts cached with background refresh |
 | Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v11` | App-shell precache; network-first navigation; cache-first assets |
 
 Workers prune their own cache prefixes; the root also removes old pre-platform
