@@ -11,7 +11,8 @@ Two layers, both run by `npm test` and by CI (`.github/workflows/qa.yml`):
 blob integrity, LI number) and stay as they are. The static policy also refuses
 any source file over 300 KB outside `vendor/`, so a library can never be inlined
 into a page again; `node tools/vendor-pdfjs.mjs --check` verifies the vendored
-runtimes themselves.
+runtimes themselves, and `node tools/build-viewer.mjs --check` that `viewer.js`
+(the standalone extractor's classic bundle) matches `src/features/extract/`.
 
 ## Data layer checks
 

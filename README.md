@@ -396,7 +396,9 @@ node tools/e2e-migrate.mjs
 `vendor/pdf.min.js` and `vendor/pdf.worker.min.js` from pinned `pdfjs-dist@4.2.67`;
 `node tools/vendor-pdfjs.mjs --check` verifies them, the JSZip and pdf-lib pins,
 and that no page inlines a library (the static check also refuses any source
-file over 300 KB outside `vendor/`).
+file over 300 KB outside `vendor/`). `npm run build:viewer` regenerates
+`viewer.js` from `src/features/extract/`; `node tools/build-viewer.mjs --check`
+(part of `npm test`) verifies it is current.
 
 [qa.yml](.github/workflows/qa.yml) runs on pushes to
 `claude/pwa-file-database-hqbppy` and on pull requests. It installs dependencies,
@@ -418,7 +420,7 @@ and path-filtered on pushes to that branch.
 | `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the first-launch migration dialog — loaded by every page, unit-tested from Node with fake-indexeddb |
 | `src/services/` | Shared browser machinery: the on-demand PDF.js, the OCR engine loader and worker pool, thumbnails, folder sync |
 | `vendor/` | The vendored runtimes, one copy each: PDF.js main + worker, JSZip, pdf-lib |
-| `viewer.html` | Standalone host of the Extract feature: a copy next to your backups can always get the files back out |
+| `viewer.html`, `viewer.js` | Standalone host of the Extract feature (`viewer.js` is the feature bundled as one classic script by `tools/build-viewer.mjs`, so the page works double-clicked from disk): a copy next to your backups can always get the files back out |
 | `inventory-data/` | Source catalog JSON and photos; build input, not automatically imported |
 | `portable/` | Portable launchers and user guide |
 | `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |

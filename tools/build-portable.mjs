@@ -14,7 +14,7 @@ const APP = path.join(OUT, "app");
 
 // Only the files the running site actually needs (no dev tooling / repo cruft).
 const INCLUDE = [
-  "index.html", "viewer.html", "debug.js", "ocr.js", "src", "vendor",
+  "index.html", "viewer.html", "viewer.js", "debug.js", "ocr.js", "src", "vendor",
   "manifest.webmanifest", "sw.js", "icons",
 ];
 

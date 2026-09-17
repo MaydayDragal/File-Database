@@ -572,10 +572,19 @@ Done as written, with these notes:
   them. Turning the classic scripts themselves into modules waits for Phase
   6's bundling step, where the Node tests move to real imports too.
 - `viewer.html` stays as a standalone host of the Extract feature (a copy
-  next to a backup can always get the files out); `vault/`, `li/`,
+  next to a backup can always get the files out — and double-clicked from
+  disk, so it loads the feature as `viewer.js`, one classic script bundled by
+  `tools/build-viewer.mjs` and checked by `npm test`); `vault/`, `li/`,
   `inventory/`, `toolbox/`, `ros/` and their workers, manifests and icons
   are deleted (D1). `sw.js` precaches a generated list; `debug.js` labels
   entries with the feature on screen.
+- Two things the first review caught: on one page every feature shares one
+  bus, so a write by another feature arrives without `remote` — the Files
+  and Repair Orders views now reload on every `files`/`links` event
+  (debounced), keeping the `remote` guard only for stores a feature alone
+  writes; and the platform's worker proxies the OCR hosts for the page, which
+  the VIN suite's hung-CDN route could not hold, so that suite blocks the
+  worker in its context.
 - Not done here: a Lighthouse run (not in the toolchain); `tools/sw-manifest.mjs
   --check` (Phase 6) still has to be written so the precache list cannot go
   stale.

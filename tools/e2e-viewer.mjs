@@ -157,6 +157,20 @@ await page.setInputFiles("#pick", path.join(FIX, "junk.bin"));
 await page.waitForTimeout(400);
 check((await page.locator("#progress").textContent()).includes("Not a recognized"), "junk input gets a clear error, not a crash");
 
+// ---------- double-clicked from disk (no server, no browser flags) ----------
+// The page is promised to work as a plain file next to your backups, so it
+// loads the feature as a classic bundle (viewer.js) — a module would be
+// refused from file://.
+{
+  const filePage = await ctx.newPage();
+  const fileErrors = [];
+  filePage.on("pageerror", (e) => fileErrors.push(e.message));
+  await filePage.goto("file://" + path.join(ROOT, "viewer.html"), { waitUntil: "load" });
+  await filePage.locator("#view-viewer").locator("#drop").waitFor({ timeout: 8000 }).catch(() => {});
+  check((await filePage.locator("#view-viewer").locator("#drop").count()) === 1 && fileErrors.length === 0, "viewer.html opened straight from disk mounts the extractor (classic bundle)");
+  await filePage.close();
+}
+
 // ---------- embedded in the platform shell (the Extract tab) ----------
 await page.goto(base + "#viewer", { waitUntil: "networkidle" });
 await page.waitForTimeout(600);

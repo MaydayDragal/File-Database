@@ -1147,13 +1147,14 @@ export function start(root, host, shell) {
     }
   }
 
-  // ---------- Cross-context changes ----------
-  // Files stored by another context (the shell's intake, the RO tab, LI
-  // Documents, another tab) announce themselves on the bus; own writes have
-  // already updated `items`, so only remote events reload the list.
+  // ---------- Cross-feature and cross-tab changes ----------
+  // Files stored by anyone else — the shell's intake, Repair Orders, LI
+  // Documents' "Add to File Vault", the Toolbox's save, another tab —
+  // announce themselves on the bus. On the one page those writers share this
+  // page's bus, so their events arrive without `remote`; every event reloads
+  // the list (debounced — a burst of own writes costs one read).
   let _refreshT = null;
   function onFilesChanged(d) {
-    if (!d.remote) return;
     clearTimeout(_refreshT);
     _refreshT = setTimeout(async () => {
       try {

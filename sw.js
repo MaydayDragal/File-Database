@@ -96,6 +96,7 @@ const EXTRAS = [
   "./vendor/jszip.min.js",
   "./vendor/pdf-lib.min.js",
   "./viewer.html",
+  "./viewer.js",
   "./manifest.webmanifest",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
