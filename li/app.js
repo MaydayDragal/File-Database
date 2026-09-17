@@ -981,6 +981,7 @@
     Promise.all([getFile(a.id), getFile(b.id), loadPdf().catch(function () { return null; })]).then(function (bl) {
       if (seq !== vSeq) return;
       if (!bl[0] || !bl[1]) { colA.innerHTML = colB.innerHTML = '<div class="vnote">Couldn\'t load the PDF files.</div>'; return; }
+      if (!bl[2]) { colA.innerHTML = colB.innerHTML = '<div class="vnote">Couldn\'t load the PDF reader.</div>'; return; }
       return Promise.all([bl[0].arrayBuffer(), bl[1].arrayBuffer()]).then(function (bufs) {
         if (seq !== vSeq) return;
         // Tolerate one side failing to parse so the other's loaded proxy is
