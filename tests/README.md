@@ -10,6 +10,27 @@ Two layers, both run by `npm test` and by CI (`.github/workflows/qa.yml`):
 `tools/test-*.mjs` are the older Node checks (static policy, backup format,
 blob integrity, LI number) and stay as they are.
 
+## Data layer checks
+
+`src/data/` (REWRITE-PLAN.md Phase 2) is tested in Node against
+[fake-indexeddb](https://github.com/dumbmatter/fakeIndexedDB); the harness in
+`tests/unit/harness/data.mjs` loads the classic scripts onto `globalThis` and
+`fresh()` gives every test its own IndexedDB world.
+
+| Check | Covers |
+| --- | --- |
+| `hash.test.mjs` | `src/core/hash.js` against WebCrypto: known vectors, block boundaries, chunked updates, the streaming path |
+| `fdb-format.test.mjs` | the `.fdb` container: round trip and every malformed-file code |
+| `data-db.test.mjs` | schema creation, the transaction commit boundary, probing without creating |
+| `data-repos.test.mjs` | rev / `expectedRev`, files with blobs and thumbs, documents owning their PDF, unique RO numbers, links, settings, bus events |
+| `data-jobs.test.mjs` | run to done, retry and fail, cancel, stale requeue, coalesced kicks |
+| `data-intake.test.mjs` | routing, per-target records and jobs, RO links, unreadable files |
+| `data-backup.test.mjs` | `.fdb` collect → restore into a new generation, failed verification, a tampered blob |
+| `data-migrate.test.mjs` | the four legacy databases → one generation: counts, hashes, shapes, D7 duplicates, a failed verification, `boot()` |
+
+The browser side of the same seam is `tools/e2e-migrate.mjs` (the first-launch
+dialog on a seeded profile, and a forced verification failure).
+
 ## Golden checks
 
 The rewrite (`REWRITE-PLAN.md`) moves the parsers out of the single-file apps

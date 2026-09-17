@@ -8,20 +8,18 @@ passing-test certification.
 ## 1. Platform topology
 
 The [shell](shell.js) hosts six lazy-loaded, same-origin iframes. A visited frame
-stays loaded while another tab is visible. Cross-app work uses three mechanisms:
+stays loaded while another tab is visible. Cross-app work uses two mechanisms:
 
 | Mechanism | Purpose | Participants |
 | --- | --- | --- |
-| [VaultBridge](bridge.js) | Queue file Blobs in IndexedDB; notify receivers through BroadcastChannel | Shell sends; Vault, LI, and Toolbox send/receive |
-| `postMessage` through the shell | Navigation, theme, keyboard commands, intake, restores, and RO updates | Shell and app frames |
-| Read-only IndexedDB peeks | Counts and RO attachment listings | Shell reads Vault/LI/Inventory; RO reads Vault |
+| The shared database ([src/data](src/data/), §9) | Every record; files stored once through one intake; follow-up work as jobs; change events on a bus that reaches every frame and tab | Shell and every app read and write it directly |
+| `postMessage` through the shell | Navigation, theme, keyboard commands, restores, and the RO's "select in Files" mode | Shell and app frames |
 
 Navigation messages usually contain metadata, but file-bearing messages also
 exist: `shell-add-files` carries Files to the shell, and restore/import messages
 carry backup Files into their app. It is incorrect to describe all postMessage
-traffic as having no file bytes. IndexedDB peeks abort upgrades to avoid creating
-another app's database accidentally. Same-origin deployment is required for the
-shared databases, theme, and bridge; it is not an isolation boundary between apps.
+traffic as having no file bytes. Same-origin deployment is required for the
+shared database, theme and change bus; it is not an isolation boundary between apps.
 
 | App key | Entry point | Standalone support | Own SW/manifest |
 | --- | --- | --- | --- |
@@ -46,8 +44,9 @@ shared databases, theme, and bridge; it is not an isolation boundary between app
   `/\b[A-Z]{2}\d{2}\.\d{2}-[A-Z]-\d{5,7}\b/i` route to LI. Other ordinary files
   route to Vault. This is filename recognition, not PDF-content classification.
 - `.fvault`, `.lidb`, and `.tidb` inputs invoke app restore/import messages instead
-  of being stored as ordinary files. Ordinary inputs up to 256 MiB are eagerly
-  materialized before bridge delivery; larger files retain their original handle.
+  of being stored as ordinary files; an `.fdb` restores the whole platform after a
+  confirm. Ordinary inputs up to 256 MiB are eagerly materialized by the intake
+  before they are stored; larger files retain their original handle.
 - Single-target batches normally surface their destination; mixed batches stay
   on the current tab. `stay:true` keeps an RO upload on its existing tab.
 - Optional collection/VIN metadata for Vault intake. An explicit intake VIN wins
@@ -59,8 +58,10 @@ shared databases, theme, and bridge; it is not an isolation boundary between app
   VINs; arbitrary text offers searches in Vault, LI, and Inventory.
 - Alt+1–6 app switching, forwarded by embedded pages. `/` search belongs to the
   Vault, LI, and Inventory handlers, not every app.
-- **Back up everything** sends `platform-backup` to Vault, LI, and Inventory at
-  1.2-second offsets. RO records, preferences, and bridge/log databases are excluded.
+- **Back up everything** downloads one `.fdb` with every store (files, LI
+  documents, tools, repair orders, links, plain-data settings) and then sends
+  `platform-backup` to Vault, LI, and Inventory at 1.2-second offsets for the
+  per-app formats. Folder handles, jobs and the log are excluded.
 - Install prompting when offered by the browser, platform service-worker
   registration on HTTPS/loopback, and refresh handling for worker updates.
 
@@ -93,10 +94,10 @@ classifier [src/core/vin.js](src/core/vin.js) (see §10).
 
 | Area | Implemented behavior |
 | --- | --- |
-| Intake | Picker, drag/drop, paste, linked-folder import, and bridge deliveries; embedded intake forwards through the shell |
-| Stored-file checks | Materializes ordinary additions up to 256 MiB, then compares the stored Blob with the source in chunks; failed normal-intake verification removes the bad record |
+| Intake | Picker, drag/drop, paste and linked-folder import all go through the shared intake; embedded intake forwards through the shell; files stored by other contexts appear through the change bus |
+| Stored-file checks | The intake materializes ordinary additions up to 256 MiB, hashes them (SHA-256), re-reads the stored bytes and compares the hash; a failed verification removes the record and reports the file |
 | Classification | Images, videos, audio, PDFs, documents, spreadsheets, presentations, text/code, archives, other |
-| Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders; existing PDF thumbnails backfill in the background |
+| Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders, made by `thumb` jobs this app runs (queued by the intake, and on boot for PDFs without one) |
 | Preview | Image/video/audio, native PDF iframe, text up to 512 KiB, fallback icon for unsupported types |
 | Organization | One collection per file, tags, note, star, editable filename, VINs and FINs |
 | Search/filter | Metadata search; type/collection/tag/VIN filters; All, Starred, Recent, By VIN; active-filter chips |
@@ -155,8 +156,10 @@ PDF.js main/worker bundles. Text normalization, the document-number matchers and
 the text-to-record extraction are the shared [src/core](src/core/) modules
 `text.js`, `ids.js` and `li-parse.js` (§10); the Toolbox's LI renamer runs the same code.
 
-- Imports individual PDFs, folders, drops, and bridge deliveries; extracts document
-  number, version, title, reason for change, function group, date, and validity.
+- Imports individual PDFs, folders and drops, and runs `li-import` jobs for PDFs
+  the intake or the Files app stored (the document is filed against that same
+  record); extracts document number, version, title, reason for change, function
+  group, date, and validity.
 - Falls back to Tesseract OCR for scanned documents. First OCR use normally needs
   network access; this can occur during import without a separate OCR button.
 - Keeps versions under document identities; repeated LI/version imports update
@@ -198,8 +201,8 @@ Source catalog prices/offered status are snapshots. Importing a new `.tidb`
 replaces the current database. CSV imports match ID first, then tool number, and
 overwrite matching fields with nonempty incoming values, including locally edited
 fields; unmatched rows are added. Stars and fields absent from that update remain
-on existing records. Inventory uses shell messages and direct database storage,
-not VaultBridge.
+on existing records. Inventory uses shell messages and the shared `tools`,
+`photos` and `settings` stores.
 
 ## 6. Toolbox
 
@@ -242,14 +245,15 @@ keys, so repeated numbers can share the same attachment collection.
 
 | Action | Implementation and effect |
 | --- | --- |
-| Upload | `shell-add-files` with collection and `stay:true`; normal shell routing still sends LI-named PDFs to LI |
-| Import existing files | `vault-ro-import` opens normal Vault selection UI; **Add to RO** changes selected records' collection, then returns to the RO |
+| Upload | Stored straight through the shared intake into the RO's collection with an `attachment` link (ro → file); the reconciliation waits for the intake's `vin-detect` job (run by the Files app) instead of polling |
+| Import existing files | `vault-ro-import` opens normal Vault selection UI; **Add to RO** changes selected records' collection, links them to the RO, then returns to the RO |
 | VIN reconciliation | Fill a missing VIN from the RO; keep matching VINs; prompt on mismatch and preserve original VINs when accepted |
-| Upload reconciliation | Poll new collection records, allow a short settle for no-OCR VIN detection, then send `vault-ro-apply`; ignored uploads become uncategorized |
+| Upload reconciliation | Written directly: links and collection for kept files, the RO VIN stamped on files without one; ignored uploads are unlinked and become uncategorized |
 | Existing-file mismatch | Vault uses `confirm()`; cancel skips the mismatched files |
-| Attachment listing | Read-only Vault peek, refreshed after actions and on focus; VIN badges and Vault navigation |
-| Rename | `vault-rename-collection` relayed by the shell moves the old collection's files |
-| Delete RO | Deletes the RO record, leaving Vault files |
+| Attachment listing | The RO's `attachment` links joined with the file records; refreshed by change events; VIN badges and Vault navigation |
+| Rename | The RO renames the collection on its files itself (`files.renameCollection`) |
+| Unique numbers | `ros.roKey` is a unique index (D7): a number another RO holds is refused and the field shows "Not saved" |
+| Delete RO | Deletes the RO record and its links, leaving the files |
 
 ### Scanning a paper RO
 
@@ -347,26 +351,29 @@ validates the whole file first. Both live in the same module.
 
 ## 9. Shared contracts and storage
 
-### VaultBridge delivery
+### The data layer (`src/data/`)
 
-[bridge.js](bridge.js) uses IndexedDB `vault-bridge` version 2, store `outbox`, with
-an auto-incrementing ID and target index. `send(target, {name, type, blob, meta})`
-resolves after queue persistence, not after destination import.
-`receive(target, handler)` registers a receiver, drains pending items, and returns
-an unsubscribe function. `drain(target)` is also exposed.
+One IndexedDB database per **generation** (`file-database-<n>`, named by
+`localStorage` `fdb.generation`), one schema ([schema.js](src/data/schema.js)),
+opened only by [db.js](src/data/db.js). `FDData.boot()` is the first call every
+page makes: it migrates the pre-Phase-2 databases on a profile that still has
+them (dialog in [src/ui/migrate-dialog.js](src/ui/migrate-dialog.js); verified
+by counts and every blob's SHA-256, a `.fdb` export offered, then the old
+databases deleted — D2, D8), cleans up leftovers, opens the live generation and
+requeues jobs a dead page left running.
 
-A receiver atomically claims a row with a token and a time-limited lease (default
-five minutes), renewing while the handler runs. A fulfilled handler leads to
-acknowledgement/deletion; rejection releases it for retry. A crashed receiver
-leaves a recoverable row once the lease expires and another drain occurs.
-This supports retries and competing receivers, but is not a transactional
-exactly-once guarantee across the receiver's database write and mailbox deletion.
-Handlers must return their completion promise and reject failed delivery.
+| Module | Owns |
+| --- | --- |
+| `repos.js` | `files` / `blobs` / `thumbs`, `documents`, `tools`, `photos`, `ros`, `links`, `jobs`, `settings`, `log`: the same verbs everywhere, `rev` on every write and `expectedRev` checks (`RevConflict`), commit = transaction complete, `<store>:changed` on the bus after each commit; blobs immutable with their `sha256`; an LI document's PDF is a `files` record (`inFiles 0`, `docId`); `ros.roKey` unique (`RoConflict`) |
+| `bus.js` | `emit`/`on` on an `EventTarget` mirrored over `BroadcastChannel("file-database")`; `detail.remote` marks events from another context |
+| `jobs.js` | `enqueue`, `register` (runs a type's queue in this page under `navigator.locks`), heartbeat, cancel, retry up to 5, stale requeue, `whenDone` |
+| `intake.js` | `ingest(target, files, opts)`: eager read, store with verification, per-file results, then the follow-up job (`thumb` + `vin-detect` for Files, `li-import`, `toolbox-intake`) and an RO `attachment` link when `roId` is given |
+| `backup.js` | `collect()` → one `.fdb` ([src/core/formats/fdb.js](src/core/formats/fdb.js), magic `FDBK`); `restore()` into a new generation, verified, then the pointer flips and the old generation is deleted |
+| `migrate.js` | `status()` / `run()`: `file-vault`, `LIDocsDB`, `tool-inventory`, `repair-orders` → one generation; files in an RO's collection become links; colliding RO numbers keep the older record's key |
 
-Wakeups occur on send/registration, BroadcastChannel messages, and window focus.
-A 2.5-second polling fallback runs only when BroadcastChannel is unavailable.
-Failed handlers schedule bounded delayed retries; expiry alone is not a universal
-background timer guaranteeing immediate crash recovery.
+Jobs today: `thumb`, `vin-detect` (the quick, OCR-free read on arrival) and
+`vin-scan` (the manual scan) run in the Files app; `li-import` in LI Documents;
+`toolbox-intake` in the Toolbox. The shell loads the app that runs a queued job.
 
 ### Shell message families
 
@@ -375,7 +382,7 @@ background timer guaranteeing immediate crash recovery.
 | `shell-nav {app, tab?, payload?}` | App → shell | Activate app and forward optional payload |
 | `shell-relay {app, payload}` | App → shell | Load target and forward without switching |
 | `vault-nav {to:"files"}` | LI → shell | Legacy Vault navigation |
-| `shell-add-files {files, collection?, vin?, stay?}` | App → shell | Unified file intake |
+| `shell-add-files {files, collection?, vin?, roId?, stay?}` | App → shell | Unified file intake |
 | `shell-open-picker` | App → shell | Open top-bar picker |
 | `shell-toast {app, msg}`, `li-changed` | App → shell | Notifications/badge refresh |
 | `shell-switch {n}`, `shell-quickopen`, `shell-pin-vehicle {vin}` | App → shell | Keyboard/navigation/vehicle context |
@@ -385,7 +392,7 @@ background timer guaranteeing immediate crash recovery.
 | `li-open`, `li-search`, `li-filter`, `li-restore` | Shell → LI | Document navigation, filters, backup restore |
 | `inventory-open`, `inventory-search`, `inventory-filter`, `inventory-import` | Shell → Inventory | Catalog navigation/import |
 | `vault-filter`, `vault-search`, `vault-restore` | Shell → Vault | Navigation/import |
-| `vault-ro-import`, `vault-ro-apply`, `vault-rename-collection` | Shell → Vault | RO selection, VIN/attachment updates, collection rename |
+| `vault-ro-import` | Shell → Vault | RO "select in Files" mode |
 | `shell-nav {id}` | Shell → RO | Open RO after Vault selection workflow |
 
 The shell queues messages until iframe load; Vault/LI/Inventory also queue their
@@ -396,17 +403,21 @@ current listeners must not be described as enforcing sender-origin validation.
 
 | Store/key | Owner | Contents |
 | --- | --- | --- |
-| IndexedDB `file-vault`: `files`, `meta` | Vault | File records/Blobs/thumbnails; preferences, collections, folder settings |
-| IndexedDB `LIDocsDB`: `docs`, `files`, `settings` | LI | Parsed records, PDFs, autosave/folder handles and flags |
-| IndexedDB `tool-inventory`: `tools`, `photos`, `meta` | Inventory | Catalog, edits/stars, photo Blobs, source metadata |
-| IndexedDB `repair-orders`: `ros` | RO | RO fields, collection string, story lines, timestamps |
-| IndexedDB `vault-bridge`: `outbox` | Bridge | Pending files, claims/leases, attempt state |
+| IndexedDB `file-database-<n>`: `files`, `blobs`, `thumbs` | Files (and LI for its PDFs) | Metadata (`inFiles`, `collection`, `tags`, `vins`, `docId`, `rev`…), immutable bytes with `sha256`, previews |
+| `documents` | LI | Parsed records with `fileId` |
+| `tools`, `photos` | Inventory | Catalog, edits/stars, photo Blobs |
+| `ros`, `links` | RO | RO fields and story lines; typed relations (`ro → file attachment`) |
+| `jobs` | every app | Queued/running/done work with progress and attempts |
+| `settings` | every app | `vault.*`, `li.*`, `inventory.*`, `migration`, `backup.restored` (folder handles included; not exported) |
+| `log` | (reserved) | The logger still writes `fv-debug` until Phase 3 |
 | IndexedDB `fv-debug`: `entries` | Logger | Local error/warning/app entries |
+| localStorage `fdb.generation` | Data layer | The live generation's name |
 | localStorage `fv-theme` | Shell / standalone Vault | Light/dark; absent means system |
 | localStorage `fd-app`, `fd-vehicle` | Shell | Last tab and pinned VIN/series |
 
 These are origin/profile scoped for hosted use. `file://` behavior depends on the
-browser and launcher configuration. App paths do not isolate databases on one origin.
+browser and launcher configuration. Every page on the origin opens the same
+generation; the standalone app pages remain until Phase 4 and share it.
 
 ### Theme and debug log
 
@@ -437,16 +448,17 @@ checks in `tests/` prove it.
 | `li-parse.js` | lines from PDF.js items, title and field extraction, renamed filename, `buildRecord()` | LI, Toolbox |
 | `vin.js` | the VIN/FIN classifier (`findVinsDetailed`), the ISO 3779 check digit, model year from a VIN | Vault, Repair Orders |
 | `ro-parse.js` | the RO scan parser: `parseScan`, `layoutLines`, DISPATCH screens, cell spans, the VIN sweep, rows from a text layer or a recognized page | Repair Orders |
-| `formats/` | `container.js` (magic + version + JSON + payloads), `zip.js`, `fvault.js` (strict and loose readers, legacy JSON), `tidb.js`, `lidb.js` | Vault, Extract |
+| `hash.js` | SHA-256 of a Blob/bytes/string: WebCrypto up to 256 MiB, a streaming JS implementation above | every page |
+| `formats/` | `container.js` (magic + version + JSON + payloads), `zip.js`, `fvault.js` (strict and loose readers, legacy JSON), `tidb.js`, `lidb.js`, `fdb.js` (the whole-platform backup, strict) | every page (`fdb`), Vault, Extract |
 
 ## 11. Offline assets and network dependencies
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| Platform root | [sw.js](sw.js) | `platform-shell-v18`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
-| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v30` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
-| LI | [li/sw.js](li/sw.js) | `li-db-shell-v3`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
-| Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v9` | App-shell precache; network-first navigation; cache-first assets |
+| Platform root | [sw.js](sw.js) | `platform-shell-v21`, `platform-runtime-v1` | Required shell core; tolerant extras including Toolbox, RO, Extract; network-first navigation and cache-first assets; skips Vault/LI/Inventory paths |
+| Vault | [vault/sw.js](vault/sw.js) | `vault-app-v33` | Required app core, tolerant shared scripts/icons; network-first navigation; same-origin assets cached on use, including lazy PDF.js |
+| LI | [li/sw.js](li/sw.js) | `li-db-shell-v6`, `li-db-runtime-v1` | Tolerant precache; network-first navigation; same-origin assets and OCR hosts cached with background refresh |
+| Inventory | [inventory/sw.js](inventory/sw.js) | `tool-inventory-v11` | App-shell precache; network-first navigation; cache-first assets |
 
 Workers prune their own cache prefixes; the root also removes old pre-platform
 `file-vault-*` caches. User databases are not stored in service-worker caches.
@@ -466,26 +478,29 @@ coordinates to OpenStreetMap. There is no application file-upload backend.
 ## 11. Build and test map
 
 [package.json](package.json) declares dev dependencies `playwright@1.56.1`,
-`pdfjs-dist@4.2.67`, and `esbuild@0.25.5`. The checked-in site needs no application
+`pdfjs-dist@4.2.67`, `esbuild@0.25.5` and `fake-indexeddb@6.2.5` (the data layer's
+Node tests). The checked-in site needs no application
 build. [build-portable.mjs](tools/build-portable.mjs) copies runtime assets and
 builds the catalog; it omits RO and deletes/recreates `dist-portable/`.
 See the README and [portable guide](portable/START-HERE.txt) for launcher limits.
 
-`npm test` runs static, binary-backup, and Blob-integrity checks, then
-[run-e2e.mjs](tools/run-e2e.mjs). E2E discovery uses Git-tracked `tools/e2e*.mjs`,
-excluding the browser helper, sorts the list, and stops at the first failure.
-There are currently **21 browser suites**. Git metadata, Node/npm, Python 3, and
+`npm test` runs the static, unit (`tests/unit/`, incl. the data layer), LI-number,
+binary-backup and Blob-integrity checks, then [run-e2e.mjs](tools/run-e2e.mjs).
+E2E discovery uses Git-tracked `tools/e2e*.mjs`, excluding the browser and
+database helpers, sorts the list, and stops at the first failure. There are
+currently **25 browser suites**; they read and seed the shared database through
+[tools/e2e-db.mjs](tools/e2e-db.mjs). Git metadata, Node/npm, Python 3, and
 Playwright-managed Chromium are required for the full workflow.
 
 | Suite under `tools/` | Coverage focus |
 | --- | --- |
 | `e2e.mjs` | Vault standalone CRUD, search/organization, export/import, theme, PWA behavior |
-| `e2e-bridge.mjs` | Lease/ack persistence, in-flight arrivals, retries, receiver crashes, competing receivers |
 | `e2e-bulk.mjs` | Multi-selection, bulk metadata/actions, batched Toolbox delivery |
 | `e2e-debug.mjs` | Logger capture, persistence, viewer, clearing, shared shell log |
 | `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, backups, toasts, catalog offer |
 | `e2e-inventory.mjs` | Empty start, fixture `.tidb`, photos, filters, edits, import/export, embedding |
-| `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs |
+| `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs over the shared database |
+| `e2e-migrate.mjs` | First-launch migration of a profile seeded with all four legacy databases: dialog, verify, `.fdb` offer, deletion, every app reading the result; a forced verification failure leaving everything untouched |
 | `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
 | `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
 | `e2e-portable.mjs` | Build, local-file shell/Vault/Inventory, catalog offer, same-path profile restart; clears generated data |

@@ -389,7 +389,7 @@ constant defined outside the function that used it).
 Acceptance: `git grep -c "\\d{2}\\.\\d{2}-\\[A-Z\\]-"` returns one file; golden tests
 pass; the existing E2E suite passes unchanged.
 
-### Phase 2 — Unify the data layer · L (the risky one)
+### Phase 2 — Unify the data layer · L (the risky one) — **done**
 
 Goal: every app reads and writes `file-database` through `src/data/repos/*`; the
 bridge, the peeks and the RO polling are gone. Apps still run in iframes.
@@ -419,6 +419,34 @@ opens with identical counts and hashes and the legacy DBs are gone afterwards;
 a migration whose verification is made to fail leaves the legacy DBs and the
 old pointer untouched; RO attach completes without polling; E2E suites that
 opened legacy DB names are updated to `file-database` (16 suites, search/replace).
+
+Done as written, with these notes:
+
+- `src/data/` is classic scripts on `window.FDData` (like `src/core/` — the pages
+  still load classic `<script>` tags; Phase 4 adds `export`s), in one file per
+  concern: `schema.js`, `db.js`, `bus.js`, `repos.js`, `jobs.js`, `intake.js`,
+  `backup.js`, `migrate.js`, `boot.js`, plus `src/ui/migrate-dialog.js`. Every
+  page calls `FDData.boot()` first; on a profile with legacy data that shows the
+  migration dialog before any frame opens the database.
+- The apps keep their own verbs as thin adapters over the repos (`vault/db.js`
+  is now that adapter; LI, Inventory and RO wrap the repos inline), so the
+  Phase 3 de-inlining moves code, not behaviour.
+- Blobs are hashed on ingest (`src/core/hash.js`: WebCrypto up to 256 MiB, a
+  streaming JS SHA-256 above) and the write is verified by re-reading; `.fdb`
+  (`src/core/formats/fdb.js`, magic `FDBK`) is the one backup and restores into
+  a new generation. The Extract page reads it.
+- An LI document's PDF is a `files` record with `inFiles 0` (hidden from the
+  Files app) and `docId`; "Add to File Vault" flips `inFiles` on the same
+  record. "Send to LI" from Files enqueues an `li-import` job on the existing
+  record — no second copy of the bytes anywhere.
+- Jobs: `thumb`, `vin-detect`, `vin-scan` run in the Files app; `li-import` in
+  LI; `toolbox-intake` in the Toolbox. The shell loads the app that runs a
+  queued job, and jobs left running by a dead page are requeued on boot.
+- Legacy RO numbers that collide are both kept: the older keeps the unique key,
+  the newer carries `roConflict` and a warning in `settings.migration`.
+- Not moved yet: `debug.js` still writes `fv-debug` (the `log` store exists for
+  Phase 3), and the standalone app pages remain until Phase 4 (they open the
+  shared database too).
 
 ### Phase 3 — De-inline the single-file apps · M
 
