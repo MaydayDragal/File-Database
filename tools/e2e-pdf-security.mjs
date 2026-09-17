@@ -45,7 +45,7 @@ await page.waitForTimeout(400);
 // 1) The vendored library reports the pinned major/version and disables eval.
 const info = await page.evaluate(async () => {
   const s = document.createElement("script");
-  s.src = "vendor/pdf.min.js";
+  s.src = "../vendor/pdf.min.js";
   await new Promise((res, rej) => { s.onload = res; s.onerror = rej; document.head.appendChild(s); });
   const lib = await Promise.resolve(window.pdfjsLibPromise || window.pdfjsLib);
   return { version: (lib || window.pdfjsLib).version };
@@ -58,7 +58,7 @@ check(info.version === "4.2.67", "vendored PDF.js is pinned at 4.2.67");
 //    only when isEvalSupported:false is honored by the parser.
 const outcome = await page.evaluate(async () => {
   const lib = await Promise.resolve(window.pdfjsLibPromise || window.pdfjsLib) || window.pdfjsLib;
-  lib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+  lib.GlobalWorkerOptions.workerSrc = "../vendor/pdf.worker.min.js";
   // valid %PDF- header, then bytes that are not a real cross-reference table
   const bad = new TextEncoder().encode("%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\n%%garbage%%\n");
   try {

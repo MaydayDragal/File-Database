@@ -404,7 +404,12 @@
     return rows.filter(function (r) { return r.some(function (c) { return c.trim() !== ""; }); });
   }
   function importCSV(file) {
-    file.text().then(function (txt) {
+    // Same re-entrancy guard as importDb(): a CSV merge that overlaps a
+    // database load (or another CSV) would interleave its puts with the
+    // clear→put chain and leave a mix of both.
+    if (importingDb) { toast("An import is already running — wait for it to finish."); return Promise.resolve(); }
+    importingDb = true;
+    return file.text().then(function (txt) {
       var rows = parseCSV(txt);
       if (rows.length < 2) { toast("CSV looks empty."); return; }
       var hi = 0;
@@ -434,8 +439,9 @@
         if (ex) { for (var kk in rec) if (rec[kk] !== "" && rec[kk] != null) ex[kk] = rec[kk]; toPut.push(ex); updated++; }
         else { rec.id = "t" + (++maxIdN); rec.star = false; var nn = normalize(rec, maxIdN); all.push(nn); byId[nn.id] = nn; byTool[tn] = nn; toPut.push(nn); added++; }
       }
-      putMany(toPut).then(function () { fillFilters(); apply(); updateSub(); toast("Imported CSV: " + added + " added, " + updated + " updated."); });
-    });
+      return putMany(toPut).then(function () { fillFilters(); apply(); updateSub(); toast("Imported CSV: " + added + " added, " + updated + " updated."); });
+    }).catch(function (e) { console.error(e); toast("Couldn't import that CSV."); })
+      .finally(function () { importingDb = false; });
   }
   function exportCSV() {
     if (!view.length) { toast("Nothing to export."); return; }

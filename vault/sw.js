@@ -5,7 +5,7 @@
  * is NOT handled here — that lives in IndexedDB and never touches the cache
  * or the network.
  */
-const CACHE = "vault-app-v33";
+const CACHE = "vault-app-v34";
 // Required for the app to boot offline — the install fails (and retries) if
 // any of these can't be cached.
 const CORE = [
@@ -39,6 +39,11 @@ const EXTRAS = [
   "../src/data/migrate.js",
   "../src/data/boot.js",
   "../src/ui/migrate-dialog.js",
+  "../src/services/vendor.js",
+  "../src/services/pdf.js",
+  "../src/services/ocr.js",
+  "../src/services/thumbs.js",
+  "../src/services/folder-sync.js",
   "./manifest.webmanifest",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",

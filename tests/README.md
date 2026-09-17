@@ -8,7 +8,10 @@ Two layers, both run by `npm test` and by CI (`.github/workflows/qa.yml`):
 | Browser | `npm run test:e2e` | Playwright Chromium | `tools/e2e-*.mjs`, one suite per feature or flow |
 
 `tools/test-*.mjs` are the older Node checks (static policy, backup format,
-blob integrity, LI number) and stay as they are.
+blob integrity, LI number) and stay as they are. The static policy also refuses
+any source file over 300 KB outside `vendor/`, so a library can never be inlined
+into a page again; `node tools/vendor-pdfjs.mjs --check` verifies the vendored
+runtimes themselves.
 
 ## Data layer checks
 

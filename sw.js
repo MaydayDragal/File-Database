@@ -1,7 +1,7 @@
 /* File Database platform shell service worker — offline shell + toolbox.
    The vault, LI and inventory apps register their own service workers for
    their own folders; this one deliberately skips their paths. */
-const CACHE = "platform-shell-v21";
+const CACHE = "platform-shell-v22";
 // The text-recognition engine the Repair Orders scanner downloads on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see loadTess() in ros/index.html). Their files
@@ -14,8 +14,8 @@ const CORE = [
   "./shell.css",
   "./shell.js",
 ];
-// …while these are nice-to-have offline (the 2.3 MB toolbox page especially
-// must not be able to fail the whole install on a flaky connection).
+// …while these are nice-to-have offline (the vendored PDF.js and pdf-lib
+// especially must not be able to fail the whole install on a flaky connection).
 const EXTRAS = [
   "./debug.js",
   "./ocr.js",
@@ -41,10 +41,35 @@ const EXTRAS = [
   "./src/data/migrate.js",
   "./src/data/boot.js",
   "./src/ui/migrate-dialog.js",
+  "./src/services/vendor.js",
+  "./src/services/pdf.js",
+  "./src/services/ocr.js",
+  "./src/services/thumbs.js",
+  "./src/services/folder-sync.js",
+  "./vendor/pdf.min.js",
+  "./vendor/pdf.worker.min.js",
+  "./vendor/jszip.min.js",
+  "./vendor/pdf-lib.min.js",
   "./viewer.html",
+  "./viewer.css",
+  "./viewer.js",
   "./manifest.webmanifest",
   "./toolbox/index.html",
+  "./toolbox/styles.css",
+  "./toolbox/app.js",
+  "./toolbox/tools/zip.js",
+  "./toolbox/tools/media.js",
+  "./toolbox/tools/ocr.js",
+  "./toolbox/tools/convert.js",
+  "./toolbox/tools/elec.js",
+  "./toolbox/tools/text.js",
+  "./toolbox/tools/calc.js",
+  "./toolbox/tools/csv.js",
+  "./toolbox/tools/img.js",
+  "./toolbox/tools/pdf.js",
   "./ros/index.html",
+  "./ros/styles.css",
+  "./ros/app.js",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
