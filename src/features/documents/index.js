@@ -1,5 +1,5 @@
 /* LI Documents — feature entry (REWRITE-PLAN.md Phase 4 / §3.1). */
-import { mountInto } from "../index.js";
+import { mountInto } from "../mount.js";
 import markup from "./markup.js";
 import { start } from "./app.js";
 

@@ -999,10 +999,13 @@ export function start(root, host, shell) {
   function boot() {
     wire();
     open().then(function () {
-      // Changes from other contexts (the Files app moving a file to an RO,
-      // another tab editing) refresh what is on screen.
+      // Changes from elsewhere refresh what is on screen. Files and links are
+      // written by the Files feature on the same page too (moving a file to an
+      // RO, renaming, deleting), so every such event refreshes the attachment
+      // list; RO records are only ever written here, so for those only another
+      // tab's edits count (a reload mid-typing would clobber the field).
       var filesT = null, rosT = null;
-      function onFiles(d) { if (!d.remote) return; clearTimeout(filesT); filesT = setTimeout(refreshFiles, 200); }
+      function onFiles(d) { clearTimeout(filesT); filesT = setTimeout(refreshFiles, 200); }
       FDData.bus.on("files:changed", onFiles);
       FDData.bus.on("links:changed", onFiles);
       FDData.bus.on("ros:changed", function (d) {
