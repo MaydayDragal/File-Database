@@ -1,12 +1,12 @@
 /*
  * fdb.js — the File Database backup: ONE file for everything the platform
- * stores (files, LI documents, tools, repair orders, links, settings) plus
+ * stores (files, LI documents, tools, repair orders, links, vehicles, settings) plus
  * every stored blob, thumbnail and photo.
  *
  * Layout is the shared container (container.js): "FDBK" + u32 version (1) +
  * u32 metaLen + JSON + payload bytes back to back. The JSON is
  *   { format: "file-database", version: 1, exportedAt, generation,
- *     records: { files:[…], documents:[…], tools:[…], ros:[…], links:[…], settings:[…] },
+ *     records: { files:[…], documents:[…], tools:[…], ros:[…], links:[…], vehicles:[…], settings:[…] },
  *     payloads: [ { store: "blobs"|"thumbs"|"photos", id, len, type, sha256? }, … ] }
  * and the payload bytes follow in the order of `payloads`. Like the .fvault
  * validator (fvault.js parseBinary), parse() checks the WHOLE file before
@@ -24,7 +24,8 @@
   var MAGIC = "FDBK";
   var VERSION = 1;
   var FORMAT = "file-database";
-  var RECORD_STORES = ["files", "documents", "tools", "ros", "links", "settings"];
+  // vehicles joined in Phase 5; a backup made before then simply has none.
+  var RECORD_STORES = ["files", "documents", "tools", "ros", "links", "vehicles", "settings"];
   var PAYLOAD_STORES = ["blobs", "thumbs", "photos"];
 
   function isNonNegInt(n) { return typeof n === "number" && isFinite(n) && n >= 0 && Math.floor(n) === n; }

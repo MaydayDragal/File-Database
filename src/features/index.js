@@ -11,15 +11,18 @@
  *                                  FEATURES.md §9), and optionally
  *                                  dropContext() and intake(files)
  * `load` imports the module on first use, so a tab that is never opened
- * costs nothing. Adding a seventh tab is one folder plus one line here (and
+ * costs nothing. `search` (optional) imports the feature's quick-open
+ * provider — search(q, { repos, limit }) → rows { icon, label, detail,
+ * app, msg } — a small module of its own, so Ctrl+K searching every store
+ * never loads a feature's UI. Adding a seventh tab is one folder plus one line here (and
  * its <section> + tab button in index.html).
  */
 export const FEATURES = [
-  { key: "vault",     title: "Files",          load: () => import("./files/index.js") },
-  { key: "li",        title: "LI Documents",   load: () => import("./documents/index.js") },
-  { key: "inventory", title: "Tool Inventory", load: () => import("./inventory/index.js") },
+  { key: "vault",     title: "Files",          load: () => import("./files/index.js"),     search: () => import("./files/search.js") },
+  { key: "li",        title: "LI Documents",   load: () => import("./documents/index.js"), search: () => import("./documents/search.js") },
+  { key: "inventory", title: "Tool Inventory", load: () => import("./inventory/index.js"), search: () => import("./inventory/search.js") },
   { key: "toolbox",   title: "Toolbox",        load: () => import("./toolbox/index.js") },
-  { key: "ros",       title: "Repair Orders",  load: () => import("./ros/index.js") },
+  { key: "ros",       title: "Repair Orders",  load: () => import("./ros/index.js"),       search: () => import("./ros/search.js") },
   { key: "viewer",    title: "Extract",        load: () => import("./extract/index.js") },
 ];
 

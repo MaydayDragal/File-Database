@@ -413,3 +413,11 @@ kbd {
 
 /* The feature fills its panel (src/features/index.js mounts it into a shadow root). */
 .fd-root { flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; outline: none; }
+
+/* Trash view (Phase 5): the bulk bar swaps to Restore / Delete forever. */
+.bulkbar .bulkbar__trash { display: none; }
+.bulkbar.is-trash .bulkbar__trash { display: inline-flex; }
+.bulkbar.is-trash > .btn:not(.bulkbar__trash):not(#bulk-all):not(#bulk-clear),
+.bulkbar.is-trash > .bulkbar__sep { display: none; }
+.detail.is-trashed .detail__trashnote { display: block; }
+.detail__trashnote { display: none; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg-sunken); font-size: 13px; }

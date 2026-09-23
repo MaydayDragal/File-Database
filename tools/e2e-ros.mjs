@@ -1,16 +1,18 @@
 // End-to-end test for the Repair Orders (ROs) tab:
 //  - create/persist an RO with multiple story LINES (Line A, Line B…)
-//  - attach files that are saved into the Vault under the RO's collection
+//  - attach files: saved in Files and linked to the RO (ro → file,
+//    "attachment") — no collection string (Phase 5)
 //  - importing existing Vault files into an RO
 //  - VIN auto-fill: files with no VIN get the RO's VIN stamped on
 //  - VIN mismatch prompt: a file whose VIN differs can be Added anyway or Ignored
-//  - editing the RO number migrates the collection; open-in-Vault filters Files
+//  - renumbering the RO touches the RO record alone; open-in-Files lists the
+//    RO's files by its links
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchBrowser } from "./e2e-browser.mjs";
-import { vaultFiles } from "./e2e-db.mjs";
+import { vaultFiles, fdbAll } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -51,6 +53,10 @@ page.on("dialog", (d) => { if (nextDialog === "dismiss") d.dismiss(); else d.acc
 // Read all vault files (id, name, vins, collection) from the page context.
 const vaultAll = async () => (await vaultFiles(page)).map((x) => ({ id: x.id, name: x.name, vins: x.vins || [], collection: x.collection || "" }));
 const fileByName = async (n) => (await vaultAll()).find((f) => f.name === n) || null;
+// The files linked to the open repair order.
+const roId = async () => page.evaluate(() => window.__ros.current && window.__ros.current.id);
+const attachedIds = async () => { const id = await roId(); return (await fdbAll(page, "links")).filter((l) => l.fromType === "ro" && l.fromId === id && l.kind === "attachment" && l.toType === "file").map((l) => l.toId); };
+const isAttached = async (name) => { const f = await fileByName(name); return !!(f && (await attachedIds()).includes(f.id)); };
 
 // ---------- Phase A: standalone — RO + multiple story lines ----------
 await page.goto(base + "#ros", { waitUntil: "load" });
@@ -95,12 +101,12 @@ async function frontDoor(name, content) {
   await page.waitForTimeout(200);
 }
 
-// (1) Upload a no-VIN file directly to the RO → it lands in the collection and
-//     gets the RO's VIN stamped on (auto-fill).
+// (1) Upload a no-VIN file directly to the RO → it is linked to the RO and
+//     gets the RO's VIN stamped on (auto-fill). No collection is invented.
 await ro.locator("#file-input").setInputFiles(write("ro-invoice.txt", "parts invoice for the repair order"));
 const autofilled = await waitFor(async () => {
   const f = await fileByName("ro-invoice.txt");
-  return f && f.collection === "RO 7654321" && f.vins.includes(RO_VIN);
+  return f && f.collection === "" && f.vins.includes(RO_VIN) && (await isAttached("ro-invoice.txt"));
 }, 15000);
 check(autofilled, "an uploaded file with no VIN is saved to the RO and stamped with the RO's VIN");
 
@@ -130,7 +136,7 @@ check(await waitFor(async () => (await vaultF.locator("#bulk-add-ro").count()) =
 await importIntoRO("spare-note.txt", null);
 const imported = await waitFor(async () => {
   const f = await fileByName("spare-note.txt");
-  return f && f.collection === "RO 7654321" && f.vins.includes(RO_VIN);
+  return f && f.vins.includes(RO_VIN) && (await isAttached("spare-note.txt"));
 }, 12000);
 check(imported, "selecting a no-VIN file in the Vault and clicking ‘Add to RO’ assigns it and stamps the RO VIN");
 
@@ -140,7 +146,7 @@ await waitFor(async () => { const f = await fileByName("othercar.txt"); return f
 await importIntoRO("othercar.txt", "accept");
 const added = await waitFor(async () => {
   const f = await fileByName("othercar.txt");
-  return f && f.collection === "RO 7654321" && f.vins.includes(OTHER_VIN) && !f.vins.includes(RO_VIN);
+  return f && f.vins.includes(OTHER_VIN) && !f.vins.includes(RO_VIN) && (await isAttached("othercar.txt"));
 }, 12000);
 check(added, "a mismatched VIN prompts, and ‘Add anyway’ adds it keeping its own VIN");
 
@@ -149,25 +155,26 @@ await frontDoor("thirdcar.txt", "notes for VIN " + THIRD_VIN + " elsewhere");
 await waitFor(async () => { const f = await fileByName("thirdcar.txt"); return f && f.vins.includes(THIRD_VIN); });
 await importIntoRO("thirdcar.txt", "dismiss");
 await page.waitForTimeout(800);
-const ignored = await (async () => { const f = await fileByName("thirdcar.txt"); return f && f.collection !== "RO 7654321"; })();
+const ignored = await (async () => { const f = await fileByName("thirdcar.txt"); return f && !(await isAttached("thirdcar.txt")); })();
 check(ignored, "choosing ‘Ignore’ (Cancel) leaves the mismatched file out of the RO");
 
 // The RO's file list now shows the three kept files (invoice, spare, othercar).
 check(await waitFor(async () => (await ro.locator("#files .file").count()) === 3), "the RO lists its three attached files");
 
-// ---------- rename migration + open in Vault ----------
+// ---------- renumber (the RO record alone) + open in Files ----------
+const before = JSON.stringify((await fdbAll(page, "files")).map((f) => [f.id, f.rev, f.collection, f.updatedAt]).sort());
 await ro.locator("#ro-no").fill("7654399");
 await page.waitForTimeout(1000);
-const migrated = await waitFor(async () => {
-  const all = await vaultAll();
-  return all.filter((f) => f.collection === "RO 7654399").length === 3 && all.filter((f) => f.collection === "RO 7654321").length === 0;
-}, 12000);
-check(migrated, "editing the RO number moves all its files to the new collection");
+const renumbered = await waitFor(async () => (await fdbAll(page, "ros")).some((r) => r.ro === "7654399"), 8000);
+const after = JSON.stringify((await fdbAll(page, "files")).map((f) => [f.id, f.rev, f.collection, f.updatedAt]).sort());
+check(renumbered && before === after, "renumbering the RO writes the RO alone — no file record changes");
+check((await attachedIds()).length === 3 && (await ro.locator("#files .file").count()) === 3, "its three files are still attached after the renumber");
 await ro.locator("#open-vault-btn").click();
 await page.waitForTimeout(700);
-check(await page.locator("#tab-vault.is-active").count() === 1, "Open in Vault switches to Files");
+check(await page.locator("#tab-vault.is-active").count() === 1, "Open in Files switches to Files");
 const vault = page.locator("#view-vault");
-check(/RO 7654399/.test((await vault.locator("#view-title").textContent()) || ""), "Files is filtered to the RO's collection");
+check(/RO 7654399/.test((await vault.locator("#view-title").textContent()) || ""), "Files shows the RO's files under its new number");
+check(await waitFor(async () => (await vault.locator(".card").count()) === 3), "…exactly the three attached files (by link)");
 
 console.log(errors.length ? "\nErrors:\n" + errors.join("\n") : "\nNo page errors.");
 check(errors.length === 0, "no page errors");

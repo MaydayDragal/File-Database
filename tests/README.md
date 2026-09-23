@@ -33,9 +33,13 @@ names every file under `src/`, so nothing can load online and be missing offline
 | `data-intake.test.mjs` | routing, per-target records and jobs, RO links, unreadable files |
 | `data-backup.test.mjs` | `.fdb` collect → restore into a new generation, failed verification, a tampered blob |
 | `data-migrate.test.mjs` | the four legacy databases → one generation: counts, hashes, shapes, D7 duplicates, a failed verification, `boot()` |
+| `data-phase5.test.mjs` | the unified model in use (Phase 5): trash and reference-checked purge, shared bytes (`blobId`) that outlive either record, duplicate review in the intake, one file on two ROs and a renumber that touches no file, the RO delete modes and RO purge, pinned LI versions and tools with the newer-version check, vehicles (check digit, confirmation, `summary`), a backup round trip with ROs/links/vehicles/trash/shared bytes, a pre-Phase-5 backup, the schema v1 → v2 upgrade in place |
+| `feature-search.test.mjs` | each feature's quick-open `search` export against the shared database (trash and hidden records left out) |
 
 The browser side of the same seam is `tools/e2e-migrate.mjs` (the first-launch
-dialog on a seeded profile, and a forced verification failure).
+dialog on a seeded profile, and a forced verification failure), and
+`tools/e2e-phase5.mjs` for the Phase 5 flows (trash, duplicates, RO links and
+pins, the vehicle view, quick-open, one backup restored).
 
 ## Golden checks
 

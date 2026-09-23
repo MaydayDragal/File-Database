@@ -64,16 +64,35 @@ backup can always get the files back out; the other per-app pages are gone
 - A pinned active vehicle (`fd-vehicle`). Vault filters by VIN. LI/Inventory scope
   by the three characters at positions 4–6 only if they are all digits. There is
   no external VIN decoder. Unpinning clears these scopes.
+- The **vehicle view** ([src/shell/vehicle.js](src/shell/vehicle.js), route
+  `#vehicle/<VIN>`): everything about one car from one query
+  (`vehicles.summary`) — its record (check-digit verdict, a technician's
+  confirmation, where it was seen), its live files and repair orders, and the
+  LI documents and special tools that fit its model series, each linking into
+  its feature; **✓ Confirm VIN** and **Pin** from the view. Opened from
+  quick-open, a file's or an RO's 🚗 button, or the address bar.
 - Ctrl/Cmd+K recognition of LI numbers, special-tool numbers, and 17-character
-  VINs; arbitrary text offers searches in Vault, LI, and Inventory.
+  VINs (with **Vehicle <VIN>** for the vehicle view), plus the matching records
+  from every store: each feature's `search` export
+  ([src/features/*/search.js](src/features/), loaded without the feature's UI)
+  answers files by name/collection/tags/VIN, LI documents by number/title (one
+  row per number, its newest version), tools by number/description, and repair
+  orders by number/VIN/customer/story text; recorded vehicles are listed too.
+  Arbitrary text still offers a search inside Vault, LI, and Inventory.
 - Alt+1–6 app switching from anywhere on the page. `/` search belongs to the
   Vault, LI, and Inventory handlers (each listens on its own shadow root, so a
   shortcut acts only when the focus is inside that feature); the shell focuses
   the feature's panel on activation unless the user is already typing.
-- **Back up everything** downloads one `.fdb` with every store (files, LI
-  documents, tools, repair orders, links, plain-data settings) and then sends
-  `platform-backup` to Vault, LI, and Inventory at 1.2-second offsets for the
-  per-app formats. Folder handles, jobs and the log are excluded.
+- **Back up everything** is one download: a `.fdb` with every store (files, LI
+  documents, tools, repair orders, links, vehicles, the trash, plain-data
+  settings) and every blob's SHA-256 in its manifest; dropping it back in is
+  one restore into a new database generation. Folder handles, jobs and the log
+  are excluded. Each app's own export stays in that app's menu.
+- Exact-duplicate review on intake ([src/ui/duplicates.js](src/ui/duplicates.js)):
+  a file whose bytes are already stored (a `blobs.sha256` match — never a name
+  or size guess) is shown with the record it matches, before anything is
+  written: **reuse** the stored bytes (a new record, no second copy), **keep** a
+  second copy, or **skip**. Closing the dialog keeps both.
 - Install prompting when offered by the browser, platform service-worker
   registration on HTTPS/loopback, and refresh handling for worker updates.
 
@@ -90,12 +109,13 @@ backup can always get the files back out; the other per-app pages are gone
 | `#inventory/<tool number>`, `#inventory/tool/<tool number>` | Open tool |
 | `#inventory/search/<query>` | Catalog search |
 | `#vault/vin/<VIN>`, `#vault/search/<query>` | Vehicle filter or metadata search |
+| `#vehicle/<VIN>` | The vehicle view, over the last-used app |
+| `#ros/<RO id>` | Open that repair order |
 | `?view=li`, `?view=inventory` | Legacy app selection |
 | `?view=starred`, `?action=add` | Legacy PWA shortcuts: the starred filter, the platform's file picker |
 
 Consumed queries are removed. Hash changes route in place. Links resolve against
-local browser data; sharing a link does not share its document. RO has a tab route
-but no implemented record-ID hash router.
+local browser data; sharing a link does not share its document.
 
 ## 3. File Vault
 
@@ -112,9 +132,12 @@ classifier [src/core/vin.js](src/core/vin.js) (see §10).
 | Thumbnails | Canvas images, video frame grabs, first-page PDF.js renders ([src/services/thumbs.js](src/services/thumbs.js)), made by `thumb` jobs this app runs (queued by the intake, and on boot for PDFs without one) |
 | Preview | Image/video/audio, native PDF iframe, text up to 512 KiB, fallback icon for unsupported types |
 | Organization | One collection per file, tags, note, star, editable filename, VINs and FINs |
-| Search/filter | Metadata search; type/collection/tag/VIN filters; All, Starred, Recent, By VIN; active-filter chips |
+| Search/filter | Metadata search; type/collection/tag/VIN filters; All, Starred, Recent, By VIN, Trash; a repair order's files (`ro:<id>`, by its links — a drop there attaches to it); active-filter chips |
+| Trash | Delete moves files to the trash (`deletedAt`; bytes and links kept, hidden everywhere else); the Trash view restores or deletes for good, one by one, in bulk, or **Empty trash**; a file a repair order or an LI document still uses is refused and stays |
+| Duplicates | Adding bytes that are already stored opens the duplicate review (§2) |
+| Related | A file's detail links to the LI document named in its tags, its model's LI documents and tools, the vehicle view, and every repair order it is attached to |
 | Sort/view | Date, name, size; grid/list saved in DB metadata |
-| Selection | Checkboxes, Ctrl/Cmd-click, Shift-click ranges, select-all, Escape; collection/tag/VIN/star/delete bulk actions |
+| Selection | Checkboxes, Ctrl/Cmd-click, Shift-click ranges, select-all, Escape; collection/tag/VIN/star/move-to-trash bulk actions (Restore / Delete forever in the Trash view) |
 | Bulk outputs | Folder downloads with read-back comparison or individual-download fallback; PDFs to LI; compatible same-kind batches to Toolbox |
 | Local storage | Usage/quota display and `navigator.storage.persist()` request |
 | Keyboard | `/` search, `a` add, `g` grid, `l` list, Escape overlays/selection |
@@ -160,8 +183,9 @@ without requesting permission in the background.
 ### Cross-app files
 
 Vault sends PDFs to LI and supported images/videos/PDFs/CSVs/ZIPs to Toolbox.
-LI deliveries become renamed PDFs in an `LI Documents` collection with LI/group/model
-tags and a note. Toolbox outputs default to a `Toolbox` collection. Explicit
+LI files a document against the same record (no second copy); LI's **Add to File
+Vault** makes that record visible in Files, renamed, in an `LI Documents`
+collection with LI/group/model tags and a note — still one record and one blob. Toolbox outputs default to a `Toolbox` collection. Explicit
 `meta.collection` overrides defaults. Bulk Toolbox sends are buffered; PDF merge
 receives a batch, while Media can queue later files behind **Next file**.
 
@@ -251,30 +275,33 @@ source file arbitrarily small.
 
 ## 7. Repair Orders
 
-[src/features/ros/](src/features/ros/) stores records in `repair-orders/ros` separately
-from Vault. Fields are RO number, vehicle text, VIN, tag, mileage in, colour, open
-date, customer, service advisor, phone, e-mail, collection association, story
-lines, and timestamps; a record created from a scan also keeps that scan's
-recognized text. Stories use independently removable textareas labelled
+[src/features/ros/](src/features/ros/) stores records in the platform's `ros`
+store. Fields are RO number, vehicle text, VIN, tag, mileage in, colour, open
+date, customer, service advisor, phone, e-mail, story lines, and timestamps; a
+record created from a scan also keeps that scan's recognized text. Stories use independently removable textareas labelled
 Line A/B/etc., each with an operation-code box; editing is debounced by 400 ms.
 Older records migrate: a single note becomes the first line, and missing fields are
 backfilled as empty strings on load. The list is ordered by last update.
 
-Files live in Vault, associated by a single collection string: `RO <number>`, or
-an ID-derived fallback when there is no number. RO numbers are not unique database
-keys, so repeated numbers can share the same attachment collection.
+Files live in Files and are attached by a typed link (`ro → file`,
+`attachment`): a file can sit on any number of repair orders, and renumbering
+an RO writes the RO record alone. (Records from before Phase 5 may still carry
+an `RO <number>` collection; nothing reads or renames it any more.)
 
 | Action | Implementation and effect |
 | --- | --- |
-| Upload | Stored straight through the shared intake into the RO's collection with an `attachment` link (ro → file); the reconciliation waits for the intake's `vin-detect` job (run by the Files app) instead of polling |
-| Import existing files | `vault-ro-import` opens normal Vault selection UI; **Add to RO** changes selected records' collection, links them to the RO, then returns to the RO |
+| Upload | Stored straight through the shared intake with an `attachment` link (ro → file); bytes already attached to this RO are skipped silently, other stored bytes go to the duplicate review (a skipped one is attached as the stored file); the reconciliation waits for the intake's `vin-detect` job (run by the Files app) instead of polling |
+| Import existing files | `vault-ro-import` opens normal Vault selection UI; **Add to RO** links the selected records to the RO (`ros.attach`), then returns to the RO |
 | VIN reconciliation | Fill a missing VIN from the RO; keep matching VINs; prompt on mismatch and preserve original VINs when accepted |
-| Upload reconciliation | Written directly: links and collection for kept files, the RO VIN stamped on files without one; ignored uploads are unlinked and become uncategorized |
+| Upload reconciliation | Written directly: links for kept files, the RO VIN stamped on files without one; ignored uploads are unlinked |
 | Existing-file mismatch | Vault uses `confirm()`; cancel skips the mismatched files |
-| Attachment listing | The RO's `attachment` links joined with the file records; refreshed by change events; VIN badges and Vault navigation |
-| Rename | The RO renames the collection on its files itself (`files.renameCollection`) |
-| Unique numbers | `ros.roKey` is a unique index (D7): a number another RO holds is refused and the field shows "Not saved" |
-| Delete RO | Deletes the RO record and its links, leaving the files |
+| Attachment listing | The RO's `attachment` links joined with the file records (trash left out); refreshed by change events; VIN badges; a row opens that file in Files, **Open in Files** shows the RO's files (`ro:<id>`) |
+| Rename | Writes the RO record alone — no file changes |
+| Unique numbers | `ros.roKey` is a unique index (D7): a number another RO holds is refused and the field shows "Not saved"; an RO in the trash keeps its number (restore it, or delete it for good) |
+| Delete RO | Asks what happens to the files — keep them attached (a restore brings them back), unlink them (they stay in Files), or move them to the trash too (except any another live RO uses) — then moves the RO to the trash |
+| RO trash | 🗑️ Trash in the list: Restore (its trashed files come back too) or Delete forever (the RO and its own links go; files stay) |
+| LI documents & tools used | Pin the exact LI version (`ro → document`, `reference`, with the LI number and version kept on the link) and special tools (`ro → tool`, `required-tool`) by typing their numbers; a later import of a newer version shows **newer version exists (vN)** beside the pin, which keeps pointing at what was used |
+| VIN | Saving an RO with a VIN records the vehicle (`vehicles`, source `ro`; a scan records source `ro-scan`); the VIN line shows the check-digit verdict and **✓ Confirm VIN** (a technician's confirmation) and opens the vehicle view |
 
 ### Scanning a paper RO
 
@@ -352,6 +379,14 @@ Every feature degrades to a plain read if `ocr.js` is missing from the cache.
 | `.lidb` | ZIP containing `manifest.json` and `files/` PDFs; current writer uses STORE | Restores by document ID, overwriting matching entries after confirmation |
 | `.tidb` | `TIDB`, little-endian uint32 version 1 and metadata length; UTF-8 JSON with tools/photo lengths; concatenated photos | Replaces inventory after confirmation |
 
+The whole-platform `.fdb` (magic `FDBK`, [src/core/formats/fdb.js](src/core/formats/fdb.js))
+holds every record store — files, documents, tools, repair orders, links,
+vehicles, settings — and every blob, thumbnail and photo, each blob with its
+SHA-256; a record that reuses another's bytes (`blobId`) points at the one
+payload. Restore parses the whole file first, writes a new generation,
+verifies counts, that every file record has its bytes and every hash, then
+switches over; a backup from before vehicles existed restores with none.
+
 Vault exports metadata such as tags, note, collection, stars, VINs/FINs, and
 timestamps. They do not export the `meta` store (preferences, folder handles,
 empty collections), source sync timestamps, RO records, or logs. A structurally
@@ -363,7 +398,9 @@ platform's Extract tab, and [viewer.html](viewer.html) standalone) reads all
 three formats plus `.fdb` and legacy Vault JSON without restoring app databases. It lists entries and downloads them individually or in a
 STORE ZIP with CRC32 and UTF-8 names. Vault output uses collection folders; LI uses
 readable document filenames; Inventory outputs `tools.csv`, `tools.json`, and
-`photos/`. Thumbnails and application settings are not extracted as user files.
+`photos/`; a `.fdb` also gives the tables as JSON (`tables/ros.json`,
+`links.json`, `vehicles.json`…) and puts trashed files under `Trash/`.
+Thumbnails and application settings are not extracted as user files.
 The readers and the ZIP writer are the shared [src/core/formats](src/core/formats/)
 modules (`container.js`, `zip.js`, `fvault.js`, `tidb.js`, `lidb.js`), which the
 standalone page loads by relative path. Deflated LI entries use
@@ -387,10 +424,10 @@ requeues jobs a dead page left running.
 
 | Module | Owns |
 | --- | --- |
-| `repos.js` | `files` / `blobs` / `thumbs`, `documents`, `tools`, `photos`, `ros`, `links`, `jobs`, `settings`, `log`: the same verbs everywhere, `rev` on every write and `expectedRev` checks (`RevConflict`), commit = transaction complete, `<store>:changed` on the bus after each commit; blobs immutable with their `sha256`; an LI document's PDF is a `files` record (`inFiles 0`, `docId`); `ros.roKey` unique (`RoConflict`) |
+| `repos.js` | `files` / `blobs` / `thumbs`, `documents`, `tools`, `photos`, `ros`, `links`, `vehicles`, `jobs`, `settings`, `log`: the same verbs everywhere, `rev` on every write and `expectedRev` checks (`RevConflict`), commit = transaction complete, `<store>:changed` on the bus after each commit; blobs immutable with their `sha256`, and a record may reuse another's (`blobId`) — a blobs row goes only when no record names it; an LI document's PDF is a `files` record (`inFiles 0`, `docId`); `ros.roKey` unique (`RoConflict`). Trash: `files.trash/restore/purge`, `ros.trash/restore/purge` — purge refuses what a link or a document still references. `ros.attach/detach/attachments/ofFile`, `ros.pinDocument/pinTool/references` (with the newer-version check). `vehicles.note/confirm/summary`. `files.findDuplicates/bySha256` |
 | `bus.js` | `emit`/`on` on an `EventTarget` mirrored over `BroadcastChannel("file-database")`; `detail.remote` marks events from another context |
 | `jobs.js` | `enqueue`, `register` (runs a type's queue in this page under `navigator.locks`), heartbeat, cancel, retry up to 5, stale requeue, `whenDone` |
-| `intake.js` | `ingest(target, files, opts)`: eager read, store with verification, per-file results, then the follow-up job (`thumb` + `vin-detect` for Files, `li-import`, `toolbox-intake`) and an RO `attachment` link when `roId` is given |
+| `intake.js` | `ingest(target, files, opts)`: eager read, the duplicate review (`opts.reviewDuplicates`, before anything is written), store with verification, per-file results, then the follow-up job (`thumb` + `vin-detect` for Files, `li-import`, `toolbox-intake`) and an RO `attachment` link when `roId` is given |
 | `backup.js` | `collect()` → one `.fdb` ([src/core/formats/fdb.js](src/core/formats/fdb.js), magic `FDBK`) read in a single transaction so every store is from the same instant; `restore()` into a new generation, verified (counts, a payload behind every file record, every blob's hash), then the pointer flips and the old generation is deleted |
 | `migrate.js` | `status()` / `run()`: `file-vault`, `LIDocsDB`, `tool-inventory`, `repair-orders` → one generation; a legacy database counts as holding data when any of its stores does; anything already in the live generation (a skipped migration, a restore) is carried into the merged one first and legacy records whose ids it already holds are skipped; files in an RO's collection become links; colliding RO numbers keep the older record's key |
 
@@ -404,8 +441,9 @@ runs a queued job.
 The contract the iframes spoke over `postMessage`, kept verbatim as function
 calls: a feature's `shell.send(msg)` is the shell's inbound handler, the shell's
 `deliver(app, msg)` is the feature instance's `receive(msg)` (queued until the
-feature has mounted). Phase 5 turns these into direct repo/feature calls
-(REWRITE-PLAN.md Appendix A).
+feature has mounted). What a message used to carry between two apps' data —
+an RO's collection, a rename — is now a repo call (`ros.attach`, links); the
+messages that remain are navigation between features.
 
 | Message | Direction | Effect |
 | --- | --- | --- |
@@ -416,12 +454,13 @@ feature has mounted). Phase 5 turns these into direct repo/feature calls
 | `shell-open-picker` | App → shell | Open top-bar picker |
 | `shell-toast {app, msg}`, `li-changed` | App → shell | Notifications/badge refresh |
 | `shell-switch {n}`, `shell-quickopen`, `shell-pin-vehicle {vin}` | App → shell | Keyboard/navigation/vehicle context |
-| `platform-backup` | Shell → Vault/LI/Inventory | Per-app exports |
+| `shell-vehicle {vin}` | App → shell | Open the vehicle view |
+| `platform-backup` | → Vault/LI/Inventory | Per-app export (each app's own menu) |
 | `toolbox-open {tab}` | Shell → Toolbox | Select utility |
 | `li-open`, `li-search`, `li-filter`, `li-restore` | Shell → LI | Document navigation, filters, backup restore |
 | `inventory-open`, `inventory-search`, `inventory-filter`, `inventory-import` | Shell → Inventory | Catalog navigation/import |
-| `vault-filter`, `vault-search`, `vault-restore` | Shell → Vault | Navigation/import |
-| `vault-ro-import` | Shell → Vault | RO "select in Files" mode |
+| `vault-filter` (incl. `ro:<id>`, `trash`), `vault-search`, `vault-open {id}`, `vault-restore` | Shell → Vault | Navigation/import |
+| `vault-ro-import {roId, roNo, vin}` | Shell → Vault | RO "select in Files" mode |
 | `shell-nav {id}` | Shell → RO | Open RO after Vault selection workflow |
 
 The shell queues messages until iframe load; Vault/LI/Inventory also queue their
@@ -432,10 +471,11 @@ current listeners must not be described as enforcing sender-origin validation.
 
 | Store/key | Owner | Contents |
 | --- | --- | --- |
-| IndexedDB `file-database-<n>`: `files`, `blobs`, `thumbs` | Files (and LI for its PDFs) | Metadata (`inFiles`, `collection`, `tags`, `vins`, `docId`, `rev`…), immutable bytes with `sha256`, previews |
+| IndexedDB `file-database-<n>`: `files`, `blobs`, `thumbs` | Files (and LI for its PDFs) | Metadata (`inFiles`, `collection`, `tags`, `vins`, `docId`, `deletedAt`, `blobId`, `rev`…), immutable bytes with `sha256`, previews |
 | `documents` | LI | Parsed records with `fileId` |
 | `tools`, `photos` | Inventory | Catalog, edits/stars, photo Blobs |
-| `ros`, `links` | RO | RO fields and story lines; typed relations (`ro → file attachment`) |
+| `ros`, `links` | RO | RO fields and story lines (`deletedAt` = in the trash); typed relations (`ro → file attachment`, `ro → document reference`, `ro → tool required-tool`) |
+| `vehicles` | RO / shell | One record per VIN: FIN, model series, check-digit verdict, `status` (`extracted` / `check-digit-ok` / `confirmed`), where it was seen |
 | `jobs` | every app | Queued/running/done work with progress and attempts |
 | `settings` | every app | `vault.*`, `li.*`, `inventory.*`, `migration`, `backup.restored` (folder handles included; not exported) |
 | `log` | (reserved) | The logger still writes `fv-debug`; it moves here when the pages collapse into one (Phase 4), so one boot gates its writes |
@@ -505,7 +545,7 @@ keep it that way.
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| The page | [sw.js](sw.js) | `file-database-v1`, `platform-runtime-v1` | Required core (the page, the shell, the theme); every feature, service, vendor runtime and icon precached tolerantly on install (a list generated from the tree by [tools/sw-manifest.mjs](tools/sw-manifest.mjs), checked in `npm test`); network-first navigation; cache-first assets |
+| The page | [sw.js](sw.js) | `file-database-v3`, `platform-runtime-v1` | Required core (the page, the theme, and `src/main.js` with every module it imports statically — the shell and what it imports); every feature, service, vendor runtime and icon precached tolerantly on install (both lists generated from the tree by [tools/sw-manifest.mjs](tools/sw-manifest.mjs), the core by following the static imports, and checked in `npm test`); network-first navigation; cache-first assets |
 
 One visit precaches the whole platform, every feature included. The worker
 prunes its own old caches and everything the pre-Phase-4 workers left behind
@@ -546,16 +586,17 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e.mjs` | Vault standalone CRUD, search/organization, export/import, theme, PWA behavior |
 | `e2e-bulk.mjs` | Multi-selection, bulk metadata/actions, batched Toolbox delivery |
 | `e2e-debug.mjs` | Logger capture, persistence, viewer, clearing, shared shell log |
-| `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, backups, toasts, catalog offer |
+| `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, the one-download backup, toasts, catalog offer |
 | `e2e-inventory.mjs` | Empty start, fixture `.tidb`, photos, filters, edits, import/export, embedding |
 | `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs over the shared database |
 | `e2e-migrate.mjs` | First-launch migration of a profile seeded with all four legacy databases: dialog, verify, `.fdb` offer, deletion, every app reading the result; a forced verification failure leaving everything untouched |
+| `e2e-phase5.mjs` | The unified model in use: Files trash / restore / delete forever and a purge refused for a file an RO uses; the duplicate review (reuse, skip); one file on two repair orders; the RO delete choices and RO trash; a pinned LI version with "newer version exists" and a pinned tool; the vehicle record, **✓ Confirm VIN** and `#vehicle/<VIN>`; Ctrl+K results from every store; one `.fdb` download restored into a new generation with ROs, links, vehicles and pins intact |
 | `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
 | `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
 | `e2e-portable.mjs` | Build, local-file shell/Vault/Inventory, catalog offer, same-path profile restart; clears generated data |
 | `e2e-ocr-orient.mjs` | ocr.js itself: render geometry, ink box, which rotation is chosen and when probing stops, document mode for reads and block mode for probes, and probing only when the caller's test fails |
 | `e2e-ro-scan.mjs` | Scan parsing of both dealer layouts and of a verbatim 300 dpi OCR read of the printed form (flattened columns, mangled tag, lost Year/Model/Color labels, clipped phone), the line table read from page layout, text-layer PDF intake, the review step, updating an existing RO, and the orientation probe with a fake OCR engine |
-| `e2e-ros.mjs` | RO stories, persistence, attachments, Vault selection, VIN reconciliation, collection rename |
+| `e2e-ros.mjs` | RO stories, persistence, attachments by link, Vault selection, VIN reconciliation, a renumber that writes no file record, the RO's files in Files |
 | `e2e-shell.mjs` | Tabs, embedding, theme, hashes/legacy navigation, badges, Toolbox save |
 | `e2e-sync.mjs` | Vault folder sync with a mocked picker/directory, dedup, changed-file import, auto mode |
 | `e2e-unified-add.mjs` | Mixed-file shell intake and filename-based LI routing |

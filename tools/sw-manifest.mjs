@@ -17,12 +17,31 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SW = path.join(ROOT, "sw.js");
 
-// The page cannot start without these (installed with addAll: all or nothing).
-const CORE = [
-  "./", "./index.html",
-  "./src/styles/tokens.css", "./src/styles/shell.css",
-  "./src/main.js", "./src/shell/index.js", "./src/features/index.js", "./src/features/mount.js",
-];
+// The page cannot start without these (installed with addAll: all or
+// nothing): the page, its two stylesheets, and src/main.js with every module
+// it imports statically, followed through the graph — a module the shell
+// imports is part of booting, so it can never be missing offline. (Dynamic
+// import() targets — the features — are extras.)
+const CORE_FIXED = ["./", "./index.html", "./src/styles/tokens.css", "./src/styles/shell.css"];
+const STATIC_IMPORT = /(?:^|[;\n])\s*(?:import|export)\s[^;'"`]*?from\s*["']([^"']+)["']|(?:^|[;\n])\s*import\s*["']([^"']+)["']/g;
+function staticGraph(entry) {
+  const seen = [];
+  const visit = (rel) => {
+    if (seen.includes(rel)) return;
+    seen.push(rel);
+    const abs = path.join(ROOT, rel);
+    const text = fs.readFileSync(abs, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    for (const m of text.matchAll(STATIC_IMPORT)) {
+      const spec = m[1] || m[2];
+      if (!spec.startsWith(".")) continue;
+      const next = "./" + path.relative(ROOT, path.resolve(path.dirname(abs), spec)).split(path.sep).join("/");
+      visit(next);
+    }
+  };
+  visit(entry);
+  return seen;
+}
+const CORE = CORE_FIXED.concat(staticGraph("./src/main.js"));
 // Bundled into viewer.js; never fetched by the page itself.
 const NOT_FETCHED = new Set(["./src/features/extract/standalone.js"]);
 

@@ -41,11 +41,14 @@ const waitFor = async (fn, ms = 12000) => { const t0 = Date.now(); while (Date.n
 // ---------- fixtures: a mixed batch ----------
 const FIX = path.join(ROOT, "tools", "_fixtures");
 fs.mkdirSync(FIX, { recursive: true });
-const fakePdf = "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF";
+// Each fixture carries its own bytes: identical bytes are an exact duplicate,
+// which the intake puts to the duplicate review (Phase 5) — not what this
+// suite is about.
+const pdfNamed = (tag) => "%PDF-1.4\n% " + tag + "\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF";
 fs.writeFileSync(path.join(FIX, "meeting-notes.txt"), "just a plain note, belongs in the Vault");
-fs.writeFileSync(path.join(FIX, "quarterly-report.pdf"), fakePdf);           // generic PDF → Vault
-fs.writeFileSync(path.join(FIX, "LI54.10-P-070001.pdf"), fakePdf);           // LI doc number → LI
-fs.writeFileSync(path.join(FIX, "GF26.10-P-054321-02.pdf"), fakePdf);        // LI doc number → LI
+fs.writeFileSync(path.join(FIX, "quarterly-report.pdf"), pdfNamed("quarterly"));           // generic PDF → Vault
+fs.writeFileSync(path.join(FIX, "LI54.10-P-070001.pdf"), pdfNamed("LI54.10-P-070001"));           // LI doc number → LI
+fs.writeFileSync(path.join(FIX, "GF26.10-P-054321-02.pdf"), pdfNamed("GF26.10-P-054321-02"));        // LI doc number → LI
 const batch = ["meeting-notes.txt", "quarterly-report.pdf", "LI54.10-P-070001.pdf", "GF26.10-P-054321-02.pdf"].map((n) => path.join(FIX, n));
 
 await page.goto(base, { waitUntil: "networkidle" });
@@ -82,7 +85,7 @@ check(cols.some((c) => c.name === "meeting-notes.txt") && cols.some((c) => c.nam
 // ---------- a single-target batch surfaces that app ----------
 await page.click("#tab-inventory");            // move away first
 await page.waitForTimeout(300);
-fs.writeFileSync(path.join(FIX, "LI99.99-P-000111.pdf"), fakePdf);
+fs.writeFileSync(path.join(FIX, "LI99.99-P-000111.pdf"), pdfNamed("LI99.99-P-000111"));
 await page.setInputFiles("#shell-file-input", [path.join(FIX, "LI99.99-P-000111.pdf")]);
 const switched = await waitFor(async () => (await page.locator("#tab-li.is-active").count()) === 1, 6000);
 check(switched, "an all-LI batch surfaces the LI Documents tab");

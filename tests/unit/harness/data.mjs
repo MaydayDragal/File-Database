@@ -6,6 +6,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import "../../../src/core/text.js";
 import "../../../src/core/ids.js";
+import "../../../src/core/vin.js";
 import "../../../src/core/hash.js";
 import "../../../src/core/formats/container.js";
 import "../../../src/core/formats/fdb.js";

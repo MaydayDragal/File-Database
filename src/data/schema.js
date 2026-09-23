@@ -14,14 +14,19 @@
   "use strict";
 
   var NAME_PREFIX = "file-database";
-  var VERSION = 1;
+  // 2 (Phase 5): vehicles; ros.deletedAt (trash); files.blobId (a record
+  // that reuses another record's bytes after a duplicate review).
+  var VERSION = 2;
 
   var STORES = {
     // Metadata only — bytes live in blobs/, previews in thumbs/. inFiles 1 =
     // shown in the Files app; 0 = owned by another feature (an LI document's
     // PDF, a transient Toolbox hand-off) until "copied to Files".
-    files: { keyPath: "id", indexes: { kind: {}, collection: {}, updatedAt: {}, tags: { multiEntry: true }, vins: { multiEntry: true }, docId: {}, deletedAt: {}, inFiles: {} } },
-    // Immutable, content-addressed: { id (= file id), blob, size, sha256 }.
+    // deletedAt set = in the trash (hidden everywhere but the Trash view).
+    // blobId set = the bytes are another record's blobs row (reused after a
+    // duplicate review); unset = blobs[id].
+    files: { keyPath: "id", indexes: { kind: {}, collection: {}, updatedAt: {}, tags: { multiEntry: true }, vins: { multiEntry: true }, docId: {}, deletedAt: {}, inFiles: {}, blobId: {} } },
+    // Immutable, content-addressed: { id (= the file id that stored it), blob, size, sha256 }.
     blobs: { keyPath: "id", indexes: { sha256: {} } },
     thumbs: { keyPath: "id" },
     documents: { keyPath: "id", indexes: { li: {}, fgroup: {}, added: {}, fileId: {} } },
@@ -29,7 +34,12 @@
     photos: { keyPath: "id" },
     // roKey is the canonical RO number, unset while the number is blank, so
     // the unique index enforces D7 without colliding on empty drafts.
-    ros: { keyPath: "id", indexes: { roKey: { unique: true }, vin: {}, updatedAt: {} } },
+    ros: { keyPath: "id", indexes: { roKey: { unique: true }, vin: {}, updatedAt: {}, deletedAt: {} } },
+    // One record per VIN (Phase 5): what the platform knows about the car —
+    // FIN, model series, whether the VIN passed its check digit and whether
+    // a technician confirmed it. Files, ROs, LI and tools are joined to it
+    // by their own indexes, never copied here.
+    vehicles: { keyPath: "vin", indexes: { series: {}, updatedAt: {} } },
     links: { keyPath: "id", indexes: { from: { keyPath: ["fromType", "fromId"] }, to: { keyPath: ["toType", "toId"] }, kind: {} } },
     jobs: { keyPath: "id", indexes: { state: {}, type: {}, createdAt: {} } },
     settings: { keyPath: "key" },

@@ -14,6 +14,8 @@
  * where it used to postMessage into a frame. Same messages, function calls.
  */
 import { FEATURES, KEYS, byKey } from "../features/index.js";
+import { createVehicleView } from "./vehicle.js";
+import { reviewDuplicates } from "../ui/duplicates.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULT_APP = "vault";
@@ -183,8 +185,13 @@ function routeFiles(list, opts) {
     if (target === "vault" && opts.vin) o.vin = opts.vin; // RO's own vehicle wins
     if (target === "vault" && opts.collection) o.collection = opts.collection;
     if (target === "vault" && opts.roId) o.roId = opts.roId;
+    // Bytes the database already holds are put to the duplicate review
+    // (reuse them, keep a second copy, or skip) before anything is written.
+    if (target === "vault") o.reviewDuplicates = reviewDuplicates;
     FDData.intake.ingest(target, arr, o).then((out) => {
-      out.results.filter((r) => !r.ok).forEach((r) => {
+      const skipped = out.results.filter((r) => r.skipped).length;
+      if (skipped) toast("Skipped " + skipped + " file(s) already stored.");
+      out.results.filter((r) => !r.ok && !r.skipped).forEach((r) => {
         toast(r.error.indexOf("read") === 0
           ? 'Couldn’t read “' + r.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'
           : 'Couldn’t save “' + r.name + '” — ' + r.error);
@@ -214,7 +221,7 @@ function routeFiles(list, opts) {
 // generation; the live data is replaced only once the copy has verified.
 function restorePlatform(file) {
   if (!window.FDData || !FDData.backup) { toast("Restore isn't available."); return; }
-  if (!confirm("Restore “" + file.name + "”?\n\nThis replaces everything in File Database (files, LI documents, tools, repair orders) with the backup's contents. The current data is removed only after the backup has been copied and verified.")) return;
+  if (!confirm("Restore “" + file.name + "”?\n\nThis replaces everything in File Database (files, LI documents, tools, repair orders, vehicles, the trash) with the backup's contents. The current data is removed only after the backup has been copied and verified.")) return;
   toast("Restoring backup…");
   FDData.backup.restore(file, {
     onProgress: (p) => { if (p.phase === "verify") toast("Verifying backup… " + p.done + " / " + p.total); },
@@ -233,6 +240,8 @@ function parseHash() {
   const i = h.indexOf("/");
   const head = i === -1 ? h : h.slice(0, i);
   const sub = i === -1 ? null : h.slice(i + 1);
+  // #vehicle/<VIN> is the vehicle view, over whichever feature is showing.
+  if (head === "vehicle") return sub ? { vehicle: decodeURIComponent(sub).toUpperCase() } : null;
   const app = head === "files" ? "vault" : head;
   if (!byKey(app)) return null;
   return { app, tab: app === "toolbox" ? sub : null, sub };
@@ -272,6 +281,7 @@ function subMessage(app, sub) {
 export function activate(name, opts) {
   opts = opts || {};
   name = byKey(name) ? name : DEFAULT_APP;
+  if (vehicleView.isOpen()) vehicleView.close();
   KEYS.forEach((k) => {
     const tab = $("#tab-" + k);
     $("#view-" + k).hidden = k !== name;
@@ -352,7 +362,23 @@ function unpinVehicle() {
   toast("Unpinned " + was + ".");
 }
 
-// ---------- Ctrl+K quick-open (ID router) ----------
+// ---------- the vehicle view (#vehicle/<VIN>) ----------
+// Everything about one car from one query; see vehicle.js. Opening it puts
+// the VIN in the address bar; closing it restores the feature's own hash.
+const vehicleView = createVehicleView({
+  go: (app, msg) => { activate(app); deliver(app, msg); },
+  pin: (vin) => pinVehicle(vin),
+  toast: (m) => toast(m),
+});
+function openVehicle(vin, fromHash) {
+  vin = String(vin || "").trim().toUpperCase();
+  if (!fromHash) { try { history.replaceState(null, "", location.pathname + "#vehicle/" + encodeURIComponent(vin)); } catch (e) {} }
+  vehicleView.open(vin, {
+    onClose: () => { if (/^#vehicle\//.test(location.hash)) { try { history.replaceState(null, "", location.pathname + "#" + (current || DEFAULT_APP)); } catch (e) {} } },
+  });
+}
+
+// ---------- Ctrl+K quick-open (ID router + every store's search) ----------
 // Recognizes the platform's shared IDs and jumps straight to the record;
 // anything else offers a search in each feature with the query carried over.
 const QO_LI = FDCore.ids.DOCNUM_EXACT, QO_TOOL = FDCore.ids.TOOL_NO, QO_VIN = FDCore.ids.VIN_SHAPE;
@@ -371,12 +397,47 @@ function qoRows(q) {
   if (QO_VIN.test(s) && !QO_TOOL.test(s)) {
     const vin = s.toUpperCase();
     rows.push({ icon: "🚗", label: "Files for vehicle " + vin, app: "vault", msg: { type: "vault-filter", filter: "vin:" + vin } });
+    rows.push({ icon: "🚘", label: "Vehicle " + vin + " — files, repair orders, LI documents and tools", run: () => openVehicle(vin) });
     rows.push({ icon: "📌", label: "Pin " + vin + " as the active vehicle", run: () => pinVehicle(vin) });
   }
-  rows.push({ icon: "📁", label: "Search Files for “" + s + "”", app: "vault", msg: { type: "vault-search", q: s } });
-  rows.push({ icon: "🗄️", label: "Search LI Documents for “" + s + "”", app: "li", msg: { type: "li-search", q: s } });
-  rows.push({ icon: "🔧", label: "Search the Tool Inventory for “" + s + "”", app: "inventory", msg: { type: "inventory-search", q: s } });
+  rows.push({ icon: "📁", label: "Search Files for “" + s + "”", app: "vault", msg: { type: "vault-search", q: s }, fallback: true });
+  rows.push({ icon: "🗄️", label: "Search LI Documents for “" + s + "”", app: "li", msg: { type: "li-search", q: s }, fallback: true });
+  rows.push({ icon: "🔧", label: "Search the Tool Inventory for “" + s + "”", app: "inventory", msg: { type: "inventory-search", q: s }, fallback: true });
   return rows;
+}
+// Records that match, from every store: each feature's `search` export
+// (src/features/*/search.js — loaded without the feature's UI) plus the
+// vehicles the platform has recorded.
+let qoSeq = 0;
+async function searchVehicles(q) {
+  const k = q.replace(/\s+/g, "").toUpperCase();
+  if (k.length < 4) return [];
+  const list = await FDData.repos.vehicles.list();
+  return list.filter((v) => v.vin.includes(k) || (v.fin || "").includes(k)).slice(0, 3).map((v) => ({
+    icon: "🚘", label: "Vehicle " + v.vin, detail: [v.series && "model " + v.series, v.status === "confirmed" ? "confirmed" : v.checkDigit ? "check digit OK" : "unverified"].filter(Boolean).join(" · "),
+    run: () => openVehicle(v.vin),
+  }));
+}
+async function qoSearch(q) {
+  const seq = ++qoSeq;
+  const repos = window.FDData && FDData.repos;
+  if (!repos) return;
+  const groups = await Promise.all(FEATURES.filter((f) => f.search).map(async (f) => {
+    try { const mod = await f.search(); return { key: f.key, title: f.title, rows: await mod.search(q, { repos, limit: 5 }) }; }
+    catch (e) { return { key: f.key, title: f.title, rows: [] }; }
+  }).concat([searchVehicles(q).then((rows) => ({ key: "vehicles", title: "Vehicles", rows }), () => ({ key: "vehicles", title: "Vehicles", rows: [] }))]));
+  if (seq !== qoSeq || $("#quickopen").hidden) return;
+  const box = $("#qo-found");
+  if (!box) return;
+  box.innerHTML = "";
+  groups.filter((g) => g.rows.length).forEach((g) => {
+    const h = document.createElement("div");
+    h.className = "qo-group";
+    h.textContent = g.title;
+    box.append(h);
+    g.rows.forEach((r) => box.append(qoButton(r)));
+  });
+  markFirst();
 }
 function qoOpen() {
   $("#quickopen").hidden = false;
@@ -386,23 +447,43 @@ function qoOpen() {
   setTimeout(() => inp.focus(), 0);
 }
 function qoClose() { $("#quickopen").hidden = true; }
+function qoButton(r) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "qo-row";
+  b.innerHTML = '<span class="qo-row__icon"></span><span class="qo-row__label"></span><span class="qo-row__detail"></span>';
+  b.children[0].textContent = r.icon;
+  b.children[1].textContent = r.label;
+  b.children[2].textContent = r.detail || "";
+  b.onclick = () => {
+    qoClose();
+    if (r.run) { r.run(); return; }
+    activate(r.app);
+    deliver(r.app, r.msg);
+  };
+  return b;
+}
+function markFirst() {
+  const all = Array.from(document.querySelectorAll("#qo-results .qo-row"));
+  all.forEach((b, i) => b.classList.toggle("is-first", i === 0));
+}
+let qoT = null;
 function qoRender() {
   const box = $("#qo-results");
   box.innerHTML = "";
-  qoRows($("#qo-input").value).forEach((r, i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "qo-row" + (i === 0 ? " is-first" : "");
-    b.innerHTML = '<span class="qo-row__icon">' + r.icon + "</span><span></span>";
-    b.lastChild.textContent = r.label;
-    b.onclick = () => {
-      qoClose();
-      if (r.run) { r.run(); return; }
-      activate(r.app);
-      deliver(r.app, r.msg);
-    };
-    box.append(b);
-  });
+  const q = $("#qo-input").value;
+  const rows = qoRows(q);
+  // Exact IDs first, then records found in the stores, then "search app X".
+  rows.filter((r) => !r.fallback).forEach((r) => box.append(qoButton(r)));
+  const found = document.createElement("div");
+  found.id = "qo-found";
+  box.append(found);
+  rows.filter((r) => r.fallback).forEach((r) => box.append(qoButton(r)));
+  markFirst();
+  clearTimeout(qoT);
+  const s = liNorm(q).trim();
+  if (s.length >= 2) qoT = setTimeout(() => qoSearch(s), 120);
+  else qoSeq++;
 }
 
 // ---------- tab badges (counts from the shared database, refreshed by change events) ----------
@@ -468,6 +549,8 @@ function onMessage(d) {
   else if (d.type === "shell-quickopen") qoOpen();
   // A feature asks to pin the active vehicle (vault By-VIN header / detail).
   else if (d.type === "shell-pin-vehicle" && d.vin) pinVehicle(d.vin);
+  // A feature opens the vehicle view (a file's or an RO's 🚗 button).
+  else if (d.type === "shell-vehicle" && d.vin) openVehicle(d.vin);
 }
 
 // ---------- boot ----------
@@ -499,20 +582,19 @@ function bootShell() {
   });
   $("#vehicle-chip-unpin").addEventListener("click", unpinVehicle);
 
-  // One-click platform backup: ONE .fdb with everything (files, LI
-  // documents, tools, repair orders, links, settings), then each app's own
-  // export (.fvault, .lidb, .tidb) for tools that still read those.
-  // Staggered so the save prompts don't land at the same instant.
+  // One-click platform backup: ONE download — a .fdb with everything
+  // (files, LI documents, tools, repair orders, links, vehicles, the trash,
+  // settings) with every blob's sha256 in its manifest; restoring it is one
+  // step into a new database generation. Each app's own export (.fvault,
+  // .lidb, .tidb) stays in that app's menu.
   $("#backup-all-btn").addEventListener("click", () => {
+    if (!window.FDData || !FDData.backup) { toast("Backup isn't available."); return; }
     toast("Backing up…");
-    const whole = (window.FDData && FDData.backup)
-      ? FDData.backup.collect().then((r) => { downloadBlob(r.blob, FDData.backup.fileName()); }).catch((e) => { toast("Backup failed — " + ((e && e.message) || e)); })
-      : Promise.resolve();
-    ["vault", "li", "inventory"].forEach((k, i) => {
-      ensureLoaded(k);
-      setTimeout(() => deliver(k, { type: "platform-backup" }), i * 1200);
-    });
-    whole.catch(() => {});
+    FDData.backup.collect().then((r) => {
+      downloadBlob(r.blob, FDData.backup.fileName());
+      const n = r.meta.records;
+      toast("Backed up " + n.files.length + " files, " + n.documents.length + " LI documents, " + n.tools.length + " tools and " + n.ros.length + " repair orders.");
+    }).catch((e) => { toast("Backup failed — " + ((e && e.message) || e)); });
   });
 
   // Unified "Add files": one button + one hidden input for the whole platform.
@@ -599,6 +681,7 @@ function bootShell() {
   // queued job wakes the feature that runs it.
   if (window.FDData && FDData.bus) {
     ["files:changed", "documents:changed", "tools:changed", "db:generation"].forEach((t) => FDData.bus.on(t, updateBadges));
+    ["files:changed", "ros:changed", "vehicles:changed"].forEach((t) => FDData.bus.on(t, () => vehicleView.refresh()));
     FDData.bus.on("jobs:changed", (d) => { if (d.op === "enqueue" && JOB_APP[d.type]) ensureLoaded(JOB_APP[d.type]); });
   }
   wakeRunners();
@@ -609,7 +692,13 @@ function bootShell() {
   const params = new URLSearchParams(location.search);
   const view = params.get("view"), action = params.get("action");
   const fromHash = parseHash();
-  if (fromHash) activate(fromHash.app, { tab: fromHash.tab, sub: fromHash.sub });
+  if (fromHash && fromHash.vehicle) {
+    let last = null;
+    try { last = localStorage.getItem("fd-app"); } catch (e) {}
+    activate(byKey(last) ? last : DEFAULT_APP);
+    openVehicle(fromHash.vehicle);
+  }
+  else if (fromHash) activate(fromHash.app, { tab: fromHash.tab, sub: fromHash.sub });
   else if (view === "li" || view === "inventory") activate(view);
   else if (view === "starred" || action === "add") activate("vault", { starred: view === "starred", add: action === "add" });
   else {
@@ -619,6 +708,7 @@ function bootShell() {
   }
   window.addEventListener("hashchange", () => {
     const h = parseHash();
+    if (h && h.vehicle) { openVehicle(h.vehicle, true); return; }
     if (h && h.app !== current) activate(h.app, { tab: h.tab, sub: h.sub });
     else if (h && h.app === "toolbox" && h.tab) deliver("toolbox", { type: "toolbox-open", tab: h.tab });
     else if (h && h.sub) {
@@ -673,4 +763,4 @@ function bootShell() {
 }
 
 // Exposed for the browser suites and the console.
-window.FDShell = { activate, deliver, ensureLoaded, instance, toast, send: api.send, get current() { return current; } };
+window.FDShell = { activate, deliver, ensureLoaded, instance, toast, send: api.send, openVehicle, get current() { return current; } };

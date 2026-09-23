@@ -124,10 +124,7 @@ export function start(root, host, shell) {
   // Cross-app filters ("tools for model 214" / "tools for group 54"):
   // model matches 3-digit series lists inside the validity strings; group
   // matches MEMBERSHIP in svcGrp (which can be multi-valued, e.g. "00, 54").
-  function matchesModel(t, model) {
-    var re = new RegExp("\\b" + model + "\\b");
-    return (t.validities || []).some(function (v) { return re.test(String(v)); });
-  }
+  function matchesModel(t, model) { return FDCore.ids.toolFitsModel(t, model); }
   function matchesGroup(t, grp) {
     return String(t.svcGrp || "").split(/[,\/\s]+/).indexOf(grp) !== -1;
   }

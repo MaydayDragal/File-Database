@@ -167,10 +167,10 @@
           if (d.fileId) docsByFile[d.fileId] = d;
         });
         (recs.files || []).forEach(function(f) {
-          var b = blobs["blobs:" + f.id];
+          var b = blobs["blobs:" + (f.blobId || f.id)];
           if (!b) return;
           var d = docsByFile[f.id];
-          var path = d ? "LI Documents/" + safeName(FDCore.formats.lidb.readableName(d, "files/" + (f.name || "document.pdf")), "document.pdf") : "Files/" + (f.collection ? safeName(f.collection, "collection") + "/" : "") + safeName(f.name, "file");
+          var path = d ? "LI Documents/" + safeName(FDCore.formats.lidb.readableName(d, "files/" + (f.name || "document.pdf")), "document.pdf") : (f.deletedAt ? "Trash/" : "Files/") + (f.collection ? safeName(f.collection, "collection") + "/" : "") + safeName(f.name, "file");
           entries.push({ path: dedupe(used, path), blob: b, type: f.type || "" });
         });
         (recs.tools || []).length && entries.push({ path: "tools.csv", blob: new Blob([FDCore.formats.tidb.toolsCsv(recs.tools)], { type: "text/csv" }), type: "text/csv" });
@@ -178,7 +178,7 @@
           if (k.indexOf("photos:") !== 0) return;
           entries.push({ path: dedupe(used, "photos/" + safeName(k.slice(7), "photo") + ".png"), blob: blobs[k], type: "image/png" });
         });
-        ["files", "documents", "tools", "ros", "links", "settings"].forEach(function(k) {
+        ["files", "documents", "tools", "ros", "links", "vehicles", "settings"].forEach(function(k) {
           if ((recs[k] || []).length) entries.push({ path: "tables/" + k + ".json", blob: new Blob([JSON.stringify(recs[k], null, 1)], { type: "application/json" }), type: "application/json" });
         });
         $("#kindLabel").textContent = "\u{1F5C3}\uFE0F File Database backup";
