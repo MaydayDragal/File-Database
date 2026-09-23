@@ -1,12 +1,23 @@
 // Assemble the portable USB package: dist-portable/FileDatabase-Portable/
-//   app/          a clean copy of the static site
+//   app/          the static site, with src/ bundled into ONE classic script
+//                 (app/app.js) — the one build step the platform has
 //   data/         (empty; the browser profile is created here on first run)
 //   Start File Database.bat / .command, START-HERE.txt
 // Run: node tools/build-portable.mjs
+//
+// Why a bundle: the page's entry (src/main.js) is an ES module, and a browser
+// refuses to load a module from file:// unless it was started with
+// --allow-file-access-from-files. The launchers pass that flag, but the
+// package must not depend on it: app/index.html loads app/app.js, which is
+// src/main.js and every module it imports — the features and their search
+// modules included (dynamic import() is inlined) — as a plain <script>, so a
+// double-clicked app/index.html opens too. The classic core/data/services
+// scripts load as before. src/ still ships for the feature stylesheets.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "dist-portable", "FileDatabase-Portable");
@@ -32,6 +43,30 @@ for (const rel of INCLUDE) {
   if (!fs.existsSync(src)) { console.warn("skip (missing):", rel); continue; }
   fs.cpSync(src, path.join(APP, rel), { recursive: true });
   tally(path.join(APP, rel));
+}
+
+// Bundle src/main.js (and everything it imports) into app/app.js.
+const MODULE_TAG = '<script type="module" src="src/main.js"></script>';
+const CLASSIC_TAG = '<script src="app.js"></script>';
+{
+  const r = await build({
+    entryPoints: [path.join(ROOT, "src", "main.js")],
+    bundle: true, write: false, format: "iife", target: "es2020", platform: "browser",
+    legalComments: "inline", logLevel: "silent",
+    banner: { js: "/* app.js — src/main.js and every module it imports, bundled as one classic script by tools/build-portable.mjs (the portable package only). */" },
+  });
+  const w = r.warnings.filter((x) => /import\.meta/.test(x.text));
+  if (w.length) throw new Error("a bundled module still uses import.meta: " + w[0].text);
+  fs.writeFileSync(path.join(APP, "app.js"), r.outputFiles[0].text);
+  const html = fs.readFileSync(path.join(APP, "index.html"), "utf8");
+  if (!html.includes(MODULE_TAG)) throw new Error("index.html: the module entry tag changed — update tools/build-portable.mjs");
+  fs.writeFileSync(path.join(APP, "index.html"), html.replace(MODULE_TAG, CLASSIC_TAG));
+  // Served over http(s) instead (a copy on a web server), the worker must
+  // precache the bundle the page now loads.
+  const sw = fs.readFileSync(path.join(APP, "sw.js"), "utf8");
+  if (!sw.includes("const CORE = [\n")) throw new Error("sw.js: CORE list not found");
+  fs.writeFileSync(path.join(APP, "sw.js"), sw.replace("const CORE = [\n", 'const CORE = [\n  "./app.js",\n'));
+  tally(path.join(APP, "app.js"));
 }
 
 // Ship the special-tools catalog so the Tool Inventory can offer a one-click

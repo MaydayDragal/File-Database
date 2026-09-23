@@ -21,7 +21,7 @@ contracts, service workers, and test coverage.
 
 Everything is one page: the shell mounts each app into its panel on first use
 and keeps it mounted when you switch tabs. There is one install, one service
-worker and one theme. The old per-app pages (`vault/`, `li/`, `inventory/`) are
+worker, one theme and one backup (**Back up everything**, a single `.fdb`). The old per-app pages (`vault/`, `li/`, `inventory/`) are
 gone — if you installed one of them as its own app, open the platform once and
 install that instead; your data is already there.
 
@@ -54,10 +54,11 @@ opens a separate set of databases. App paths on the same origin share storage.
 
 ### Opening local HTML files
 
-You can try opening `index.html` directly. `file://` has no PWA installation or
-service-worker caching, and storage, local resource loading, and cross-app
-behavior depend on the browser. Use the portable launcher for the repository's
-intended local-file configuration, or serve the site for normal daily use.
+The repository's `index.html` loads its apps as ES modules, which browsers refuse
+from `file://`, so serve the repository (above) or build the portable package
+(below), whose `app/index.html` loads the same code as one classic script and
+opens from `file://`. `file://` has no PWA installation or service-worker
+caching, and storage behaviour depends on the browser.
 
 ## Adding and finding files
 
@@ -326,7 +327,10 @@ The output is `dist-portable/FileDatabase-Portable/`. Copy that whole folder to 
 USB drive and use **Start File Database.bat** (Windows) or
 **Start File Database (Mac).command** (macOS). The launchers look for an installed
 Edge or Chrome and use a separate profile in the package's `data/` folder, with
-`--allow-file-access-from-files` for the local app pages. No local server is started.
+`--allow-file-access-from-files` for the local data files (the tool catalog, the
+PDF worker). No local server is started. The build bundles `src/` into one
+classic script, `app/app.js`, so `app/index.html` also opens double-clicked
+without the launcher — in that case the browser's own profile holds the data.
 
 The builder includes the shell, Vault, LI, Inventory, Toolbox, Repair Orders, and
 Extract. A portable build has no network, so the RO scanner reads PDFs that carry
@@ -366,9 +370,10 @@ backup in the build output directory. See [portable/START-HERE.txt](portable/STA
 
 ## Development and QA
 
-Use Node.js 20 (the CI version), npm, Git, and Python 3. The application has no
-required runtime build; npm dependencies are for development, tests, and PDF.js
-vendoring.
+Use Node.js 20 (the CI version), npm, Git, and Python 3. The site is served as
+checked in; the only build is the portable package (esbuild bundles `src/` into
+its `app/app.js`). npm dependencies are for development, tests, the portable and
+viewer bundles, and PDF.js vendoring.
 
 ```bash
 npm ci --omit=optional
@@ -381,11 +386,10 @@ canvas dependency. Linux systems may need `npx playwright install --with-deps ch
 to install browser system dependencies; CI uses this form.
 
 ```bash
-npm run test:static     # script syntax, manifests, PDF.js policy
-npm run test:backup     # malformed binary Vault backups
-npm run test:integrity  # full-byte Blob comparison
+npm run test:fast       # static + generated-file checks + unit tests (Node only, seconds)
+npm run test:unit       # tests/unit/*.test.mjs (data layer, goldens, search)
 npm run test:e2e        # tracked tools/e2e*.mjs suites, sequentially
-npm test               # static + backup + integrity + E2E
+npm test                # test:fast, then the E2E suites
 npm run build:portable
 ```
 
@@ -413,14 +417,17 @@ node tools/e2e-migrate.mjs
 and that no page inlines a library (the static check also refuses any source
 file over 300 KB outside `vendor/`). `npm run build:viewer` regenerates
 `viewer.js` from `src/features/extract/`; `node tools/build-viewer.mjs --check`
-(part of `npm test`) verifies it is current. `node tools/sw-manifest.mjs --write`
-regenerates the service worker's precache list from the tree and `--check`
-(also part of `npm test`) refuses a list that has fallen behind it.
+(part of `test:fast`) verifies it is current. `node tools/sw-manifest.mjs --write`
+regenerates the service worker's precache lists — the required core by
+following `src/main.js`'s static imports — and `--check` (also part of
+`test:fast`) refuses lists that have fallen behind the tree.
 
-[qa.yml](.github/workflows/qa.yml) runs on pushes to
-`claude/pwa-file-database-hqbppy` and on pull requests. It installs dependencies,
-audits with `--omit=optional --audit-level=high`, installs Chromium, runs the checks
-above, and builds the portable package. [zip-test.yml](.github/workflows/zip-test.yml)
+[qa.yml](.github/workflows/qa.yml) has three jobs. `checks` runs on every push
+and pull request: it installs dependencies, audits with
+`--omit=optional --audit-level=high`, and runs `npm run test:fast`. `qa` runs the
+whole browser suite on pull requests. `portable` builds the portable package on
+pushes to `claude/pwa-file-database-hqbppy`, exercises it from `file://`, and
+uploads it as an artifact. [zip-test.yml](.github/workflows/zip-test.yml)
 validates viewer ZIP output using Windows extraction tools; it is manually runnable
 and path-filtered on pushes to that branch.
 
@@ -428,13 +435,13 @@ and path-filtered on pushes to that branch.
 
 | Path | Purpose |
 | --- | --- |
-| `index.html`, `src/main.js`, `src/shell/` | The one page and its shell: tabs, intake, navigation, theme, badges, install |
-| `src/features/` | One folder per tab (`files`, `documents`, `inventory`, `toolbox`, `ros`, `extract`): markup, app, styles, mounted into a shadow root by the shell |
+| `index.html`, `src/main.js`, `src/shell/` | The one page and its shell: tabs, intake, navigation, quick-open, the vehicle view, theme, badges, install |
+| `src/features/` | One folder per tab (`files`, `documents`, `inventory`, `toolbox`, `ros`, `extract`): markup, app, styles and (for four of them) a quick-open `search.js`, mounted into a shadow root by the shell |
 | `src/styles/` | `tokens.css` (the one theme) and the shell's stylesheet |
 | `sw.js`, `manifest.webmanifest`, `icons/` | The platform's PWA assets (one worker, one manifest) |
 | `debug.js` | Shared local logger |
 | `src/core/` | Shared pure code: text normalization, LI/tool/VIN identifiers, LI and RO parsers, hashing, backup formats — loaded by every page, unit-tested from Node |
-| `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the first-launch migration dialog — loaded by every page, unit-tested from Node with fake-indexeddb |
+| `src/data/`, `src/ui/` | The one database (schema, generations, repos, change bus, jobs, intake, backup/restore, legacy migration) and the dialogs any app can show (first-launch migration, duplicate review) — the data layer is unit-tested from Node with fake-indexeddb |
 | `src/services/` | Shared browser machinery: the on-demand PDF.js, the OCR engine loader and worker pool, thumbnails, folder sync |
 | `vendor/` | The vendored runtimes, one copy each: PDF.js main + worker, JSZip, pdf-lib |
 | `viewer.html`, `viewer.js` | Standalone host of the Extract feature (`viewer.js` is the feature bundled as one classic script by `tools/build-viewer.mjs`, so the page works double-clicked from disk): a copy next to your backups can always get the files back out |
@@ -442,7 +449,7 @@ and path-filtered on pushes to that branch.
 | `portable/` | Portable launchers and user guide |
 | `tests/` | Unit tests and the golden fixtures the rewrite is checked against (see `tests/README.md`) |
 | `tools/` | Build helpers, vendoring, static checks, the browser suites and their shared database helper (`e2e-db.mjs`) |
-| `.github/workflows/` | QA and Windows ZIP workflows |
+| `.github/workflows/` | QA (fast checks on every push, browser suites on PRs, portable build on the live branch) and Windows ZIP workflows |
 
 ## License
 

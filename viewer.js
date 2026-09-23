@@ -19,6 +19,9 @@
     root.append(link, wrap);
     return ready;
   }
+  function featureStyle(folder) {
+    return new URL("src/features/" + folder + "/styles.css", document.baseURI).href;
+  }
 
   // src/features/extract/markup.js
   var markup_default = `
@@ -339,9 +342,8 @@
   }
 
   // src/features/extract/index.js
-  var import_meta = {};
   async function mount(host, shell2, opts) {
-    const styleUrl = opts && opts.styleUrl || new URL("./styles.css", import_meta.url).href;
+    const styleUrl = opts && opts.styleUrl || featureStyle("extract");
     const root = await mountInto(host, markup_default, styleUrl);
     return start(root, host, shell2);
   }

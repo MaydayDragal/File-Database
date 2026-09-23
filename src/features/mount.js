@@ -23,3 +23,11 @@ export function mountInto(host, markup, styleUrl) {
   root.append(link, wrap);
   return ready;
 }
+
+// A feature's stylesheet, resolved against the PAGE (the page sits at the
+// site root with src/ beside it). Not import.meta.url: the portable build
+// bundles src/ into one classic script, where that has no meaning, and the
+// same line then works both ways.
+export function featureStyle(folder) {
+  return new URL("src/features/" + folder + "/styles.css", document.baseURI).href;
+}

@@ -1,11 +1,17 @@
 # Tests
 
-Two layers, both run by `npm test` and by CI (`.github/workflows/qa.yml`):
+Two layers, both run by `npm test`. CI (`.github/workflows/qa.yml`) runs the
+fast layer on every push and the browser layer on pull requests:
 
 | Layer | Command | Runs where | What |
 | --- | --- | --- | --- |
+| Fast | `npm run test:fast` | Node only, seconds | the `tools/test-*.mjs` checks, the generated-file checks and the unit tests |
 | Unit | `npm run test:unit` | Node only, seconds | `tests/unit/*.test.mjs` under `node --test` |
 | Browser | `npm run test:e2e` | Playwright Chromium | `tools/e2e-*.mjs`, one suite per feature or flow, all against the one page (a feature's elements are reached through its panel: `page.locator("#view-li").locator(…)`) |
+
+A behaviour that a unit test pins exactly is not also a browser suite: the
+Mercedes-prefix VIN validation lives in the VIN golden (`vin.test.mjs`), and
+the browser suites keep what needs a page — the scan pipeline, the UI, storage.
 
 `tools/test-*.mjs` are the older Node checks (static policy, backup format,
 blob integrity, LI number) and stay as they are. The static policy also refuses
@@ -13,8 +19,9 @@ any source file over 300 KB outside `vendor/`, so a library can never be inlined
 into a page again; `node tools/vendor-pdfjs.mjs --check` verifies the vendored
 runtimes themselves, `node tools/build-viewer.mjs --check` that `viewer.js`
 (the standalone extractor's classic bundle) matches `src/features/extract/`, and
-`node tools/sw-manifest.mjs --check` that the service worker's precache list
-names every file under `src/`, so nothing can load online and be missing offline.
+`node tools/sw-manifest.mjs --check` that the service worker's precache lists
+name every file under `src/` — with everything `src/main.js` imports statically
+in the required core — so nothing can load online and be missing offline.
 
 ## Data layer checks
 

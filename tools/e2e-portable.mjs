@@ -62,6 +62,38 @@ let persisted = -1; for (let i = 0; i < 30; i++) { persisted = await countVaultF
 ok(persisted === 1, "data persists across a full restart (portable data on the stick)");
 await ctx.close();
 
+// 2) Double-clicked, no launcher: a plain browser with NO file-access flag
+// opening app/index.html. The page's modules are bundled into app/app.js (a
+// classic script), so every feature still mounts.
+ok(!/type="module"/.test(fs.readFileSync(path.join(PKG, "app", "index.html"), "utf8")), "app/index.html loads no ES module (src/ is bundled into app.js)");
+{
+  const plain = await launchBrowser();
+  const p2 = await plain.newPage();
+  const e2 = []; p2.on("pageerror", (e) => e2.push(String(e.message)));
+  await p2.goto(URL, { waitUntil: "load" });
+  await sleep(800);
+  const mounted = [];
+  for (const k of ["vault", "li", "inventory", "toolbox", "ros", "viewer"]) {
+    await p2.click("#tab-" + k).catch(() => {});
+    let n = 0;
+    for (let i = 0; i < 25 && !n; i++) { n = await p2.evaluate((k) => { const r = document.querySelector("#view-" + k)?.shadowRoot; return r ? (r.querySelector(".fd-root")?.children.length || 0) : 0; }, k).catch(() => 0); if (!n) await sleep(200); }
+    if (n) mounted.push(k);
+  }
+  ok(mounted.length === 6, "double-clicked with no browser flags, all six features mount (" + mounted.join(", ") + ")");
+  // (cssRules can't be read from a file:// sheet — an opaque origin — so
+  // check that it loaded and that its rules apply.)
+  const styled = await p2.evaluate(() => {
+    const r = document.querySelector("#view-vault").shadowRoot;
+    const l = r && r.querySelector('link[rel="stylesheet"]');
+    const fd = r && r.querySelector(".fd-root");
+    return !!(l && l.sheet) && !!fd && getComputedStyle(fd).overflow === "hidden";
+  }).catch(() => false);
+  ok(styled, "a feature's stylesheet loads from beside the page");
+  const e2real = e2.filter((e) => !/ServiceWorker|serviceworker/i.test(e));
+  ok(e2real.length === 0, "no page errors without the flag" + (e2real.length ? ": " + e2real[0] : ""));
+  await plain.close();
+}
+
 const realErrs = errs.filter((e) => !/ServiceWorker|serviceworker/i.test(e)); // SW is expected to be unavailable on file://
 ok(realErrs.length === 0, "no unexpected page errors" + (realErrs.length ? ": " + realErrs[0] : ""));
 

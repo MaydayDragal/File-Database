@@ -1,5 +1,5 @@
 /* Toolbox — feature entry (REWRITE-PLAN.md Phase 4 / §3.1). */
-import { mountInto } from "../mount.js";
+import { mountInto, featureStyle } from "../mount.js";
 import markup from "./markup.js";
 import { start } from "./app.js";
 import * as zip from "./tools/zip.js";
@@ -19,7 +19,7 @@ const TOOLS = [zip, media, ocr, convert, elec, text, calc, csv, img, pdf];
 export const route = { key: "toolbox", title: "Toolbox" };
 
 export async function mount(host, shell) {
-  const root = await mountInto(host, markup + TOOLS.map((t) => t.markup).join("\n"), new URL("./styles.css", import.meta.url).href);
+  const root = await mountInto(host, markup + TOOLS.map((t) => t.markup).join("\n"), featureStyle("toolbox"));
   TOOLS.forEach((t) => t.init(root));
   return start(root, host, shell);
 }
