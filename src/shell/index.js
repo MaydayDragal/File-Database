@@ -559,7 +559,15 @@ function onMessage(d) {
 export function boot() {
   applyTheme();
   const ready = (window.FDData && FDData.boot) ? FDData.boot() : Promise.resolve();
-  ready.then(null, (e) => { toast("Couldn't open the database — " + ((e && e.message) || e)); }).then(bootShell);
+  ready.then(null, (e) => {
+    // An out-of-date copy of the app (see boot.js): it clears the offline
+    // cache and reloads on its own; say so instead of reporting a failure.
+    if (e && e.name === "VersionError") {
+      toast(FDData.outdatedRecovering
+        ? "A newer version of File Database is installed — loading it…"
+        : "This copy of File Database is older than your data. Reload with Ctrl+Shift+R to load the current version.");
+    } else toast("Couldn't open the database — " + ((e && e.message) || e));
+  }).then(bootShell);
 }
 function bootShell() {
   if (window.matchMedia) {
