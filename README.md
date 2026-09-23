@@ -13,7 +13,7 @@ contracts, service workers, and test coverage.
 | App | What it does | Route |
 | --- | --- | --- |
 | Files | Store, preview, search, tag, star, and group files by collection or VIN | `#vault` (or `#files`) |
-| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, open the files embedded in (or linked from) a PDF, and export renamed documents | `#li` |
+| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | `#li` |
 | Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | `#inventory` |
 | Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | `#toolbox` |
 | Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, attach files stored in Files, and pin the exact LI versions and tools a job used | `#ros` (`#ros/<id>` opens one) |

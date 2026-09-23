@@ -84,15 +84,7 @@ export default `
       <button class="x" data-close>×</button>
     </div>
     <div class="modal-body">
-      <div class="preview-pane">
-        <div class="att-bar" id="dAttBar" style="display:none">
-          <span class="att-bar__name" id="dAttBarName"></span>
-          <button class="btn btn-ghost btn-sm" id="dAttDownload" title="Save this file">⬇ Download</button>
-          <button class="btn btn-ghost btn-sm" id="dAttBack" title="Show the LI document again">← Back to the PDF</button>
-        </div>
-        <div class="att-view" id="dAttView" style="display:none"></div>
-        <iframe id="dFrame" title="PDF preview"></iframe>
-      </div>
+      <div class="preview-pane"><iframe id="dFrame" title="PDF preview"></iframe></div>
       <div class="meta-pane">
         <div class="field"><label>Document number</label><input id="dLi" /></div>
         <div class="field"><label>Version</label><input id="dVer" /></div>
@@ -125,11 +117,6 @@ export default `
         <div class="refs" id="dXApps" style="display:none">
           <h3>Special tools</h3>
           <div class="refchips" id="dXAppChips"></div>
-        </div>
-        <div class="refs" id="dAtt">
-          <h3>📎 Files in this PDF <span class="att-count" id="dAttCount"></span></h3>
-          <div class="att-list" id="dAttList"></div>
-          <div class="att-list att-links" id="dAttLinks" style="display:none"></div>
         </div>
         <div class="cmp" id="dCmp" style="display:none">
           <h3>Compare versions</h3>
