@@ -13,7 +13,7 @@ contracts, service workers, and test coverage.
 | App | What it does | Route |
 | --- | --- | --- |
 | Files | Store, preview, search, tag, star, and group files by collection or VIN | `#vault` (or `#files`) |
-| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | `#li` |
+| LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, open the files embedded in a PDF, and export renamed documents | `#li` |
 | Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | `#inventory` |
 | Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | `#toolbox` |
 | Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, attach files stored in Files, and pin the exact LI versions and tools a job used | `#ros` (`#ros/<id>` opens one) |
@@ -419,8 +419,10 @@ file over 300 KB outside `vendor/`). `npm run build:viewer` regenerates
 `viewer.js` from `src/features/extract/`; `node tools/build-viewer.mjs --check`
 (part of `test:fast`) verifies it is current. `node tools/sw-manifest.mjs --write`
 regenerates the service worker's precache lists — the required core by
-following `src/main.js`'s static imports — and `--check` (also part of
-`test:fast`) refuses lists that have fallen behind the tree.
+following `src/main.js`'s static imports — and stamps its cache name with a
+hash of every precached file, so any change to the app reaches returning
+users; `--check` (also part of `test:fast`) refuses lists or a cache name
+that have fallen behind the tree. Run it after changing any app file.
 
 [qa.yml](.github/workflows/qa.yml) has three jobs. `checks` runs on every push
 and pull request: it installs dependencies, audits with

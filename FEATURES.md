@@ -218,6 +218,17 @@ the text-to-record extraction are the shared [src/core](src/core/) modules
 - Offers PDF preview, editable metadata, version selection, visual page comparison,
   text comparison, LI/filename/permalink copying, original or renamed downloads,
   and bulk deletion/renamed ZIP export.
+- **Files in this PDF**: the document view lists the files embedded in the
+  stored PDF — attachments in its catalogue and paperclip annotations on its
+  pages, with size, page and the annotation's note — read by
+  `FDServices.pdf.attachments()` ([src/services/pdf.js](src/services/pdf.js))
+  when the document is opened (once per stored PDF). **View** shows one in the
+  preview pane with inert elements only: images in an `<img>`, text-like files
+  (HTML and XML included) as plain text, PDFs in the browser's viewer, video
+  and audio in their players; any other type offers a download. **⬇** saves
+  it; **＋ Files** stores it in Files (collection `LI Documents`, tagged with
+  the LI number, a note naming the document and version), through the
+  duplicate review. The embedded files are not copied anywhere until then.
 - Copies renamed PDFs to Vault with LI/group/model metadata; links to Inventory
   by service group/model and referenced special-tool numbers.
 - Supports folder import and five-minute auto-sync while open. Folder identity
@@ -578,7 +589,7 @@ keep it that way.
 
 | Scope | Worker | Current cache | Strategy |
 | --- | --- | --- | --- |
-| The page | [sw.js](sw.js) | `file-database-v4`, `platform-runtime-v1` | Required core (the page, the theme, and `src/main.js` with every module it imports statically — the shell and what it imports); every feature, service, vendor runtime and icon precached tolerantly on install (both lists generated from the tree by [tools/sw-manifest.mjs](tools/sw-manifest.mjs), the core by following the static imports, and checked in `npm test`); network-first navigation; cache-first assets |
+| The page | [sw.js](sw.js) | `file-database-v4-<hash>` (the hash of every precached file, stamped by the tool below, so any change to the app renames the cache), `platform-runtime-v1` | Required core (the page, the theme, and `src/main.js` with every module it imports statically — the shell and what it imports); every feature, service, vendor runtime and icon precached tolerantly on install (both lists generated from the tree by [tools/sw-manifest.mjs](tools/sw-manifest.mjs), the core by following the static imports, and checked in `npm test`); network-first navigation; cache-first assets |
 
 One visit precaches the whole platform, every feature included. The worker
 fetches every file from the server on install (`cache: "reload"`, never the
@@ -630,7 +641,7 @@ binary-backup and Blob-integrity checks — Node only, seconds. `npm test` runs
 those, then [run-e2e.mjs](tools/run-e2e.mjs).
 E2E discovery uses Git-tracked `tools/e2e*.mjs`, excluding the browser and
 database helpers, sorts the list, and stops at the first failure. There are
-currently **25 browser suites**; they drive the one page (a feature's elements
+currently **26 browser suites**; they drive the one page (a feature's elements
 are addressed through its panel, `page.locator("#view-li").locator(…)`, which
 pierces the shadow root) and read and seed the shared database through
 [tools/e2e-db.mjs](tools/e2e-db.mjs). Git metadata, Node/npm, Python 3, and
@@ -643,6 +654,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-debug.mjs` | Logger capture, persistence, viewer, clearing, shared shell log |
 | `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, the one-download backup, toasts, catalog offer |
 | `e2e-inventory.mjs` | Empty start, fixture `.tidb`, photos, filters, edits, import/export, embedding |
+| `e2e-li-attachments.mjs` | A pdf-lib-built LI PDF with three attachments and a paperclip annotation: all four listed with page and note, each viewed safely (an HTML file as text, its script never run), downloaded, added to Files with the LI tag; a PDF without files says so |
 | `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs over the shared database |
 | `e2e-migrate.mjs` | First-launch migration of a profile seeded with all four legacy databases: dialog, verify, `.fdb` offer, deletion, every app reading the result; a forced verification failure leaving everything untouched |
 | `e2e-phase5.mjs` | The unified model in use: Files trash / restore / delete forever and a purge refused for a file an RO uses; the duplicate review (reuse, skip); one file on two repair orders; the RO delete choices and RO trash; a pinned LI version with "newer version exists" and a pinned tool; the vehicle record, **✓ Confirm VIN** and `#vehicle/<VIN>`; Ctrl+K results from every store; one `.fdb` download restored into a new generation with ROs, links, vehicles and pins intact |

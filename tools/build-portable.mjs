@@ -76,8 +76,9 @@ if (fs.existsSync(path.join(ROOT, "inventory-data", "tools.json"))) {
 
 // Served over http(s) instead (a copy on a web server), the worker must
 // precache the bundle the page now loads — and its cache name must change
-// whenever anything it caches changes. The repository's worker is versioned
-// by hand; here a release can change app.js (or any copied file) alone,
+// whenever anything it caches changes. The repository's worker carries a
+// hash of the tree's files (tools/sw-manifest.mjs); here a release can change
+// app.js (or any copied file) alone,
 // which would leave sw.js byte-identical: the browser would keep the old
 // worker and its cache-first handler would serve the old app forever. So the
 // cache name carries a hash of every file in app/ (the worker prunes any
@@ -97,7 +98,8 @@ if (fs.existsSync(path.join(ROOT, "inventory-data", "tools.json"))) {
     h.update(fs.readFileSync(p));
   });
   walk(APP);
-  const cache = m[1] + "-" + h.digest("hex").slice(0, 12);
+  // The live name already carries the tree's hash; swap it for this copy's.
+  const cache = m[1].replace(/-[0-9a-f]{12}$/, "") + "-" + h.digest("hex").slice(0, 12);
   sw = sw.replace(m[0], 'const CACHE = "' + cache + '";').replace("const CORE = [\n", 'const CORE = [\n  "./app.js",\n');
   fs.writeFileSync(swPath, sw);
   console.log("  worker cache: " + cache);
