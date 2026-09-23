@@ -40,3 +40,23 @@ test("probe() never creates a database; deleteDatabase removes one", async () =>
   await db.deleteDatabase("file-database-1");
   assert.equal(await dbExists("file-database-1"), false);
 });
+
+test("code older than the database reports db:outdated (and boot's recovery stands down without a page)", async () => {
+  await fresh();
+  // A database already upgraded past this code's schema.
+  await new Promise((resolve, reject) => {
+    const r = indexedDB.open("file-database-1", FDSchema.VERSION + 1);
+    r.onupgradeneeded = () => {};
+    r.onsuccess = () => { r.result.close(); resolve(); };
+    r.onerror = () => reject(r.error);
+  });
+  FDData.db.setCurrentName("file-database-1");
+  const seen = [];
+  const off = FDData.bus.on("db:outdated", (d) => seen.push(d));
+  await assert.rejects(FDData.db.open(), (e) => e.name === "VersionError");
+  off();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].name, "file-database-1");
+  assert.equal(seen[0].version, FDSchema.VERSION);
+  assert.equal(await FDData.recoverOutdated(), false, "no location to reload in Node: nothing to do");
+});

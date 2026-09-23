@@ -5,7 +5,9 @@
  * from src/ui/migrate-dialog.js when the page has one — before anything
  * opens the live generation), cleans up leftovers, opens the database,
  * requeues jobs a dead page left running, and reloads the page when
- * another tab replaces the live generation.
+ * another tab replaces the live generation — or when this page's code turns
+ * out to be older than the database (a stale offline copy of the app), after
+ * clearing the offline cache so the reload fetches the current code.
  *
  * Classic <script> (window.FDData.boot) and side-effect import from Node.
  * Requires db.js, bus.js, repos.js, jobs.js and migrate.js.
@@ -22,9 +24,55 @@
     if (locks && locks.request) return locks.request(name, fn);
     return fn();
   }
+  // The page's code is older than the database it found (VersionError): a
+  // stale offline copy is running. Drop the service worker's app cache, ask
+  // for the latest worker, and reload once — so the reload fetches current
+  // code. Resolves true when it is reloading, false when it stood down:
+  //   - at most once a minute per tab, by a marker in sessionStorage; when
+  //     the marker cannot be stored (storage blocked) it never reloads, so
+  //     a page that keeps meeting old code cannot loop;
+  //   - only with the server reachable (a no-store probe that no cache can
+  //     answer): offline, the app cache is the only copy of the app, so it
+  //     is kept and nothing reloads.
+  var RECOVER_KEY = "fdb.outdatedReload";
+  function recoverOutdated() {
+    var loc = global.location;
+    if (!loc || typeof loc.reload !== "function") return Promise.resolve(false);
+    var ss = null;
+    try { ss = global.sessionStorage; } catch (e) {}
+    if (!ss) return Promise.resolve(false);
+    try {
+      var last = +(ss.getItem(RECOVER_KEY) || 0);
+      if (last && Date.now() - last < 60000) return Promise.resolve(false);
+      var stamp = String(Date.now());
+      ss.setItem(RECOVER_KEY, stamp);
+      if (ss.getItem(RECOVER_KEY) !== stamp) return Promise.resolve(false);
+    } catch (e) { return Promise.resolve(false); }
+    var nav = global.navigator || {};
+    if (nav.onLine === false || typeof global.fetch !== "function") return Promise.resolve(false);
+    var probe = global.fetch(new URL("sw.js?fdb-probe=" + Date.now(), loc.href).href, { cache: "no-store" })
+      .then(function (r) { return !!(r && r.ok); }, function () { return false; });
+    var p = probe.then(function (online) {
+      if (!online) return false;
+      var cs = null;
+      try { cs = global.caches; } catch (e) {}
+      var clear = cs && cs.keys ? cs.keys().then(function (ks) {
+        return Promise.all(ks.filter(function (k) { return /^file-database-/.test(k); }).map(function (k) { return cs.delete(k); }));
+      }).catch(function () {}) : Promise.resolve();
+      var sw = null;
+      try { sw = nav.serviceWorker; } catch (e) {}
+      var update = sw && sw.getRegistration ? sw.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve();
+      return Promise.all([clear, update]).then(function () { try { loc.reload(); } catch (e) {} return true; });
+    });
+    data.outdatedRecovery = p;
+    return p;
+  }
+  data.recoverOutdated = recoverOutdated;
+
   function wireReload() {
     if (reloadWired) return;
     reloadWired = true;
+    bus.on("db:outdated", function () { recoverOutdated(); });
     // Our connection was closed because another context is upgrading or
     // deleting that generation: reload onto whatever is live now. (The
     // context doing a restore closes its own connections first, so it never

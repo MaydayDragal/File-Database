@@ -3,7 +3,7 @@
    open and run with no network. User data lives in IndexedDB and never
    touches this cache. `tools/sw-manifest.mjs --check` verifies the list is
    complete against the tree. */
-const CACHE = "file-database-v3";
+const CACHE = "file-database-v4";
 // The text-recognition engine the scanners download on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see src/services/ocr.js). Their files are
@@ -113,10 +113,16 @@ const EXTRAS = [
   "./icons/icon-maskable-512.png",
 ];
 
+// Every file is fetched from the SERVER on install ({cache: "reload"}),
+// never from the browser's HTTP cache: a host that lets browsers reuse files
+// for a while (GitHub Pages: max-age=600) would otherwise hand a new worker
+// yesterday's copy of one file beside today's copy of another, and cache-first
+// would serve that mixed app until the next release.
+const fresh = (u) => new Request(u, { cache: "reload" });
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(CORE).then(() => Promise.all(EXTRAS.map((u) => c.add(u).catch(() => {})))))
+      .then((c) => c.addAll(CORE.map(fresh)).then(() => Promise.all(EXTRAS.map((u) => c.add(fresh(u)).catch(() => {})))))
       .then(() => self.skipWaiting())
   );
 });
@@ -174,8 +180,10 @@ self.addEventListener("fetch", (e) => {
     );
     return;
   }
+  // A file this worker doesn't hold yet is revalidated with the server
+  // ({cache: "no-cache"}, a cheap 304 when unchanged) before it is cached.
   e.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+    caches.match(req).then((cached) => cached || fetch(new Request(req, { cache: "no-cache" })).then((res) => {
       if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => cached))

@@ -64,7 +64,15 @@
         db.onclose = function () { if (conns[name]) delete conns[name]; };
         resolve(db);
       };
-      req.onerror = function () { delete conns[name]; reject(req.error || new Error("Could not open " + name)); };
+      req.onerror = function () {
+        delete conns[name];
+        var err = req.error || new Error("Could not open " + name);
+        // VersionError: the database is NEWER than this code's schema — the
+        // page is running an out-of-date copy of the app (a stale offline
+        // cache). Every call would fail the same way; boot.js recovers.
+        if (err && err.name === "VersionError" && data.bus) data.bus.emit("db:outdated", { name: name, version: schema.VERSION }, { local: true });
+        reject(err);
+      };
       req.onblocked = function () { if (data.bus) data.bus.emit("db:blocked", { name: name }, { local: true }); };
     });
     return conns[name];
