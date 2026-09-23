@@ -129,6 +129,7 @@ export default `
         <div class="refs" id="dAtt">
           <h3>📎 Files in this PDF <span class="att-count" id="dAttCount"></span></h3>
           <div class="att-list" id="dAttList"></div>
+          <div class="att-list att-links" id="dAttLinks" style="display:none"></div>
         </div>
         <div class="cmp" id="dCmp" style="display:none">
           <h3>Compare versions</h3>
