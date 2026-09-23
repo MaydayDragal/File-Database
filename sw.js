@@ -3,7 +3,7 @@
    open and run with no network. User data lives in IndexedDB and never
    touches this cache. `tools/sw-manifest.mjs --check` verifies the list is
    complete against the tree. */
-const CACHE = "file-database-v4";
+const CACHE = "file-database-v4-b88d4eb3b020";
 // The text-recognition engine the scanners download on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see src/services/ocr.js). Their files are

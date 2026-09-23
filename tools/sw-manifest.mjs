@@ -7,9 +7,16 @@
 // icons. A file that is added to src/ without appearing here would load
 // online and be missing from an offline launch — this check fails instead.
 //
+// The cache name is stamped too: "file-database-v<n>-<hash>", the hash taken
+// over every precached file. The worker serves assets cache-first, so a
+// change to any of them must rename the cache (and so change sw.js's bytes)
+// or returning users would keep running the old code; stamping it here means
+// nobody has to remember to bump it by hand.
+//
 // Usage:
-//   node tools/sw-manifest.mjs --check   fail if sw.js's lists differ from the tree
-//   node tools/sw-manifest.mjs --write   rewrite the lists in sw.js
+//   node tools/sw-manifest.mjs --check   fail if sw.js's lists or cache name differ from the tree
+//   node tools/sw-manifest.mjs --write   rewrite the lists and cache name in sw.js
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,15 +75,31 @@ function listOf(src, name) {
 }
 function render(name, items) { return "const " + name + " = [\n" + items.map((f) => '  "' + f + '",').join("\n") + "\n];"; }
 
+// Paths and bytes of everything the worker precaches ("./" is index.html).
+export function cacheName(base, lists) {
+  const h = createHash("sha256");
+  for (const f of [...new Set(lists.core.concat(lists.extras))]) {
+    if (f === "./") continue;
+    h.update(f + "\0");
+    h.update(fs.readFileSync(path.join(ROOT, f)));
+  }
+  return base + "-" + h.digest("hex").slice(0, 12);
+}
+const CACHE_LINE = /const CACHE = "(file-database-v\d+)(?:-[0-9a-f]{12})?";/;
+
 const sw = fs.readFileSync(SW, "utf8");
 const want = expected();
-const have = { core: listOf(sw, "CORE"), extras: listOf(sw, "EXTRAS") };
+const cacheLine = sw.match(CACHE_LINE);
+if (!cacheLine) throw new Error("sw.js: could not find const CACHE = \"file-database-v<n>…\"");
+want.cache = cacheName(cacheLine[1], want);
+const have = { core: listOf(sw, "CORE"), extras: listOf(sw, "EXTRAS"), cache: cacheLine[0].slice(15, -2) };
 const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 if (process.argv.includes("--write")) {
-  const out = sw.replace(have.core.text, render("CORE", want.core)).replace(have.extras.text, render("EXTRAS", want.extras));
+  const out = sw.replace(cacheLine[0], 'const CACHE = "' + want.cache + '";')
+    .replace(have.core.text, render("CORE", want.core)).replace(have.extras.text, render("EXTRAS", want.extras));
   fs.writeFileSync(SW, out);
-  console.log("✓ sw.js precache lists written (" + want.core.length + " core, " + want.extras.length + " extras)");
+  console.log("✓ sw.js precache lists written (" + want.core.length + " core, " + want.extras.length + " extras), cache " + want.cache);
 } else {
   let ok = true;
   for (const k of ["core", "extras"]) {
@@ -86,6 +109,10 @@ if (process.argv.includes("--write")) {
       ok = false;
       console.error("✗ sw.js " + k.toUpperCase() + " differs from the tree" + (missing.length ? " — missing: " + missing.join(", ") : "") + (stale.length ? " — stale: " + stale.join(", ") : ""));
     }
+  }
+  if (have.cache !== want.cache) {
+    ok = false;
+    console.error("✗ sw.js cache name is " + have.cache + " but the precached files hash to " + want.cache + " — returning users would keep the old code");
   }
   if (!ok) { console.error("  run `node tools/sw-manifest.mjs --write`"); process.exit(1); }
   console.log("✓ sw.js precaches the whole tree (" + want.core.length + " core, " + want.extras.length + " extras)");

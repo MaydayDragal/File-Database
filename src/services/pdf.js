@@ -11,6 +11,11 @@
  *
  *   FDServices.pdf.load()   → Promise<pdfjsLib>
  *   FDServices.pdf.lib      the library once loaded, else null
+ *   FDServices.pdf.attachments(blob, { maxPages })
+ *                           → Promise<[{ name, description, size, type,
+ *                             page, blob }]>: the files embedded in a PDF —
+ *                             the document's attachments (EmbeddedFiles) and
+ *                             paperclip annotations on its pages (page > 0)
  *
  * `window.__PDFJS_SRC` / `window.__PDFJS_WORKER` override the file locations
  * (tests). Callers still pass `isEvalSupported: false` to getDocument — the
@@ -42,7 +47,69 @@
     return libP;
   }
 
+  // A type for an embedded file from its name (PDFs rarely record one).
+  var MIME = {
+    txt: "text/plain", log: "text/plain", csv: "text/csv", tsv: "text/tab-separated-values", md: "text/markdown",
+    json: "application/json", xml: "application/xml", html: "text/html", htm: "text/html",
+    pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+    bmp: "image/bmp", webp: "image/webp", svg: "image/svg+xml", tif: "image/tiff", tiff: "image/tiff",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
+    zip: "application/zip", "7z": "application/x-7z-compressed",
+    doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
+  function mimeOf(name) {
+    var ext = String(name || "").toLowerCase().split(".").pop();
+    return MIME[ext] || "application/octet-stream";
+  }
+  function baseName(n) { return String(n || "").split(/[\\/]/).pop() || "attachment"; }
+
+  // Every file embedded in the PDF: the catalogue's attachments first, then
+  // each page's FileAttachment annotations (up to opts.maxPages pages), the
+  // same bytes listed once. The PDF itself is parsed in PDF.js's worker.
+  function attachments(blob, opts) {
+    opts = opts || {};
+    var maxPages = opts.maxPages || 300;
+    return load().then(function (lib) {
+      return blob.arrayBuffer().then(function (buf) {
+        return lib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+      });
+    }).then(function (doc) {
+      var out = [], seen = {};
+      // description: PDF.js 4.2 passes a file spec's name and bytes but not
+      // its /Desc, so a catalogue attachment has none; a paperclip
+      // annotation's note (its Contents) is used for its file.
+      function add(f, page, note) {
+        if (!f || !f.content || !f.content.length) return;
+        var name = baseName(f.filename);
+        var key = name + ":" + f.content.length;
+        if (seen[key]) return;
+        seen[key] = 1;
+        var type = mimeOf(name);
+        out.push({ name: name, description: f.description || note || "", size: f.content.length, type: type, page: page || 0, blob: new Blob([f.content], { type: type }) });
+      }
+      var n = Math.min(doc.numPages || 0, maxPages), i = 1;
+      function pages() {
+        if (i > n) return Promise.resolve();
+        var p = i++;
+        return doc.getPage(p).then(function (pg) { return pg.getAnnotations({ intent: "display" }); }).then(function (an) {
+          (an || []).forEach(function (a) {
+            if (a && a.subtype === "FileAttachment" && a.file) add(a.file, p, (a.contentsObj && a.contentsObj.str) || "");
+          });
+        }, function () {}).then(pages);
+      }
+      return Promise.resolve(doc.getAttachments()).then(function (att) {
+        Object.keys(att || {}).forEach(function (k) { add(att[k], 0); });
+      }, function () {}).then(pages).then(function () {
+        try { doc.destroy(); } catch (e) {}
+        return out;
+      }, function (e) { try { doc.destroy(); } catch (x) {} throw e; });
+    });
+  }
+
   global.FDServices.pdf = {
+    attachments: attachments,
+    mimeOf: mimeOf,
     load: load,
     SRC: SRC,
     WORKER: WORKER,

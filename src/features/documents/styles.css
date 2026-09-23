@@ -155,3 +155,24 @@
 
 /* The feature fills its panel (src/features/index.js mounts it into a shadow root). */
 .fd-root { flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; outline: none; }
+
+/* Files embedded in the PDF (its attachments), and viewing one in the preview pane */
+.preview-pane { display:flex; flex-direction:column; }
+.preview-pane iframe { flex:1 1 auto; }
+.att-bar { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--panel); border-bottom:1px solid var(--border); }
+.att-bar__name { flex:1; min-width:0; font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.att-view { flex:1 1 auto; min-height:320px; overflow:auto; display:flex; align-items:flex-start; justify-content:center; background:var(--preview-bg); }
+.att-view img, .att-view video { max-width:100%; max-height:100%; margin:auto; display:block; }
+.att-view iframe { width:100%; min-height:320px; height:100%; border:none; background:#fff; }
+.att-view pre { margin:0; padding:14px; width:100%; box-sizing:border-box; white-space:pre-wrap; word-break:break-word; font:12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--text); background:var(--panel); min-height:100%; }
+.att-view .att-none { margin:auto; padding:30px; text-align:center; color:var(--muted); font-size:13px; }
+.att-count { font-weight:600; color:var(--muted); }
+.att-list { display:flex; flex-direction:column; gap:6px; }
+.att-row { display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid var(--border); border-radius:8px; }
+.att-row.on { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
+.att-row__icon { flex:none; font-size:16px; }
+.att-row__main { flex:1; min-width:0; }
+.att-row__name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.att-row__meta { font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.att-row .btn { flex:none; }
+.att-empty { font-size:12.5px; color:var(--muted); }

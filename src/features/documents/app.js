@@ -1,6 +1,8 @@
 /* LI Documents — the app, as a feature module (REWRITE-PLAN.md Phase 4). */
 /* ===== LI Document Database app (moved out of li/index.html, REWRITE-PLAN.md Phase 3) ===== */
 /* ===== LI Document Database app ===== */
+import { reviewDuplicates } from "../../ui/duplicates.js";
+
 export function start(root, host, shell) {
   "use strict";
   var $ = function (id) { return root.getElementById(id); };
@@ -341,9 +343,138 @@ export function start(root, host, shell) {
     updNewName();
     renderRefs(d);
     renderCrossApps(d);
+    showPdf();
+    renderAttachments(d);
     dDirty = false;
     getFile(d.id).then(function (blob) { if (curDoc !== d || !$("detailOverlay").classList.contains("show")) return; if (curUrl) URL.revokeObjectURL(curUrl); curUrl = blob ? URL.createObjectURL(asPdf(blob)) : null; $("dFrame").src = curUrl || "about:blank"; });
   }
+  // ---------- files embedded in the PDF (its attachments) ----------
+  // A PDF can carry files of its own: attachments in its catalogue and
+  // paperclip annotations on its pages. They are read out of the stored PDF
+  // when a document is opened (once per stored file) and listed under
+  // "Files in this PDF", where each can be viewed in the preview pane,
+  // downloaded, or added to Files. Nothing is stored twice: the PDF stays the
+  // one copy until a file is added to Files.
+  var attCache = {};  // fileId (or doc id) -> Promise<[attachments]>
+  var attUrl = null, attShown = null;
+  var ATT_ICON = { image: "🖼️", video: "🎬", audio: "🎵", pdf: "📕", text: "📝", other: "📎" };
+  function attKind(a) {
+    var t = a.type || "";
+    if (t === "application/pdf") return "pdf";
+    if (/^image\//.test(t)) return "image";
+    if (/^video\//.test(t)) return "video";
+    if (/^audio\//.test(t)) return "audio";
+    if (/^text\//.test(t) || t === "application/json" || t === "application/xml") return "text";
+    return "other";
+  }
+  function attachmentsOf(d) {
+    var key = d.fileId || d.id;
+    if (!attCache[key]) {
+      attCache[key] = getFile(d.id).then(function (blob) {
+        if (!blob) return [];
+        return FDServices.pdf.attachments(asPdf(blob));
+      });
+      attCache[key].catch(function () { delete attCache[key]; });
+    }
+    return attCache[key];
+  }
+  function renderAttachments(d) {
+    var list = $("dAttList"), count = $("dAttCount");
+    list.innerHTML = '<div class="att-empty">Looking for files inside the PDF…</div>';
+    count.textContent = "";
+    attachmentsOf(d).then(function (atts) {
+      if (curDoc !== d) return;
+      list.innerHTML = "";
+      count.textContent = atts.length ? "(" + atts.length + ")" : "";
+      if (!atts.length) { list.innerHTML = '<div class="att-empty">No files are attached to this PDF.</div>'; return; }
+      atts.forEach(function (a, i) {
+        var row = document.createElement("div"); row.className = "att-row"; row.dataset.index = String(i);
+        var ic = document.createElement("span"); ic.className = "att-row__icon"; ic.textContent = ATT_ICON[attKind(a)];
+        var main = document.createElement("div"); main.className = "att-row__main";
+        var nm = document.createElement("div"); nm.className = "att-row__name"; nm.textContent = a.name; nm.title = a.name;
+        var meta = document.createElement("div"); meta.className = "att-row__meta";
+        meta.textContent = [fmtBytes(a.size), a.page ? "on page " + a.page : "attached to the document", a.description].filter(Boolean).join(" · ");
+        main.append(nm, meta);
+        var view = document.createElement("button"); view.className = "btn btn-ghost btn-sm att-view-btn"; view.textContent = "👁 View"; view.title = "Show it in the preview";
+        view.onclick = function () { showAttachment(a, row); };
+        var dl = document.createElement("button"); dl.className = "btn btn-ghost btn-sm att-dl-btn"; dl.textContent = "⬇"; dl.title = "Download " + a.name;
+        dl.onclick = function () { downloadBlob(a.blob, a.name); };
+        var add = document.createElement("button"); add.className = "btn btn-ghost btn-sm att-add-btn"; add.textContent = "＋ Files"; add.title = "Add this file to Files (tagged with the LI number)";
+        add.onclick = function () { addAttachmentToFiles(d, a, add); };
+        row.append(ic, main, view, dl, add);
+        list.append(row);
+      });
+    }, function (e) {
+      if (curDoc !== d) return;
+      list.innerHTML = "";
+      var m = document.createElement("div"); m.className = "att-empty";
+      m.textContent = "Couldn't read the files inside this PDF — " + ((e && e.message) || e);
+      list.append(m);
+    });
+  }
+  function clearAttachmentView() {
+    if (attUrl) { URL.revokeObjectURL(attUrl); attUrl = null; }
+    attShown = null;
+    var v = $("dAttView"); v.innerHTML = ""; v.style.display = "none";
+    $("dAttBar").style.display = "none";
+    root.querySelectorAll("#dAttList .att-row.on").forEach(function (r) { r.classList.remove("on"); });
+  }
+  // Back to the LI document itself in the preview pane.
+  function showPdf() { clearAttachmentView(); $("dFrame").style.display = ""; }
+  // Show an attachment in the preview pane. Only inert elements are used — an
+  // embedded HTML or SVG file is never rendered as a page here (it would run
+  // with this app's origin): images go in an <img>, text-like files are
+  // shown as text, a PDF in the browser's PDF viewer; anything else offers a
+  // download.
+  function showAttachment(a, row) {
+    clearAttachmentView();
+    attShown = a;
+    if (row) row.classList.add("on");
+    var v = $("dAttView"), kind = attKind(a);
+    $("dAttBarName").textContent = "📎 " + a.name;
+    $("dAttBar").style.display = "";
+    $("dFrame").style.display = "none";
+    v.style.display = "";
+    attUrl = URL.createObjectURL(a.blob);
+    if (kind === "image") { var img = document.createElement("img"); img.alt = a.name; img.src = attUrl; v.append(img); }
+    else if (kind === "pdf") { var f = document.createElement("iframe"); f.title = a.name; f.src = attUrl; v.append(f); }
+    else if (kind === "video" || kind === "audio") { var m = document.createElement(kind); m.controls = true; m.src = attUrl; v.append(m); }
+    else if (kind === "text") {
+      var pre = document.createElement("pre"); pre.textContent = "Loading…"; v.append(pre);
+      var cap = 2 * 1024 * 1024;
+      a.blob.slice(0, cap).text().then(function (t) { if (attShown === a) pre.textContent = t + (a.size > cap ? "\n\n… (the first 2 MB — download it for the rest)" : ""); });
+    } else {
+      var none = document.createElement("div"); none.className = "att-none";
+      none.textContent = "There's no preview for this kind of file. Use ⬇ Download to open it with another program.";
+      v.append(none);
+    }
+  }
+  function downloadBlob(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a"); link.href = url; link.download = name || "attachment";
+    root.appendChild(link); link.click(); link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  // Store the attachment as its own file in Files — tagged with the LI
+  // number, noted with where it came from, in the LI Documents collection.
+  function addAttachmentToFiles(d, a, btn) {
+    if (!window.FDData || !FDData.intake) { toast("Files isn't available."); return; }
+    btn.disabled = true;
+    var li = d.li || "";
+    var file = new File([a.blob], a.name, { type: a.type });
+    FDData.intake.ingest("vault", [file], {
+      source: "li", collection: FDData.repos.LI_COLLECTION, reviewDuplicates: reviewDuplicates,
+      meta: { tags: li ? [li] : [], note: "Attached inside " + (li || d.filename || "an LI document") + (d.ver ? " v" + d.ver : "") },
+    }).then(function (out) {
+      var r = out.results[0] || {};
+      if (r.ok) toast("Added “" + a.name + "” to Files ✓");
+      else if (r.skipped) toast("“" + a.name + "” is already in Files.");
+      else toast("Couldn't add “" + a.name + "” — " + (r.error || "unknown error"));
+    }, function (e) { toast("Couldn't add “" + a.name + "” — " + ((e && e.message) || e)); }).then(function () { btn.disabled = false; });
+  }
+  $("dAttBack").addEventListener("click", showPdf);
+  $("dAttDownload").addEventListener("click", function () { if (attShown) downloadBlob(attShown.blob, attShown.name); });
+
   // Other LI documents cited in this one's text/reason — shown as chips that
   // jump to that document if it's in the library.
   function findRefs(d) {
@@ -1055,6 +1186,7 @@ export function start(root, host, shell) {
     dDirty = false; vSeq++; vCleanDocs(); curDoc = null; curGroup = null; navStack = [];
     $("detailOverlay").classList.remove("show"); $("importOverlay").classList.remove("show"); $("diffOverlay").classList.remove("show"); $("installOverlay").classList.remove("show");
     if (curUrl) { URL.revokeObjectURL(curUrl); curUrl = null; } $("dFrame").src = "about:blank";
+    showPdf();
     if (wasDetail) setHash("");
   }
   // ---------- permalinks + quick copy ----------
