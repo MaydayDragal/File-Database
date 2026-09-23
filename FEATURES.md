@@ -221,7 +221,7 @@ the text-to-record extraction are the shared [src/core](src/core/) modules
 - **Files in this PDF**: the document view lists the files embedded in the
   stored PDF — attachments in its catalogue and paperclip annotations on its
   pages, with size, page and the annotation's note — read by
-  `FDServices.pdf.attachments()` ([src/services/pdf.js](src/services/pdf.js))
+  `FDServices.pdf.contents()` ([src/services/pdf.js](src/services/pdf.js))
   when the document is opened (once per stored PDF). **View** shows one in the
   preview pane with inert elements only: images in an `<img>`, text-like files
   (HTML and XML included) as plain text, PDFs in the browser's viewer, video
@@ -229,6 +229,18 @@ the text-to-record extraction are the shared [src/core](src/core/) modules
   it; **＋ Files** stores it in Files (collection `LI Documents`, tagged with
   the LI number, a note naming the document and version), through the
   duplicate review. The embedded files are not copied anywhere until then.
+  Identical files (same name and bytes) are listed once; empty ones are kept.
+- **Linked, not inside this PDF**: a page saved from XENTRY TIPS lists its
+  attachments as links to Mercedes' attachment service rather than carrying
+  them. Links whose text or path names a file (or that point at an
+  attachment/download endpoint) are listed by the link's text, with page and
+  host; plain web and mailto links are not. **⬇ Get file** fetches one (no
+  cookies, no referrer — XENTRY's read-key links need no login and allow
+  cross-origin reads) and it becomes a file like the embedded ones (View, ⬇,
+  ＋ Files, noted "Linked from …"). An error answer is never kept as the file:
+  an expired read key shows XENTRY's own message and says to get a fresh link
+  from XENTRY TIPS; a server that refuses other sites says to use **↗** (opens
+  the link in a new tab) and add the download with ＋ Add files.
 - Copies renamed PDFs to Vault with LI/group/model metadata; links to Inventory
   by service group/model and referenced special-tool numbers.
 - Supports folder import and five-minute auto-sync while open. Folder identity
@@ -654,7 +666,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-debug.mjs` | Logger capture, persistence, viewer, clearing, shared shell log |
 | `e2e-integration.mjs` | Record links, cross-app filters, auto VIN, quick-open, the one-download backup, toasts, catalog offer |
 | `e2e-inventory.mjs` | Empty start, fixture `.tidb`, photos, filters, edits, import/export, embedding |
-| `e2e-li-attachments.mjs` | A pdf-lib-built LI PDF with three attachments and a paperclip annotation: all four listed with page and note, each viewed safely (an HTML file as text, its script never run), downloaded, added to Files with the LI tag; a PDF without files says so |
+| `e2e-li-attachments.mjs` | A pdf-lib-built LI PDF with three attachments and a paperclip annotation: all four listed with page and note, each viewed safely (an HTML file as text, its script never run), downloaded, added to Files with the LI tag; a PDF without files says so; look-alike files (same name and size) all listed, exact repeats once, an empty file kept; a saved web page's linked attachments listed by link text (web/mailto links not), fetched with ⬇ Get file into View/⬇/＋ Files, an expired XENTRY key and a refusing server each explained |
 | `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs over the shared database |
 | `e2e-migrate.mjs` | First-launch migration of a profile seeded with all four legacy databases: dialog, verify, `.fdb` offer, deletion, every app reading the result; a forced verification failure leaving everything untouched |
 | `e2e-phase5.mjs` | The unified model in use: Files trash / restore / delete forever and a purge refused for a file an RO uses; the duplicate review (reuse, skip); one file on two repair orders; the RO delete choices and RO trash; a pinned LI version with "newer version exists" and a pinned tool; the vehicle record, **✓ Confirm VIN** and `#vehicle/<VIN>`; Ctrl+K results from every store; one `.fdb` download restored into a new generation with ROs, links, vehicles and pins intact |

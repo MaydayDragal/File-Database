@@ -355,7 +355,7 @@ export function start(root, host, shell) {
   // "Files in this PDF", where each can be viewed in the preview pane,
   // downloaded, or added to Files. Nothing is stored twice: the PDF stays the
   // one copy until a file is added to Files.
-  var attCache = {};  // fileId (or doc id) -> Promise<[attachments]>
+  var attCache = {};  // fileId (or doc id) -> Promise<{ files, links }>
   var attUrl = null, attShown = null;
   var ATT_ICON = { image: "🖼️", video: "🎬", audio: "🎵", pdf: "📕", text: "📝", other: "📎" };
   function attKind(a) {
@@ -371,8 +371,8 @@ export function start(root, host, shell) {
     var key = d.fileId || d.id;
     if (!attCache[key]) {
       attCache[key] = getFile(d.id).then(function (blob) {
-        if (!blob) return [];
-        return FDServices.pdf.attachments(asPdf(blob));
+        if (!blob) return { files: [], links: [] };
+        return FDServices.pdf.contents(asPdf(blob));
       });
       attCache[key].catch(function () { delete attCache[key]; });
     }
@@ -381,29 +381,20 @@ export function start(root, host, shell) {
   function renderAttachments(d) {
     var list = $("dAttList"), count = $("dAttCount");
     list.innerHTML = '<div class="att-empty">Looking for files inside the PDF…</div>';
+    renderLinkedFiles(d, []);
     count.textContent = "";
-    attachmentsOf(d).then(function (atts) {
+    attachmentsOf(d).then(function (c) {
       if (curDoc !== d) return;
+      var atts = c.files, links = c.links;
       list.innerHTML = "";
       count.textContent = atts.length ? "(" + atts.length + ")" : "";
-      if (!atts.length) { list.innerHTML = '<div class="att-empty">No files are attached to this PDF.</div>'; return; }
-      atts.forEach(function (a, i) {
-        var row = document.createElement("div"); row.className = "att-row"; row.dataset.index = String(i);
-        var ic = document.createElement("span"); ic.className = "att-row__icon"; ic.textContent = ATT_ICON[attKind(a)];
-        var main = document.createElement("div"); main.className = "att-row__main";
-        var nm = document.createElement("div"); nm.className = "att-row__name"; nm.textContent = a.name; nm.title = a.name;
-        var meta = document.createElement("div"); meta.className = "att-row__meta";
-        meta.textContent = [fmtBytes(a.size), a.page ? "on page " + a.page : "attached to the document", a.description].filter(Boolean).join(" · ");
-        main.append(nm, meta);
-        var view = document.createElement("button"); view.className = "btn btn-ghost btn-sm att-view-btn"; view.textContent = "👁 View"; view.title = "Show it in the preview";
-        view.onclick = function () { showAttachment(a, row); };
-        var dl = document.createElement("button"); dl.className = "btn btn-ghost btn-sm att-dl-btn"; dl.textContent = "⬇"; dl.title = "Download " + a.name;
-        dl.onclick = function () { downloadBlob(a.blob, a.name); };
-        var add = document.createElement("button"); add.className = "btn btn-ghost btn-sm att-add-btn"; add.textContent = "＋ Files"; add.title = "Add this file to Files (tagged with the LI number)";
-        add.onclick = function () { addAttachmentToFiles(d, a, add); };
-        row.append(ic, main, view, dl, add);
-        list.append(row);
-      });
+      if (!atts.length) {
+        var none = document.createElement("div"); none.className = "att-empty";
+        none.textContent = links.length ? "No files are stored inside this PDF." : "No files are attached to this PDF.";
+        list.append(none);
+      }
+      renderLinkedFiles(d, links);
+      atts.forEach(function (a, i) { list.append(fileRow(d, a, i)); });
     }, function (e) {
       if (curDoc !== d) return;
       list.innerHTML = "";
@@ -412,12 +403,108 @@ export function start(root, host, shell) {
       list.append(m);
     });
   }
+  // One file the user can look at: 👁 View, ⬇ download, ＋ Files.
+  function fileRow(d, a, i) {
+    var row = document.createElement("div"); row.className = "att-row"; row.dataset.index = String(i);
+    var ic = document.createElement("span"); ic.className = "att-row__icon"; ic.textContent = ATT_ICON[attKind(a)];
+    var main = document.createElement("div"); main.className = "att-row__main";
+    var nm = document.createElement("div"); nm.className = "att-row__name"; nm.textContent = a.name; nm.title = a.name;
+    var meta = document.createElement("div"); meta.className = "att-row__meta";
+    var where = a.link ? "fetched from the link on page " + a.page : a.page ? "on page " + a.page : "attached to the document";
+    meta.textContent = [fmtBytes(a.size), where, a.description].filter(Boolean).join(" · ");
+    main.append(nm, meta);
+    var view = document.createElement("button"); view.className = "btn btn-ghost btn-sm att-view-btn"; view.textContent = "👁 View"; view.title = "Show it in the preview";
+    view.onclick = function () { showAttachment(a, row); };
+    var dl = document.createElement("button"); dl.className = "btn btn-ghost btn-sm att-dl-btn"; dl.textContent = "⬇"; dl.title = "Download " + a.name;
+    dl.onclick = function () { downloadBlob(a.blob, a.name); };
+    var add = document.createElement("button"); add.className = "btn btn-ghost btn-sm att-add-btn"; add.textContent = "＋ Files"; add.title = "Add this file to Files (tagged with the LI number)";
+    add.onclick = function () { addAttachmentToFiles(d, a, add); };
+    var acts = document.createElement("div"); acts.className = "att-row__acts";
+    acts.append(view, dl, add);
+    row.append(ic, main, acts);
+    return row;
+  }
+  // Files the PDF only links to (a page saved from XENTRY TIPS lists its
+  // attachments as links to Mercedes' attachment service). They aren't in the
+  // PDF; ⬇ Get file fetches one (XENTRY's service allows it — its links carry
+  // a read key, no login) and, once it arrives, it's a file like the others.
+  // A key can stop working; the server's own message is shown then.
+  function renderLinkedFiles(d, links) {
+    var box = $("dAttLinks");
+    box.innerHTML = "";
+    box.style.display = links.length ? "" : "none";
+    if (!links.length) return;
+    var h = document.createElement("div"); h.className = "att-sub";
+    h.textContent = "🔗 Linked, not inside this PDF (" + links.length + ")";
+    box.append(h);
+    links.forEach(function (l, i) {
+      if (l.fetched) { var fr = fileRow(d, l.fetched, "link-" + i); fr.classList.add("att-link"); box.append(fr); return; }
+      var row = document.createElement("div"); row.className = "att-row att-link";
+      var ic = document.createElement("span"); ic.className = "att-row__icon"; ic.textContent = "🔗";
+      var main = document.createElement("div"); main.className = "att-row__main";
+      var nm = document.createElement("div"); nm.className = "att-row__name"; nm.textContent = l.name; nm.title = l.name;
+      var meta = document.createElement("div"); meta.className = "att-row__meta";
+      meta.textContent = ["linked on page " + l.page, l.host || l.target].filter(Boolean).join(" · ");
+      meta.title = l.target;
+      var err = document.createElement("div"); err.className = "att-row__err"; err.style.display = "none";
+      main.append(nm, meta, err);
+      row.append(ic, main);
+      if (l.url) {
+        var get = document.createElement("button"); get.className = "btn btn-ghost btn-sm att-fetch-btn";
+        get.textContent = "⬇ Get file"; get.title = "Download it from the link into this list";
+        get.onclick = function () {
+          get.disabled = true; get.textContent = "Getting…"; err.style.display = "none";
+          fetchLinked(l).then(function (a) {
+            l.fetched = a;
+            if (curDoc === d) renderLinkedFiles(d, links);
+          }, function (e) {
+            get.disabled = false; get.textContent = "⬇ Get file";
+            err.textContent = (e && e.message) || String(e); err.style.display = "";
+          });
+        };
+        var open = document.createElement("a"); open.className = "btn btn-ghost btn-sm att-open-btn";
+        open.href = l.url; open.target = "_blank"; open.rel = "noopener noreferrer";
+        open.textContent = "↗"; open.title = "Open the link in a new tab: " + l.url;
+        var acts = document.createElement("div"); acts.className = "att-row__acts";
+        acts.append(get, open);
+        row.append(acts);
+      }
+      box.append(row);
+    });
+    var note = document.createElement("div"); note.className = "att-note";
+    note.textContent = "These files live outside the PDF. If ⬇ Get file doesn't work, ↗ opens the link in the browser — add what it downloads with ＋ Add files.";
+    box.append(note);
+  }
+  // Fetch a linked file. No cookies are sent, only the link itself (XENTRY's
+  // read-key links need none). An error page — XENTRY answers a bad key with
+  // JSON — is reported with the server's own message, never kept as the file.
+  function fetchLinked(l) {
+    return fetch(l.url, { credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store" }).then(function (res) {
+      var ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!res.ok || /^application\/(problem\+)?json/.test(ct)) {
+        return res.text().then(function (t) {
+          var msg = "";
+          try { var j = JSON.parse(t); msg = j.message || (j.errorInfo && (j.errorInfo.developerMessage || j.errorInfo.errorDescription)) || ""; } catch (e) {}
+          if (/read key/i.test(msg)) throw new Error("This link has expired (XENTRY: “" + msg + "”). Open the LI in XENTRY TIPS for a fresh one.");
+          throw new Error("The server refused it: " + (msg || "HTTP " + res.status) + ".");
+        });
+      }
+      return res.blob().then(function (b) {
+        var cd = res.headers.get("content-disposition") || "", m = /filename\*=(?:UTF-8'')?([^;]+)|filename="?([^";]+)"?/i.exec(cd), name = l.name;
+        if (m) { try { name = decodeURIComponent((m[1] || m[2]).trim()); } catch (e) { name = (m[1] || m[2]).trim(); } }
+        var type = b.type && b.type !== "application/octet-stream" ? b.type : FDServices.pdf.mimeOf(name);
+        return { name: name, description: "", size: b.size, type: type, page: l.page, blob: b.type === type ? b : new Blob([b], { type: type }), link: l.url };
+      });
+    }, function () {
+      throw new Error("Couldn't fetch it here — its server doesn't allow it. Use ↗ to open the link, then add the download with ＋ Add files.");
+    });
+  }
   function clearAttachmentView() {
     if (attUrl) { URL.revokeObjectURL(attUrl); attUrl = null; }
     attShown = null;
     var v = $("dAttView"); v.innerHTML = ""; v.style.display = "none";
     $("dAttBar").style.display = "none";
-    root.querySelectorAll("#dAttList .att-row.on").forEach(function (r) { r.classList.remove("on"); });
+    root.querySelectorAll("#dAtt .att-row.on").forEach(function (r) { r.classList.remove("on"); });
   }
   // Back to the LI document itself in the preview pane.
   function showPdf() { clearAttachmentView(); $("dFrame").style.display = ""; }
@@ -464,7 +551,7 @@ export function start(root, host, shell) {
     var file = new File([a.blob], a.name, { type: a.type });
     FDData.intake.ingest("vault", [file], {
       source: "li", collection: FDData.repos.LI_COLLECTION, reviewDuplicates: reviewDuplicates,
-      meta: { tags: li ? [li] : [], note: "Attached inside " + (li || d.filename || "an LI document") + (d.ver ? " v" + d.ver : "") },
+      meta: { tags: li ? [li] : [], note: (a.link ? "Linked from " : "Attached inside ") + (li || d.filename || "an LI document") + (d.ver ? " v" + d.ver : "") },
     }).then(function (out) {
       var r = out.results[0] || {};
       if (r.ok) toast("Added “" + a.name + "” to Files ✓");
