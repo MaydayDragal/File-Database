@@ -21,7 +21,7 @@
   var data = global.FDData, db = data.db, bus = data.bus, repos = data.repos;
   var fdb = global.FDCore.formats.fdb, hash = global.FDCore.hash;
 
-  var RECORD_STORES = fdb.RECORD_STORES;   // files, documents, tools, ros, links, settings
+  var RECORD_STORES = fdb.RECORD_STORES;   // files, documents, tools, ros, links, vehicles, settings
   var PAYLOAD_STORES = fdb.PAYLOAD_STORES; // blobs, thumbs, photos
   var BATCH = 100;
 
@@ -158,7 +158,8 @@
         // Every file record must have its bytes in the backup.
         var have = {};
         parsed.payloads.forEach(function (p) { if (p.store === "blobs") have[p.id] = true; });
-        var missing = (parsed.meta.records.files || []).filter(function (f) { return !have[f.id]; });
+        // (A record that reuses another's bytes names them with blobId.)
+        var missing = (parsed.meta.records.files || []).filter(function (f) { return !have[f.blobId || f.id]; });
         if (missing.length) throw new Error("Verification failed: " + missing.length + " file record(s) have no bytes in the backup (" + missing[0].name + ").");
         var hashed = parsed.payloads.filter(function (p) { return p.store === "blobs" && p.sha256; });
         var i = 0;

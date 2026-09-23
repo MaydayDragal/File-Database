@@ -13,6 +13,17 @@
  * never reported as delivered (the old mailbox acknowledged LI batches that
  * had failures).
  *
+ * Exact duplicates (Phase 5): for "vault", when opts.reviewDuplicates is
+ * given, every file whose bytes are already stored (blobs.sha256) is put to
+ * it BEFORE anything is written — reviewDuplicates([{ index, name, sha256,
+ * matches }]) resolves one decision per entry, { index, action: "reuse" |
+ * "keep" | "skip", reuse?: fileId }. "reuse" stores a new record sharing
+ * the bytes, "keep" stores a second copy, "skip" stores nothing (reported
+ * as { skipped: true, duplicateOf }) — and when the stored file standing
+ * for it is in the trash, takes it out: adding the file again means it is
+ * wanted. Without a reviewer both are kept: nothing is ever dropped on a
+ * match.
+ *
  * Classic <script> (window.FDData.intake) and side-effect import from Node.
  * Requires repos.js, jobs.js and src/core/ids.js.
  */
@@ -75,19 +86,28 @@
         });
       });
     });
-    return chain.then(function () { return repos.files.ingest(entries, { verify: opts.verify !== false }); }).then(function (stored) {
+    return chain.then(function () {
+      if (target !== "vault" || typeof opts.reviewDuplicates !== "function" || !entries.length) return null;
+      return reviewDuplicates(entries, opts.reviewDuplicates, results);
+    }).then(function () {
+      entries = entries.filter(function (en) { return !en.skip; });
+      return repos.files.ingest(entries, { verify: opts.verify !== false });
+    }).then(function (stored) {
       results = results.concat(stored);
       var ok = stored.filter(function (r) { return r.ok; });
       var ids = ok.map(function (r) { return r.id; });
       var queued = [];
       var after = Promise.resolve();
-      if (!ids.length) return { results: results, ids: ids, jobs: queued };
+      if (!ids.length && !(opts.roId && results.some(function (r) { return r.skipped && r.duplicateOf; }))) return { results: results, ids: ids, jobs: queued };
       if (target === "vault") {
         var thumbIds = ok.filter(function (r) { return THUMB_KINDS[r.kind]; }).map(function (r) { return r.id; });
         var vinIds = ok.filter(function (r) { return !VIN_SKIP_KIND[r.kind]; }).map(function (r) { return r.id; });
         if (opts.roId) {
+          // A duplicate the reviewer skipped is attached as the file already
+          // stored: the repair order still gets the evidence, once.
+          var onRo = ids.concat(results.filter(function (r) { return r.skipped && r.duplicateOf; }).map(function (r) { return r.duplicateOf; }));
           after = after.then(function () {
-            return repos.links.linkMany(ids.map(function (id) { return { fromType: "ro", fromId: opts.roId, toType: "file", toId: id, kind: "attachment", source: opts.source || "user" }; }));
+            return repos.links.linkMany(onRo.map(function (id) { return { fromType: "ro", fromId: opts.roId, toType: "file", toId: id, kind: "attachment", source: opts.source || "user" }; }));
           });
         }
         if (thumbIds.length) after = after.then(function () { return jobs.enqueue("thumb", thumbIds).then(function (j) { queued.push({ id: j.id, type: "thumb" }); }); });
@@ -98,6 +118,44 @@
         after = after.then(function () { return jobs.enqueue("toolbox-intake", ids, { tab: opts.tab || null }).then(function (j) { queued.push({ id: j.id, type: "toolbox-intake" }); }); });
       }
       return after.then(function () { return { results: results, ids: ids, jobs: queued }; });
+    });
+  }
+
+  // Ask the reviewer about entries whose bytes are already stored and apply
+  // its decisions to the entries (reuse → entry.reuse, skip → entry.skip).
+  function reviewDuplicates(entries, reviewer, results) {
+    return repos.files.findDuplicates(entries.map(function (en) { return en.blob; })).then(function (dups) {
+      if (!dups.length) return null;
+      var asked = dups.map(function (d) {
+        var en = entries[d.index];
+        en.sha256 = d.sha256;
+        return {
+          index: d.index, name: en.name, size: en.blob.size, sha256: d.sha256,
+          matches: d.matches.map(function (m) { return { id: m.id, name: m.name, collection: m.collection || "", inFiles: m.inFiles, deletedAt: m.deletedAt || 0, docId: m.docId || null }; }),
+        };
+      });
+      var revive = [];
+      return Promise.resolve(reviewer(asked)).then(function (decisions) {
+        (decisions || []).forEach(function (dec) {
+          var en = dec && entries[dec.index];
+          var d = dec && asked.filter(function (a) { return a.index === dec.index; })[0];
+          if (!en || !d) return;
+          var named = dec.reuse && d.matches.some(function (m) { return m.id === dec.reuse; }) ? dec.reuse : null;
+          if (dec.action === "skip") {
+            en.skip = true;
+            // duplicateOf: the stored record that stands for it (the one the
+            // reviewer named, else the first match).
+            var stand = named || (d.matches.filter(function (m) { return !m.deletedAt; })[0] || d.matches[0] || {}).id;
+            var sm = d.matches.filter(function (m) { return m.id === stand; })[0];
+            if (sm && sm.deletedAt) revive.push(stand);
+            results.push({ name: en.name, id: null, ok: false, skipped: true, duplicateOf: stand || null, restored: !!(sm && sm.deletedAt), error: "already stored" });
+          } else if (dec.action === "reuse") {
+            var target = named || (d.matches[0] && d.matches[0].id);
+            if (target) en.reuse = target;
+          }
+        });
+        return revive.length ? repos.files.restore(revive) : null;
+      });
     });
   }
 

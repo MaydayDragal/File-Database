@@ -16,7 +16,7 @@ contracts, service workers, and test coverage.
 | LI Documents | Parse Mercedes-Benz LI PDFs, organize versions, compare changes, and export renamed documents | `#li` |
 | Tool Inventory | Open a portable special-tool catalog, search/filter it, and edit locations, quantities, notes, and comments | `#inventory` |
 | Toolbox | Ten file and workshop utilities, including PDF tools, compression, OCR, and calculators | `#toolbox` |
-| Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, and associate files stored in Files | `#ros` |
+| Repair Orders | Scan a paper RO to fill one in, keep its vehicle/customer details and multiple story lines, attach files stored in Files, and pin the exact LI versions and tools a job used | `#ros` (`#ros/<id>` opens one) |
 | Extract | Open `.fdb`, `.fvault`, `.lidb`, or `.tidb` backups and download ordinary files | `#viewer` (also standalone: [viewer.html](viewer.html)) |
 
 Everything is one page: the shell mounts each app into its panel on first use
@@ -83,6 +83,12 @@ File Vault supports:
   including VINs and FINs. Vault search is not a full-content document search.
 - Multi-select with checkboxes, Ctrl/Cmd-click, Shift-click ranges, and select-all;
   bulk collection, tag, VIN, star, delete, download, and cross-app actions.
+- **Trash.** Delete moves files to the 🗑️ Trash, where they can be restored or
+  deleted for good. A file a repair order or an LI document still uses cannot be
+  deleted for good until it is removed there.
+- **Duplicates.** Adding a file whose exact bytes are already stored asks first:
+  reuse the stored bytes (a new entry, no second copy), keep a second copy, or
+  skip it.
 - Bulk downloads to a chosen folder with read-back verification, or individual
   browser downloads when the folder API is unavailable.
 - PDF handoffs to LI Documents and supported file handoffs to Toolbox. LI can
@@ -97,8 +103,12 @@ image/scanned-PDF OCR when its engine is available. Videos are skipped. Detectio
 uses Mercedes-specific manufacturer prefixes and heuristics; it is not a general
 VIN decoder. VIN and FIN fields can be edited in the file detail panel.
 
-The **By VIN** view groups files by vehicle. Pin a VIN from a vehicle header,
-related-file chips, or Ctrl/Cmd+K to make it the active vehicle. New files routed
+The **By VIN** view groups files by vehicle. **#vehicle/<VIN>** (also reached
+from Ctrl/Cmd+K, a file's 🚗 chip or an RO's 🚗 Vehicle button) shows everything
+about one car: whether its VIN passed the check digit and whether a technician
+confirmed it, its files and repair orders, and the LI documents and special
+tools for its model series. Pin a VIN from a vehicle header,
+related-file chips, the vehicle view, or Ctrl/Cmd+K to make it the active vehicle. New files routed
 to the Vault can then receive that VIN. LI and Inventory model filters are applied
 only when characters 4–6 of the pinned identifier form a three-digit model series;
 many VINs, including North American formats, do not provide this value.
@@ -197,17 +207,23 @@ back without one, so a correctly-fed page costs nothing extra. See
   rather than becoming RO attachments directly. To associate one, copy it to the
   Vault and use the import workflow below.
 - **Import from Vault** opens the normal Vault screen in selection mode. Select
-  files and press **Add to RO**. This changes their collection to `RO <number>`;
-  it does not create a second copy or preserve their former collection membership.
+  files and press **Add to RO**. This attaches them to the RO; they keep their
+  name, collection and place in Files, and a file can be on several ROs.
 - Files without a VIN receive the RO's VIN when provided. Files with a different
   VIN prompt for add-anyway or skip; their existing VIN is retained.
-- Changing an RO number in the shell moves its collection's files to the new
-  collection name. Deleting the RO leaves its Vault files in place.
+- Changing an RO number changes the RO alone; its files stay attached. RO numbers
+  are unique.
+- **LI documents & tools used**: type an LI number or a special-tool number to pin
+  it. An LI number pins the version stored today; importing a newer version later
+  shows "newer version exists" beside the pin without changing it.
+- The VIN line shows whether the VIN passes its check digit; **✓ Confirm VIN**
+  records that a technician checked it against the car.
+- **Delete** asks what to do with the RO's files — keep them attached, unlink them,
+  or move them to the trash too — and moves the RO to its own 🗑️ Trash, where it
+  can be restored or deleted for good.
 
-RO association is based on a collection name, so use distinct RO numbers.
-**RO records and story lines currently have no export/restore feature and are not
-included in the platform's backup button.** Attached Vault files are included in
-Vault backups, but restoring those files does not recreate the RO records.
+Repair orders, their links and pins, and vehicles are part of the one `.fdb`
+backup.
 
 ### Tool Inventory catalog
 
@@ -250,18 +266,17 @@ remove its stored copy. LI also offers auto-save of its database to a chosen fil
 
 ## Backups and extraction
 
-The top-bar **Back up everything** button downloads one `.fdb` with everything,
-then asks the three apps for their own formats as well. Empty LI/Inventory
-databases produce no per-app download. Check that the browser allowed the
-expected downloads.
+The top-bar **Back up everything** button downloads one `.fdb` with everything;
+dropping that file back onto the platform restores it. Each app still offers its
+own format from its own menu.
 
 | Data | Backup | Restore behavior |
 | --- | --- | --- |
-| Everything: files with bytes and thumbnails, LI documents, tools and photos, repair orders, links, plain-data settings | `.fdb` binary container (drop it on the platform, or open it in Extract) | Replaces the whole database after a confirm: written into a new generation, verified (counts and every file's SHA-256), then switched to; a failed verification changes nothing |
+| Everything: files with bytes and thumbnails, LI documents, tools and photos, repair orders, links and pins, vehicles, the trash, plain-data settings | `.fdb` binary container (drop it on the platform, or open it in Extract) | Replaces the whole database after a confirm: written into a new generation, verified (counts and every file's SHA-256), then switched to; a failed verification changes nothing |
 | Vault files, thumbnails, and per-file metadata | `.fvault` binary v2; legacy JSON imports remain supported | Adds records; conflicting IDs receive new IDs, so repeated restores can duplicate files |
 | LI PDFs and document metadata | `.lidb` ZIP with a manifest and PDFs | Overwrites matching document IDs after confirmation; other documents remain |
 | Inventory records, edits, stars, and photos | `.tidb` binary container | Replaces the current inventory after confirmation |
-| RO records and story lines | In the `.fdb` | In the `.fdb` |
+| RO records, story lines, attachments and pins | In the `.fdb` | In the `.fdb` |
 
 Vault backups do not include browser preferences, linked-folder handles, or empty
 collections stored only in settings. Backups are not encrypted by the app.

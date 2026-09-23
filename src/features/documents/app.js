@@ -172,10 +172,7 @@ export function start(root, host, shell) {
   function modelsOf(d) {
     var s = d.validity || "";
     if (Object.prototype.hasOwnProperty.call(_modelMemo, s)) return _modelMemo[s];
-    var seen = {}, out = [], m;
-    function add(k) { if (/^\d{3}$/.test(k) && !seen[k]) { seen[k] = 1; out.push(k); } }
-    var re1 = /model(?:\s+series)?\s+(\d{3})\b/gi; while ((m = re1.exec(s))) add(m[1]);
-    var re2 = /(?:^|,)\s*(\d{3})\s*(?=,|$)/g; while ((m = re2.exec(s))) add(m[1]);
+    var out = FDCore.ids.modelsOfValidity(s); // the one rule (the vehicle summary counts with it too)
     _modelMemo[s] = out;
     return out;
   }

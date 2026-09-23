@@ -8,6 +8,7 @@ export default `
       <button class="icon-btn" id="new-btn" title="New repair order">＋</button>
     </div>
     <div class="side__list" id="list"></div>
+    <button class="side__trash" id="trash-toggle" type="button" title="Deleted repair orders — restore them, or delete them for good">🗑️ Trash <span id="trash-count"></span></button>
   </aside>
 
   <main class="main">
@@ -26,6 +27,11 @@ export default `
         <div class="field wide">
           <label for="ro-vin">VIN (files added here auto-fill this VIN when they don't have one)</label>
           <input id="ro-vin" placeholder="e.g. W1N0G8DB0MV000000" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+          <div class="vin-status" id="vin-status" hidden>
+            <span id="vin-status-text"></span>
+            <button class="btn btn--sm" id="vin-confirm" type="button" title="You checked this VIN against the car">✓ Confirm VIN</button>
+            <button class="btn btn--sm" id="vin-open" type="button" title="Everything about this vehicle — its files, repair orders, LI documents and tools">🚗 Vehicle</button>
+          </div>
         </div>
       </div>
 
@@ -75,13 +81,23 @@ export default `
       </div>
 
       <div class="card">
+        <h3>📚 LI documents &amp; tools used <span class="grow"></span></h3>
+        <p class="refs-hint">Pin the exact LI version and the special tools this job used. A later import of a newer version shows up here without changing what was used.</p>
+        <div class="refs-add">
+          <input id="ref-input" placeholder="LI number (e.g. LI54.10-P-070001) or tool number (e.g. 000 589 01 23 00)" autocomplete="off" spellcheck="false" />
+          <button class="btn btn--sm btn--primary" id="ref-add" type="button">Pin</button>
+        </div>
+        <div class="refs" id="refs"></div>
+      </div>
+
+      <div class="card">
         <h3>📎 Files <span class="grow"></span>
           <button class="btn btn--sm" id="import-btn" title="Import files that are already in the Vault">⬇ Import from Vault</button>
           <button class="btn btn--sm" id="open-vault-btn" title="Open these files in the File Vault">Open in Vault ↗</button>
           <button class="btn btn--sm btn--primary" id="add-btn">＋ Add files</button>
         </h3>
-        <div id="add-banner" class="banner" hidden>Open Repair Orders inside the <b>File Database</b> app to attach files (they're saved in the Vault under this RO).</div>
-        <div class="dropz" id="dropz">Drop files here, or click to browse — they're saved in the Vault under this RO.</div>
+        <div id="add-banner" class="banner" hidden>Open Repair Orders inside the <b>File Database</b> app to attach files (they're saved in Files and attached to this RO).</div>
+        <div class="dropz" id="dropz">Drop files here, or click to browse — they're saved in Files and attached to this RO.</div>
         <input type="file" id="file-input" multiple hidden />
         <div class="files" id="files"></div>
       </div>
@@ -111,6 +127,22 @@ export default `
   <div class="modal__foot">
     <button class="btn btn--sm" id="mm-ignore">Ignore these</button>
     <button class="btn btn--sm btn--primary" id="mm-add">Add anyway</button>
+  </div>
+</div>
+
+<!-- Delete a repair order: what happens to its files -->
+<div class="scrim" id="del-scrim"></div>
+<div class="modal" id="del-modal" role="dialog" aria-label="Delete repair order">
+  <div class="modal__head"><h2 id="del-title">🗑 Delete repair order</h2></div>
+  <div class="modal__body">
+    <p class="del-note" id="del-note"></p>
+    <label class="del-opt"><input type="radio" name="del-files" value="keep" checked /> <span><b>Keep the files attached</b> — restoring the RO brings them back with it</span></label>
+    <label class="del-opt"><input type="radio" name="del-files" value="unlink" /> <span><b>Unlink the files</b> — they stay in Files, attached to nothing</span></label>
+    <label class="del-opt"><input type="radio" name="del-files" value="trash" /> <span><b>Move the files to the trash too</b> — except any another repair order still uses</span></label>
+  </div>
+  <div class="modal__foot">
+    <button class="btn btn--sm" id="del-cancel">Cancel</button>
+    <button class="btn btn--sm btn--danger" id="del-ok">Move to trash</button>
   </div>
 </div>
 

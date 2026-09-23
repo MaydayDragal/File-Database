@@ -3,7 +3,7 @@
    open and run with no network. User data lives in IndexedDB and never
    touches this cache. `tools/sw-manifest.mjs --check` verifies the list is
    complete against the tree. */
-const CACHE = "file-database-v2";
+const CACHE = "file-database-v3";
 // The text-recognition engine the scanners download on first use.
 const RUNTIME_CACHE = "platform-runtime-v1";
 // Hosts that engine comes from (see src/services/ocr.js). Their files are
@@ -19,6 +19,8 @@ const CORE = [
   "./src/shell/index.js",
   "./src/features/index.js",
   "./src/features/mount.js",
+  "./src/shell/vehicle.js",
+  "./src/ui/duplicates.js",
 ];
 // …while these are cached tolerantly: a single hiccup (a proxy blip, one
 // unreachable icon) must never fail the whole install and strand the user on
@@ -50,6 +52,7 @@ const EXTRAS = [
   "./src/features/documents/app.js",
   "./src/features/documents/index.js",
   "./src/features/documents/markup.js",
+  "./src/features/documents/search.js",
   "./src/features/documents/styles.css",
   "./src/features/extract/app.js",
   "./src/features/extract/index.js",
@@ -60,15 +63,19 @@ const EXTRAS = [
   "./src/features/files/db.js",
   "./src/features/files/index.js",
   "./src/features/files/markup.js",
+  "./src/features/files/search.js",
   "./src/features/files/styles.css",
   "./src/features/inventory/app.js",
   "./src/features/inventory/index.js",
   "./src/features/inventory/markup.js",
+  "./src/features/inventory/search.js",
   "./src/features/inventory/styles.css",
   "./src/features/ros/app.js",
   "./src/features/ros/index.js",
   "./src/features/ros/markup.js",
+  "./src/features/ros/search.js",
   "./src/features/ros/styles.css",
+  "./src/features/search-util.js",
   "./src/features/toolbox/app.js",
   "./src/features/toolbox/index.js",
   "./src/features/toolbox/markup.js",

@@ -8,6 +8,8 @@
  * the platform's shared database (db.js adapts it to this app's verbs). This file wires up the UI: importing files, generating
  * thumbnails, searching/filtering, previewing, editing metadata and backups.
  */
+import { reviewDuplicates } from "../../ui/duplicates.js";
+
 export function start(root, host, shell) {
   "use strict";
 
@@ -23,11 +25,14 @@ export function start(root, host, shell) {
   let shellNavQueue = [];
   let onShellNav = (d) => { shellNavQueue.push(d); };
   function receive(d) {
-    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-ro-import") onShellNav(d);
+    if (d.type === "vault-filter" || d.type === "vault-search" || d.type === "vault-open" || d.type === "vault-restore" || d.type === "platform-backup" || d.type === "vault-ro-import") onShellNav(d);
   }
 
   // ---- In-memory index of metadata (no blobs) for fast rendering ----
-  let items = [];               // array of meta records
+  let items = [];               // array of meta records (the trash left out)
+  let trashItems = [];          // records in the trash (the Trash view)
+  // The "ro:<id>" view: a repair order's files, by its attachment links.
+  let roView = null;            // { id, no, ids: Set }
   const objectUrls = new Set(); // track for revocation
 
   // ---- Multi-select (bulk actions) ----
@@ -194,9 +199,11 @@ export function start(root, host, shell) {
   // is reported and never counted as added. Resolves the ids stored.
   async function storeFiles(files, opts) {
     let out;
-    try { out = await FDData.intake.ingest("vault", files, Object.assign({ source: "files" }, opts || {})); }
+    try { out = await FDData.intake.ingest("vault", files, Object.assign({ source: "files", reviewDuplicates }, opts || {})); }
     catch (e) { console.error(e); toast("Couldn't save the files. Storage may be full."); return []; }
-    out.results.filter((r) => !r.ok).forEach((r) => {
+    const skipped = out.results.filter((r) => r.skipped).length;
+    if (skipped && !(opts && opts.quiet)) toast("Skipped " + skipped + " file(s) already stored.");
+    out.results.filter((r) => !r.ok && !r.skipped).forEach((r) => {
       if (opts && opts.quiet) return;
       toast(r.error.indexOf("read") === 0
         ? 'Couldn’t read “' + r.name + '” — if it lives in OneDrive or on a network drive, open it once (or copy it locally), then add it again.'
@@ -271,9 +278,11 @@ export function start(root, host, shell) {
 
   // ---------- Rendering ----------
   function currentSet() {
-    let list = items.slice();
     const f = state.filter;
-    if (f === "starred") list = list.filter((i) => i.starred);
+    let list = (f === "trash" ? trashItems : items).slice();
+    if (f === "trash") list.sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
+    else if (f.startsWith("ro:")) list = list.filter((i) => roView && roView.id === f.slice(3) && roView.ids.has(i.id));
+    else if (f === "starred") list = list.filter((i) => i.starred);
     else if (f === "recent") {
       list.sort((a, b) => b.updatedAt - a.updatedAt);
       list = list.slice(0, 40);
@@ -295,7 +304,7 @@ export function start(root, host, shell) {
       list = list.filter((i) =>
         [i.name, i.collection, i.note, (i.tags || []).join(" "), (i.vins || []).join(" "), (i.fins || []).join(" ")].join(" ").toLowerCase().includes(q));
     }
-    if (f !== "recent") list = sortList(list);
+    if (f !== "recent" && f !== "trash") list = sortList(list);
     return list;
   }
 
@@ -322,7 +331,9 @@ export function start(root, host, shell) {
     results.innerHTML = "";
     $("#list-head").hidden = true;
 
-    if (items.length === 0) {
+    const inTrash = state.filter === "trash";
+    $("#empty-trash").hidden = !(inTrash && trashItems.length);
+    if (items.length === 0 && !inTrash) {
       $("#empty").hidden = false;
       $("#empty-title").textContent = "Your vault is empty";
       $("#empty-text").innerHTML = "Drag files anywhere onto this window, or use <strong>Add files</strong> to start building your database. Everything stays on this computer.";
@@ -332,7 +343,13 @@ export function start(root, host, shell) {
     results.hidden = false;
     if (list.length === 0) {
       $("#empty").hidden = false;
-      if (state.filter === "vins" && !state.query) {
+      if (inTrash && !state.query) {
+        $("#empty-title").textContent = "The trash is empty";
+        $("#empty-text").textContent = "Deleted files wait here until you delete them for good.";
+      } else if (state.filter.startsWith("ro:") && !state.query) {
+        $("#empty-title").textContent = "No files on this repair order";
+        $("#empty-text").textContent = "Drop files here to attach them to it, or use ➕ Add from the Repair Orders tab.";
+      } else if (state.filter === "vins" && !state.query) {
         $("#empty-title").textContent = "No VINs detected yet";
         $("#empty-text").innerHTML = "Use <strong>⋮ → Scan files for VINs</strong> to read every file for a 17-character vehicle identification number. Images and scanned PDFs are read with OCR (needs internet the first time).";
       } else {
@@ -392,7 +409,8 @@ export function start(root, host, shell) {
     updateTitle(list.length);
     renderActiveFilters();
     lastRenderIds = list.map((it) => it.id);
-    for (const id of Array.from(selection)) if (!items.some((it) => it.id === id)) selection.delete(id); // prune deleted
+    const pool = state.filter === "trash" ? trashItems : items;
+    for (const id of Array.from(selection)) if (!pool.some((it) => it.id === id)) selection.delete(id); // prune gone (or other-view) ids
     results.classList.toggle("selecting", selection.size > 0);
     renderBulkBar();
     scheduleThumbBackfill(); // fill in any missing PDF previews in the background
@@ -438,10 +456,12 @@ export function start(root, host, shell) {
     bar.hidden = selection.size === 0;
     if (bar.hidden) return;
     $("#bulk-count").textContent = selection.size + " selected";
+    // The Trash view has two actions of its own; the rest apply to live files.
+    bar.classList.toggle("is-trash", state.filter === "trash");
     // "Add to RO" appears only while the Repair Orders tab has us in import mode.
     const addRo = $("#bulk-add-ro");
     if (addRo) { addRo.hidden = !roImport; if (roImport) addRo.textContent = "➕ Add to RO " + (roImport.roNo || ""); }
-    const sel = items.filter((it) => selection.has(it.id));
+    const sel = (state.filter === "trash" ? trashItems : items).filter((it) => selection.has(it.id));
     const allStarred = sel.length > 0 && sel.every((it) => it.starred);
     $("#bulk-star").textContent = allStarred ? "☆ Unstar" : "★ Star";
     const pdfs = sel.filter((it) => it.kind === "pdf").length;
@@ -506,18 +526,26 @@ export function start(root, host, shell) {
       const target = !(sel.length && sel.every((it) => it.starred));
       bulkMutate((r) => { r.starred = target; }, (n) => (target ? "Starred " : "Unstarred ") + n + " file(s).");
     };
+    // Delete = move to the trash (recoverable; bytes and links kept).
     $("#bulk-delete").onclick = async () => {
-      if (!confirm(`Delete ${selection.size} file(s) from the vault? This can't be undone.`)) return;
-      const ids = Array.from(selection);
-      for (const id of ids) {
-        try { await DB.remove(id); } catch (e) {}
-        const i = items.findIndex((x) => x.id === id);
-        if (i !== -1) items.splice(i, 1);
-      }
+      const ids = Array.from(selection).filter((id) => items.some((x) => x.id === id));
+      if (!ids.length) return;
+      await moveToTrash(ids);
       selection.clear();
       render();
-      updateStorage();
-      toast(`Deleted ${ids.length} file(s).`);
+    };
+    $("#bulk-restore").onclick = async () => {
+      const ids = Array.from(selection);
+      await restoreFromTrash(ids);
+      selection.clear();
+      render();
+    };
+    $("#bulk-purge").onclick = async () => {
+      const ids = Array.from(selection);
+      if (!confirm(`Delete ${ids.length} file(s) for good? This can't be undone.`)) return;
+      await purgeFiles(ids);
+      selection.clear();
+      render();
     };
     $("#bulk-send-li").onclick = async () => {
       if (!window.FDData) return;
@@ -761,6 +789,8 @@ export function start(root, host, shell) {
     else if (f.startsWith("collection:")) title = f.slice(11) || "Uncategorized";
     else if (f === "vins") title = "By VIN";
     else if (f.startsWith("vin:")) title = f.slice(4);
+    else if (f === "trash") title = "Trash";
+    else if (f.startsWith("ro:")) title = roView && roView.no ? "RO " + roView.no : "Repair order";
     if (state.query) title = `“${state.query}”`;
     $("#view-title").textContent = title;
   }
@@ -785,7 +815,7 @@ export function start(root, host, shell) {
 
   // ---------- Sidebar ----------
   function renderSidebar() {
-    const counts = { all: items.length, starred: 0, recent: Math.min(items.length, 40), vins: 0 };
+    const counts = { all: items.length, starred: 0, recent: Math.min(items.length, 40), vins: 0, trash: trashItems.length };
     const kindCounts = {};
     const collCounts = {};
     const tagCounts = {};
@@ -875,8 +905,11 @@ export function start(root, host, shell) {
   function setFilter(f) {
     state.filter = f;
     state.tag = null;
-    render();
     closeSidebarMobile();
+    // Views backed by another query load it first.
+    if (f === "trash") { loadTrash().then(render); return; }
+    if (f.startsWith("ro:")) { loadRoView(f.slice(3)).then(render); return; }
+    render();
   }
 
   // Keep the fixed sidebar entries in sync with the active view.
@@ -924,8 +957,11 @@ export function start(root, host, shell) {
       chips.push({ label: "📌 Pin " + v.slice(-6), title: "Pin " + v + " as the active vehicle — every tab then scopes to this car",
         go: () => { try { shell.send({ type: "shell-pin-vehicle", vin: v }); } catch (e) {} } });
     });
-    $("#d-related-field").hidden = !chips.length;
-    chips.forEach((c) => {
+    if (embedded) (rec.vins || []).forEach((v) => {
+      chips.push({ label: "🚗 " + v.slice(-6), title: "Everything about vehicle " + v + " — its files, repair orders, LI documents and tools",
+        go: () => { try { shell.send({ type: "shell-vehicle", vin: v }); } catch (e) {} } });
+    });
+    const addChip = (c) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "chip chip--link";
@@ -933,7 +969,16 @@ export function start(root, host, shell) {
       b.title = c.title;
       b.onclick = c.go;
       box.append(b);
-    });
+    };
+    $("#d-related-field").hidden = !chips.length;
+    chips.forEach(addChip);
+    // The repair orders this file is attached to (links, so any number).
+    FDData.repos.ros.ofFile(rec.id).then((list) => {
+      if (state.currentId !== rec.id || !list.length) return;
+      $("#d-related-field").hidden = false;
+      list.forEach((r) => addChip({ label: "🧾 RO " + ((r.ro || "").trim() || "(no number)"), title: "Open this repair order",
+        go: () => crossNav("ros", { type: "shell-nav", id: r.id }, "ros/" + encodeURIComponent(r.id)) }));
+    }).catch(() => {});
   }
 
   // ---------- Detail drawer ----------
@@ -942,6 +987,12 @@ export function start(root, host, shell) {
     if (!rec) { toast("File not found."); return; }
     state.currentId = id;
     const meta = KINDS[rec.kind] || KINDS.other;
+    // A file in the trash: Restore, and Delete means "for good".
+    const trashed = !!rec.deletedAt;
+    $("#detail").classList.toggle("is-trashed", trashed);
+    $("#d-restore").hidden = !trashed;
+    $("#d-delete").textContent = trashed ? "Delete forever" : "Delete";
+    $("#d-delete").title = trashed ? "Delete this file for good" : "Move this file to the trash";
     $("#d-name").value = rec.name;
     $("#d-type").textContent = rec.type || "unknown";
     $("#d-size").textContent = fmtBytes(rec.size);
@@ -1052,18 +1103,75 @@ export function start(root, host, shell) {
     toast("Saved.");
   }
 
+  // Delete from the detail drawer: a live file goes to the trash; one
+  // already in the trash is deleted for good (after a confirmation).
   async function deleteCurrent() {
     const id = state.currentId;
     if (!id) return;
-    const rec = items.find((i) => i.id === id);
-    const name = rec ? rec.name : "this file";
-    if (!confirm(`Delete “${name}”? This can't be undone (the file is removed from the vault).`)) return;
-    await DB.remove(id);
-    items = items.filter((i) => i.id !== id);
+    const trashed = trashItems.find((i) => i.id === id);
+    if (trashed) {
+      if (!confirm(`Delete “${trashed.name}” for good? This can't be undone.`)) return;
+      closeDetail();
+      await purgeFiles([id]);
+      render();
+      return;
+    }
     closeDetail();
+    await moveToTrash([id]);
     render();
+  }
+  async function restoreCurrent() {
+    const id = state.currentId;
+    if (!id) return;
+    closeDetail();
+    await restoreFromTrash([id]);
+    render();
+  }
+
+  // ---------- Trash ----------
+  async function loadTrash() {
+    try { trashItems = (await FDData.repos.files.listTrash()).filter((r) => r.inFiles); } catch (e) { trashItems = []; }
+  }
+  async function moveToTrash(ids) {
+    try { await FDData.repos.files.trash(ids); }
+    catch (e) { toast("Couldn't move to the trash — " + ((e && e.message) || e)); return; }
+    items = items.filter((x) => !ids.includes(x.id));
+    await loadTrash();
+    toast(ids.length === 1 ? "Moved to the trash." : `Moved ${ids.length} files to the trash.`);
+  }
+  async function restoreFromTrash(ids) {
+    const done = await FDData.repos.files.restore(ids);
+    const back = await FDData.repos.files.getMany(done);
+    back.forEach((r) => { if (r && !items.some((x) => x.id === r.id)) { r.thumb = (trashItems.find((t) => t.id === r.id) || {}).thumb || null; items.push(r); } });
+    await loadTrash();
+    toast(`Restored ${done.length} file(s).`);
+  }
+  // Delete for good. A file a repair order or an LI document still uses is
+  // refused by the data layer and stays in the trash — say which.
+  async function purgeFiles(ids) {
+    let res;
+    try { res = await FDData.repos.files.purge(ids); }
+    catch (e) { toast("Couldn't delete — " + ((e && e.message) || e)); return; }
+    await loadTrash();
     updateStorage();
-    toast("Deleted “" + name + "”.");
+    if (!res.blocked.length) { toast(`Deleted ${res.purged.length} file(s) for good.`); return; }
+    const one = res.blocked[0];
+    const what = one.refs.some((r) => r.type === "ro") ? "a repair order" : one.refs.some((r) => r.type === "document") ? "an LI document" : "another record";
+    toast((res.purged.length ? `Deleted ${res.purged.length}; ` : "") + `${res.blocked.length} kept — “${one.name}” is still used by ${what}. Remove it there first.`);
+  }
+  async function emptyTrash() {
+    if (!trashItems.length) return;
+    if (!confirm(`Empty the trash? ${trashItems.length} file(s) are deleted for good (files a repair order or an LI document still uses stay).`)) return;
+    await purgeFiles(trashItems.map((t) => t.id));
+    render();
+  }
+
+  // ---------- A repair order's files (the "ro:<id>" view) ----------
+  async function loadRoView(roId) {
+    try {
+      const [ro, files] = await Promise.all([FDData.repos.ros.get(roId), FDData.repos.ros.attachments(roId)]);
+      roView = { id: roId, no: ro ? (ro.ro || "").trim() : "", ids: new Set(files.map((f) => f.id)) };
+    } catch (e) { roView = { id: roId, no: "", ids: new Set() }; }
   }
 
   async function toggleStar(id) {
@@ -1171,7 +1279,9 @@ export function start(root, host, shell) {
           if (noThumb) cur._noThumb = true;
           return cur;
         });
-        if (state.currentId && !items.some((x) => x.id === state.currentId)) closeDetail();
+        await loadTrash();
+        if (state.filter.startsWith("ro:")) await loadRoView(state.filter.slice(3));
+        if (state.currentId && !items.some((x) => x.id === state.currentId) && !trashItems.some((x) => x.id === state.currentId)) closeDetail();
         render();
         updateStorage();
       } catch (e) {}
@@ -1400,6 +1510,8 @@ export function start(root, host, shell) {
   // still files there.
   function initDnD() {}
   function dropContext() {
+    // Viewing a repair order's files: a drop attaches to it.
+    if (state.filter.startsWith("ro:") && roView) return { roId: roView.id };
     return { collection: state.filter.startsWith("collection:") ? state.filter.slice(11) : "" };
   }
 
@@ -1443,6 +1555,8 @@ export function start(root, host, shell) {
     $$("#detail [data-close]").forEach((el) => { el.onclick = closeDetail; });
     $("#d-save").onclick = saveDetail;
     $("#d-delete").onclick = deleteCurrent;
+    $("#d-restore").onclick = restoreCurrent;
+    $("#empty-trash").onclick = emptyTrash;
     $("#d-download").onclick = downloadCurrent;
     $("#d-open").onclick = openCurrent;
     $("#d-send-li").onclick = sendCurrentToLI;
@@ -1976,21 +2090,24 @@ export function start(root, host, shell) {
     } else if (mismatch.length) {
       keep = keep.concat(mismatch);
     }
+    // Attaching is a link (ro → file): the file keeps its name, collection
+    // and place in Files, and can sit on other repair orders too. A file
+    // with no VIN of its own is stamped with the RO's.
     let moved = 0;
     for (const it of keep) {
-      const rec = await DB.get(it.id);
-      if (!rec) continue;
-      rec.collection = target.coll;
-      if (!(rec.vins && rec.vins.length) && roVin) { rec.vins = Array.from(new Set([roVin].concat(rec.vins || []))); rec.vinScan = Date.now(); } // auto-fill VIN
-      rec.updatedAt = Date.now();
-      rec.searchText = DB.buildSearchText(rec);
-      await DB.put(rec);
-      if (target.roId) { try { await FDData.repos.links.link("ro", target.roId, "file", it.id, "attachment"); } catch (e) {} }
-      const i = items.findIndex((x) => x.id === it.id);
-      if (i !== -1) items[i] = stripBlob(rec);
+      if (!(it.vins && it.vins.length) && roVin) {
+        try {
+          const upd = await FDData.repos.files.update(it.id, { vins: [roVin], vinScan: Date.now() });
+          const i = items.findIndex((x) => x.id === it.id);
+          if (i !== -1 && upd) Object.assign(items[i], { vins: upd.vins, vinScan: upd.vinScan, searchText: upd.searchText });
+        } catch (e) {}
+      }
       moved++;
     }
-    if (target.coll && !extraCollections.includes(target.coll)) { extraCollections.push(target.coll); DB.setMeta("collections", extraCollections); }
+    if (target.roId && keep.length) {
+      try { await FDData.repos.ros.attach(target.roId, keep.map((it) => it.id), { source: "files" }); }
+      catch (e) { toast("Couldn't attach the files — " + ((e && e.message) || e)); return; }
+    }
     clearSelection();
     exitRoImport();
     $("#search-input").value = ""; state.query = ""; // don't leave the pick search lingering
@@ -2059,6 +2176,7 @@ export function start(root, host, shell) {
     if (isStandalone()) $("#install-btn").hidden = true;
 
     items = await DB.listMeta();
+    await loadTrash();
     render();
     updateStorage();
 
@@ -2083,6 +2201,10 @@ export function start(root, host, shell) {
       } else if (d.type === "vault-restore" && d.file) importVault(d.file);
       else if (d.type === "platform-backup") exportVault();
       else if (d.type === "vault-ro-import") enterRoImport(d);
+      else if (d.type === "vault-open" && d.id) {
+        if (!items.some((x) => x.id === d.id) && state.filter !== "all") setFilter("all");
+        openDetail(String(d.id));
+      }
     };
     shellNavQueue.splice(0).forEach(onShellNav);
 

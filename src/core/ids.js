@@ -67,7 +67,27 @@
     return s.length === 17 && /^\d{3}$/.test(s.slice(3, 6)) ? s.slice(3, 6) : "";
   }
 
+  // The model series an LI document's validity text names ("Model 214",
+  // "model series 213", or a bare "213, 214" list) — the rule LI Documents
+  // filters by, shared so a vehicle summary counts the same documents.
+  function modelsOfValidity(s) {
+    s = String(s || "");
+    var seen = {}, out = [], m;
+    function add(k) { if (/^\d{3}$/.test(k) && !seen[k]) { seen[k] = 1; out.push(k); } }
+    var re1 = /model(?:\s+series)?\s+(\d{3})\b/gi; while ((m = re1.exec(s))) add(m[1]);
+    var re2 = /(?:^|,)\s*(\d{3})\s*(?=,|$)/g; while ((m = re2.exec(s))) add(m[1]);
+    return out;
+  }
+  // Does a special tool fit a model series? The Tool Inventory's rule: the
+  // series appears as a word in one of the tool's validity strings.
+  function toolFitsModel(tool, series) {
+    if (!/^\d{3}$/.test(String(series || ""))) return false;
+    var re = new RegExp("\\b" + series + "\\b");
+    return ((tool && tool.validities) || []).some(function (v) { return re.test(String(v)); });
+  }
+
   global.FDCore.ids = {
+    modelsOfValidity: modelsOfValidity, toolFitsModel: toolFitsModel,
     DOCNUM: DOCNUM, DOCNUM_EXACT: DOCNUM_EXACT, FUZZY: FUZZY,
     canonLI: canonLI, liKey: liKey, detectLI: detectLI, docnumGlobal: docnumGlobal, detectLIFuzzy: detectLIFuzzy, detectVersion: detectVersion,
     hasLiNumber: hasLiNumber, isLiNumber: isLiNumber, toDigits: toDigits, toAlpha: toAlpha,

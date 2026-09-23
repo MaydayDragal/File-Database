@@ -163,13 +163,11 @@ check(await page.locator("#quickopen[hidden]").count() === 1, "Escape closes qui
 const downloads = [];
 page.on("download", (d) => downloads.push(d.suggestedFilename()));
 await page.click("#backup-all-btn");
-// One .fdb with everything, then the per-app exports (.fvault, .tidb; LI is
-// empty, so it reports rather than downloads — that's the contract).
-await waitFor(async () => downloads.length >= 3, 20000);
-await page.waitForTimeout(500);
-check(downloads.some((n) => /\.fdb$/.test(n)), `backup-all produced the whole-platform backup (${downloads.join(", ")})`);
-check(downloads.some((n) => /\.fvault$/.test(n)), "backup-all produced a vault backup");
-check(downloads.some((n) => /\.tidb$/.test(n)), "backup-all produced an inventory backup");
+// ONE download: the .fdb with everything (Phase 5). The per-app exports
+// stay in each app's own menu.
+await waitFor(async () => downloads.length >= 1, 20000);
+await page.waitForTimeout(3000);
+check(downloads.length === 1 && /\.fdb$/.test(downloads[0]), `backup-all is one .fdb download (${downloads.join(", ")})`);
 
 // ---------- 8. Toast relay from a background tab ----------
 // Stay on the inventory tab; drop a MIXED batch (so the shell stays put — a

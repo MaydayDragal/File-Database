@@ -1,5 +1,7 @@
 /* Repair Orders — the app, as a feature module (REWRITE-PLAN.md Phase 4). */
 /* ===== Repair Orders app (moved out of ros/index.html, REWRITE-PLAN.md Phase 3) ===== */
+import { reviewDuplicates } from "../../ui/duplicates.js";
+
 export function start(root, host, shell) {
   "use strict";
   var $ = function (s) { return root.querySelector(s); };
@@ -11,26 +13,26 @@ export function start(root, host, shell) {
   // ---------- RO storage (shared: ../src/data) ----------
   // Repair orders live in the platform database; a file attached to an RO is
   // a typed link (ro → file, "attachment"), so a file can sit on two ROs and
-  // renumbering an RO touches one record. RO numbers are unique (D7).
+  // renumbering an RO touches one record — never its files. RO numbers are
+  // unique (D7). The exact LI version and the tools a job used are links too
+  // ("reference", "required-tool"). Delete is trash first (Phase 5).
   var R = function () { return FDData.repos; };
   function open() { return FDData.boot(); }
-  function roAll() { return R().ros.list(); }
+  function roAll() { return R().ros.live(); }
   function roPut(rec) { return R().ros.put(rec); }
-  function roDel(id) { return R().ros.remove(id).then(function () { return R().links.removeFor("ro", id); }); }
   function uid() { return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function isRoConflict(e) { return !!(e && e.name === "RoConflict"); }
   function mini(x) { return { id: x.id, name: x.name, type: x.type, kind: x.kind, size: x.size, vins: x.vins || [], collection: x.collection || "" }; }
-  // The files attached to a repair order, by its links.
+  // The files attached to a repair order, by its links (the trash left out).
   function attachedFiles(roId) {
-    return R().links.from("ro", roId, "attachment").then(function (ls) {
-      return R().files.getMany(ls.map(function (l) { return l.toId; }));
-    }).then(function (recs) {
-      return recs.filter(Boolean).map(mini).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
+    return R().ros.attachments(roId).then(function (recs) {
+      return recs.map(mini).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
     });
   }
 
   // ---------- state ----------
   var ros = [], current = null, saveT = null;
+  var showTrash = false, trashed = [];
 
   // Every plain text field on the screen, paired with the record key it holds.
   // A scan fills these in; typing in any of them saves the same way.
@@ -46,7 +48,6 @@ export function start(root, host, shell) {
     FIELDS.forEach(function (f) { rec[f[1]] = ""; });
     return rec;
   }
-  function desiredCollection(rec) { var n = (rec.ro || "").trim(); return n ? ("RO " + n) : ("RO-" + rec.id.slice(0, 7)); }
   function fmtBytes(b) { if (!b) return "0 B"; var u = ["B", "KB", "MB", "GB"], i = Math.floor(Math.log(b) / Math.log(1024)); i = Math.min(i, u.length - 1); return (b / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + u[i]; }
   var GLYPH = { image: "🖼️", video: "🎬", audio: "🎵", pdf: "📕", document: "📄", spreadsheet: "📊", presentation: "📈", text: "📝", archive: "🗜️", other: "📎" };
   function letter(i) { return i < 26 ? String.fromCharCode(65 + i) : "L" + (i + 1); }
@@ -54,6 +55,9 @@ export function start(root, host, shell) {
   // ---------- rendering ----------
   function renderList() {
     var box = $("#list"); box.innerHTML = "";
+    $("#trash-count").textContent = trashed.length ? "(" + trashed.length + ")" : "";
+    $("#trash-toggle").classList.toggle("on", showTrash);
+    if (showTrash) { renderTrash(box); return; }
     if (!ros.length) { box.innerHTML = '<div class="side__empty">No repair orders yet.<br>Click ＋ to start one.</div>'; return; }
     ros.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
     ros.forEach(function (r) {
@@ -66,6 +70,142 @@ export function start(root, host, shell) {
       box.append(d);
     });
   }
+  // The trash: each deleted RO with Restore / Delete forever.
+  function renderTrash(box) {
+    if (!trashed.length) { box.innerHTML = '<div class="side__empty">The trash is empty.</div>'; return; }
+    trashed.slice().sort(function (a, b) { return (b.deletedAt || 0) - (a.deletedAt || 0); }).forEach(function (r) {
+      var d = document.createElement("div"); d.className = "ro-item trashed";
+      var no = document.createElement("div"); no.className = "ro-item__no"; no.textContent = (r.ro || "").trim() ? "RO " + r.ro.trim() : "Untitled RO";
+      var m = document.createElement("div"); m.className = "ro-item__meta"; m.textContent = r.vehicle || "—";
+      var acts = document.createElement("div"); acts.className = "ro-item__actions";
+      var rs = document.createElement("button"); rs.className = "btn btn--sm btn--primary"; rs.textContent = "♻️ Restore"; rs.dataset.restore = r.id;
+      rs.onclick = function () { restoreRO(r.id); };
+      var del = document.createElement("button"); del.className = "btn btn--sm btn--danger"; del.textContent = "Delete forever"; del.dataset.purge = r.id;
+      del.onclick = function () { purgeRO(r); };
+      acts.append(rs, del);
+      d.append(no, m, acts);
+      box.append(d);
+    });
+  }
+  function loadTrash() { return R().ros.listTrash().then(function (l) { trashed = l || []; }, function () { trashed = []; }); }
+  function restoreRO(id) {
+    R().ros.restore(id, { files: true }).then(function () {
+      return Promise.all([roAll(), loadTrash()]);
+    }).then(function (r) {
+      ros = r[0] || [];
+      showTrash = false;
+      openRO(id);
+      toast("Repair order restored.");
+    }, function (e) { toast("Couldn't restore — " + ((e && e.message) || e)); });
+  }
+  function purgeRO(r) {
+    var label = (r.ro || "").trim() ? "RO " + r.ro.trim() : "this repair order";
+    if (!confirm("Delete " + label + " for good? Its notes and links go; its files stay in Files.")) return;
+    R().ros.purge(r.id).then(function (res) {
+      if (!res.purged) { toast(label + " is still referenced elsewhere and was kept."); return null; }
+      return loadTrash().then(function () { renderList(); toast(label + " deleted for good."); });
+    });
+  }
+
+  // ---------- VIN: check digit, confirmation, the vehicle record ----------
+  function paintVin() {
+    var v = current ? (current.vin || "").trim().toUpperCase().replace(/\s+/g, "") : "";
+    var box = $("#vin-status");
+    box.hidden = v.length !== 17;
+    if (box.hidden) return;
+    var id = current.id;
+    R().vehicles.get(v).then(function (rec) {
+      if (!current || current.id !== id) return;
+      var ok = vinCheckOk(v);
+      var t = $("#vin-status-text"); t.textContent = "";
+      var a = document.createElement("span"); a.className = ok ? "ok" : "warn";
+      a.textContent = ok ? "✓ Check digit OK" : "⚠ Check digit fails — probably a misread";
+      t.append(a);
+      var confirmed = !!(rec && rec.confirmedAt);
+      t.append(document.createTextNode(confirmed ? " · confirmed by a technician" : " · not confirmed"));
+      $("#vin-confirm").textContent = confirmed ? "Withdraw confirmation" : "✓ Confirm VIN";
+      $("#vin-confirm").dataset.confirmed = confirmed ? "1" : "";
+    }).catch(function () {});
+  }
+  // A VIN saved on an RO becomes (or tops up) its vehicle record.
+  function noteVehicle(vin, source) {
+    vin = String(vin || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) return Promise.resolve(null);
+    return R().vehicles.note(vin, { source: source }).catch(function () { return null; });
+  }
+
+  // ---------- pinned LI versions and tools ----------
+  function renderRefs() {
+    if (!current) return;
+    var id = current.id;
+    R().ros.references(id).then(function (refs) {
+      if (!current || current.id !== id) return;
+      var box = $("#refs"); box.innerHTML = "";
+      if (!refs.documents.length && !refs.tools.length) { box.innerHTML = '<div class="refs-empty">Nothing pinned yet.</div>'; return; }
+      refs.documents.forEach(function (r) {
+        var row = document.createElement("div"); row.className = "ref"; row.dataset.kind = "document";
+        var li = (r.doc && r.doc.li) || r.link.li || "", ver = (r.doc && r.doc.ver) || r.link.ver || "";
+        var main = document.createElement("span"); main.className = "ref__main";
+        main.textContent = "🗄️ " + li + (ver ? " v" + ver : "") + (r.doc && r.doc.title ? " · " + r.doc.title : "");
+        main.title = "Open in LI Documents";
+        main.onclick = function () { navLi(li); };
+        row.append(main);
+        if (!r.doc) { var g = document.createElement("span"); g.className = "ref__gone"; g.textContent = "(this version is no longer stored)"; row.append(g); }
+        if (r.newer && r.latest) {
+          var nb = document.createElement("button"); nb.type = "button"; nb.className = "ref__newer";
+          nb.textContent = "newer version exists (v" + r.latest.ver + ")"; nb.title = "Open the newest version — this RO keeps the one it used";
+          nb.onclick = function () { navLi(li); };
+          row.append(nb);
+        }
+        var x = document.createElement("button"); x.className = "btn btn--sm"; x.textContent = "✕"; x.title = "Unpin";
+        x.onclick = function () { R().links.remove(r.link.id).then(renderRefs); };
+        row.append(x);
+        box.append(row);
+      });
+      refs.tools.forEach(function (r) {
+        var row = document.createElement("div"); row.className = "ref"; row.dataset.kind = "tool";
+        var t = r.tool || {};
+        var main = document.createElement("span"); main.className = "ref__main";
+        main.textContent = "🔧 " + (t.toolNo || r.link.toId) + (t.desc ? " · " + t.desc : "");
+        main.title = "Open in the Tool Inventory";
+        main.onclick = function () { try { shell.send({ type: "shell-nav", app: "inventory", payload: { type: "inventory-open", toolNo: t.toolNo || "" } }); } catch (e) {} };
+        row.append(main);
+        if (!r.tool) { var g = document.createElement("span"); g.className = "ref__gone"; g.textContent = "(no longer in the inventory)"; row.append(g); }
+        var x = document.createElement("button"); x.className = "btn btn--sm"; x.textContent = "✕"; x.title = "Unpin";
+        x.onclick = function () { R().links.remove(r.link.id).then(renderRefs); };
+        row.append(x);
+        box.append(row);
+      });
+    }).catch(function () {});
+  }
+  function navLi(li) { try { shell.send({ type: "shell-nav", app: "li", payload: { type: "li-open", li: li } }); } catch (e) {} }
+  // Pin what was typed: an LI number (its newest stored version — the one
+  // in use today) or a special-tool number.
+  function addRef() {
+    if (!current) return;
+    var raw = $("#ref-input").value.trim();
+    if (!raw) return;
+    var id = current.id;
+    var ids = FDCore.ids;
+    var li = ids.isLiNumber(raw) ? ids.canonLI(raw).toUpperCase() : "";
+    var toolNo = ids.canonToolNo(raw);
+    var p;
+    if (li) {
+      p = R().documents.latestOf(li).then(function (doc) {
+        if (!doc) { toast(li + " isn't in LI Documents yet — import it there first."); return false; }
+        return R().ros.pinDocument(id, doc).then(function () { toast("Pinned " + li + " v" + doc.ver + "."); return true; });
+      });
+    } else if (toolNo) {
+      p = R().tools.list().then(function (list) {
+        var key = toolNo.replace(/\s+/g, "");
+        var t = list.filter(function (x) { return String(x.toolNo || "").replace(/\s+/g, "") === key; })[0];
+        if (!t) { toast("Tool " + toolNo + " isn't in the Tool Inventory."); return false; }
+        return R().ros.pinTool(id, t.id).then(function () { toast("Pinned tool " + toolNo + "."); return true; });
+      });
+    } else { toast("Type an LI number (LI54.10-P-070001) or a tool number (000 589 01 23 00)."); return; }
+    p.then(function (ok) { if (ok) { $("#ref-input").value = ""; renderRefs(); } }).catch(function (e) { toast("Couldn't pin — " + ((e && e.message) || e)); });
+  }
+
   function paint() {
     var has = !!current;
     $("#inner").hidden = !has; $("#empty-main").hidden = has;
@@ -75,6 +215,8 @@ export function start(root, host, shell) {
     $("#add-banner").hidden = embedded;
     renderLines();
     refreshFiles();
+    renderRefs();
+    paintVin();
   }
   function renderLines() {
     var box = $("#lines"); box.innerHTML = "";
@@ -110,7 +252,7 @@ export function start(root, host, shell) {
         if (f.vins && f.vins.length) { var vb = document.createElement("span"); vb.className = "vin-badge" + (roVin && f.vins.indexOf(roVin) !== -1 ? " match" : ""); vb.textContent = "🚗 " + f.vins[0].slice(-6); vb.title = f.vins.join(", "); meta.append(vb); }
         var sz = document.createElement("span"); sz.textContent = fmtBytes(f.size); meta.append(sz);
         row.append(g, n, meta);
-        row.onclick = openInVault;
+        row.onclick = function () { try { shell.send({ type: "shell-nav", app: "vault", payload: { type: "vault-open", id: f.id } }); } catch (e) {} };
         box.append(row);
       });
     });
@@ -125,23 +267,22 @@ export function start(root, host, shell) {
     flushSave();
     var rec = blankRO();
     rec.lines = [{ id: uid(), text: "", op: "" }];
-    rec.collection = desiredCollection(rec);
     current = rec; ros.push(rec); roPut(rec);
     renderList(); paint(); $("#ro-no").focus();
   }
-  function openRO(id) { var r = ros.find(function (x) { return x.id === id; }); if (!r) return; flushSave(); current = r; renderList(); paint(); }
+  function openRO(id) { var r = ros.find(function (x) { return x.id === id; }); if (!r) return; flushSave(); current = r; showTrash = false; renderList(); paint(); }
   function scheduleSave() { if (!current) return; $("#save-note").textContent = "Saving…"; clearTimeout(saveT); saveT = setTimeout(commitSave, 400); }
   function commitSave() {
     saveT = null;
     if (!current) return;
-    var oldColl = current.collection;
     FIELDS.forEach(function (f) { current[f[1]] = $(f[0]).value; });
     current.vin = (current.vin || "").trim().toUpperCase().replace(/\s+/g, "");
     current.updatedAt = Date.now();
-    var newColl = desiredCollection(current);
     var rec = current;
-    if (newColl !== oldColl) { rec.collection = newColl; R().files.renameCollection(oldColl, newColl).catch(function () {}); }
+    // Renumbering is this one record: the attached files are links, so
+    // nothing in Files changes (no collection rename, no file writes).
     roPut(rec).then(function () {
+      noteVehicle(rec.vin, "ro").then(function () { if (current === rec) paintVin(); });
       $("#save-note").textContent = "Saved"; setTimeout(function () { if ($("#save-note").textContent === "Saved") $("#save-note").textContent = ""; }, 1400); renderList();
     }, function (e) {
       // D7: the number belongs to another repair order — nothing is saved
@@ -150,15 +291,38 @@ export function start(root, host, shell) {
       else { $("#save-note").textContent = "Not saved"; toast("Couldn't save — " + ((e && e.message) || e)); }
     });
   }
+  // Delete = move to the trash, after asking what happens to the files:
+  // keep them attached (a restore brings them back), unlink them, or trash
+  // them too (a file another repair order uses is kept).
   function deleteRO() {
     if (!current) return;
-    if (!confirm("Delete " + ((current.ro || "").trim() ? "RO " + current.ro.trim() : "this repair order") + "? The notes are removed. Files stay in the Vault (under “" + current.collection + "”).")) return;
     flushSave();
-    var id = current.id;
-    roDel(id).then(function () {
-      ros = ros.filter(function (x) { return x.id !== id; });
-      current = ros.length ? ros[0] : null;
-      renderList(); paint(); toast("Repair order deleted.");
+    var rec = current;
+    var label = (rec.ro || "").trim() ? "RO " + rec.ro.trim() : "this repair order";
+    attachedFiles(rec.id).then(function (files) {
+      $("#del-title").textContent = "🗑 Delete " + label;
+      $("#del-note").textContent = label.charAt(0).toUpperCase() + label.slice(1) + " goes to the trash (restore it any time from 🗑️ Trash). " +
+        (files.length ? "It has " + files.length + " file" + (files.length === 1 ? "" : "s") + " attached:" : "It has no files attached.");
+      root.querySelectorAll('input[name="del-files"]').forEach(function (r) { r.checked = r.value === "keep"; r.disabled = !files.length; });
+      $("#del-scrim").classList.add("show"); $("#del-modal").classList.add("show");
+      function close() { $("#del-scrim").classList.remove("show"); $("#del-modal").classList.remove("show"); $("#del-ok").onclick = null; $("#del-cancel").onclick = null; }
+      $("#del-cancel").onclick = close;
+      $("#del-ok").onclick = function () {
+        var picked = root.querySelector('input[name="del-files"]:checked');
+        var mode = picked ? picked.value : "keep";
+        close();
+        R().ros.trash(rec.id, { attachments: mode }).then(function (res) {
+          ros = ros.filter(function (x) { return x.id !== rec.id; });
+          current = ros.length ? ros.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })[0] : null;
+          return loadTrash().then(function () {
+            renderList(); paint();
+            var msg = "Moved " + label + " to the trash.";
+            if (mode === "unlink" && res.unlinked) msg += " " + res.unlinked + " file(s) unlinked.";
+            if (mode === "trash") msg += " " + res.trashed.length + " file(s) trashed" + (res.kept.length ? ", " + res.kept.length + " kept (on another RO)" : "") + ".";
+            toast(msg);
+          });
+        }, function (e) { toast("Couldn't delete — " + ((e && e.message) || e)); });
+      };
     });
   }
 
@@ -174,8 +338,8 @@ export function start(root, host, shell) {
     });
     return { noVin: noVin, match: match, mismatch: mismatch };
   }
-  // uploaded=true → files are already in the RO collection (eject to remove);
-  // uploaded=false (import) → files aren't in the collection yet (skip to omit).
+  // uploaded=true → files are already attached (detach to remove);
+  // uploaded=false (import) → files aren't attached yet (skip to omit).
   function reconcile(files, uploaded) {
     if (!files.length) { refreshFiles(); return Promise.resolve(); }
     var roVin = current.vin;
@@ -187,16 +351,11 @@ export function start(root, host, shell) {
       var add = keep.concat(extraKeep || []).map(function (f) { return f.id; });
       var remove = (eject || []).map(function (f) { return f.id; });
       var ops = [];
-      if (add.length) {
-        ops.push(R().links.linkMany(add.map(function (fid) { return { fromType: "ro", fromId: rec.id, toType: "file", toId: fid, kind: "attachment", source: "ro" }; })));
-        add.forEach(function (fid) { ops.push(R().files.update(fid, { collection: rec.collection })); });
-      }
+      if (add.length) ops.push(R().ros.attach(rec.id, add, { source: "ro" }));
       stampVin.forEach(function (fid) {
         ops.push(R().files.get(fid).then(function (f) { if (!f) return null; return R().files.update(fid, { vins: Array.from(new Set([roVin].concat(f.vins || []))), vinScan: Date.now() }); }));
       });
-      remove.forEach(function (fid) {
-        ops.push(R().links.unlink("ro", rec.id, "file", fid, "attachment").then(function () { return R().files.update(fid, { collection: "" }); }));
-      });
+      if (remove.length) ops.push(R().ros.detach(rec.id, remove));
       var msgs = [];
       if (c.noVin.length && roVin) msgs.push("stamped VIN on " + c.noVin.length);
       if (add.length) msgs.push(add.length + " added");
@@ -219,15 +378,15 @@ export function start(root, host, shell) {
   function addFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
     if (!files.length || !current) return;
-    if (!current.collection) { current.collection = desiredCollection(current); roPut(current); }
     var rec = current;
     toast("Saving " + files.length + " file" + (files.length === 1 ? "" : "s") + " to this RO…");
-    // Stored straight into the shared database, linked to this RO, kept in
-    // its collection for the Files app's filter. No polling: the intake
-    // reports each file, and the quick VIN read it queues (a job the Files
-    // app runs) is awaited before the VINs are reconciled.
-    FDData.intake.ingest("vault", files, { collection: rec.collection, roId: rec.id, source: "ro" }).then(function (out) {
-      out.results.filter(function (r) { return !r.ok; }).forEach(function (r) { toast("Couldn't save “" + r.name + "” — " + r.error); });
+    // Stored straight into the shared database and linked to this RO. No
+    // polling: the intake reports each file, and the quick VIN read it
+    // queues (a job the Files app runs) is awaited before the VINs are
+    // reconciled. A file whose bytes are already stored is put to the
+    // duplicate review; a skipped one is attached as the stored file.
+    FDData.intake.ingest("vault", files, { roId: rec.id, source: "ro", reviewDuplicates: reviewFor(rec.id) }).then(function (out) {
+      out.results.filter(function (r) { return !r.ok && !r.skipped; }).forEach(function (r) { toast("Couldn't save “" + r.name + "” — " + r.error); });
       refreshFiles();
       if (!out.ids.length) return;
       var vj = (out.jobs || []).filter(function (j) { return j.type === "vin-detect"; })[0];
@@ -238,10 +397,28 @@ export function start(root, host, shell) {
       });
     }).catch(function (e) { toast("Couldn't save the files — " + ((e && e.message) || e)); });
   }
+  // Duplicate review for files added to an RO: bytes already attached to
+  // THIS repair order (a rescan filing the same PDF again) are skipped
+  // without asking — and an attachment sitting in the trash comes back out
+  // (the intake restores a skipped duplicate's trashed stand-in); any other
+  // match is put to the person.
+  function reviewFor(roId) {
+    return function (list) {
+      return R().ros.attachments(roId, { trash: "with" }).then(function (att) {
+        var on = {}; att.forEach(function (f) { on[f.id] = true; });
+        var auto = [], ask = [];
+        list.forEach(function (d) {
+          var hit = d.matches.filter(function (m) { return on[m.id]; })[0];
+          if (hit) auto.push({ index: d.index, action: "skip", reuse: hit.id }); else ask.push(d);
+        });
+        return (ask.length ? reviewDuplicates(ask) : Promise.resolve([])).then(function (r) { return auto.concat(r); });
+      });
+    };
+  }
   function openInVault() {
     if (!current) return;
     if (!embedded) { toast("Open in the File Database app to view files in the Vault."); return; }
-    try { shell.send({ type: "shell-nav", app: "vault", payload: { type: "vault-filter", filter: "collection:" + current.collection } }); } catch (e) {}
+    try { shell.send({ type: "shell-nav", app: "vault", payload: { type: "vault-filter", filter: "ro:" + current.id } }); } catch (e) {}
   }
 
   // ---------- import from Vault: hand off to the normal Vault screen ----------
@@ -250,9 +427,8 @@ export function start(root, host, shell) {
   function selectInVault() {
     if (!current) return;
     if (!embedded) { toast("Open in the File Database app to import Vault files."); return; }
-    if (!current.collection) { current.collection = desiredCollection(current); roPut(current); }
     try {
-      shell.send({ type: "shell-nav", app: "vault", payload: { type: "vault-ro-import", coll: current.collection, vin: current.vin || "", roNo: (current.ro || "").trim(), roId: current.id } });
+      shell.send({ type: "shell-nav", app: "vault", payload: { type: "vault-ro-import", vin: current.vin || "", roNo: (current.ro || "").trim(), roId: current.id } });
     } catch (e) {}
   }
 
@@ -937,7 +1113,6 @@ export function start(root, host, shell) {
       FIELDS.forEach(function (f) { rec[f[1]] = vals[f[1]] || ""; });
       rec.lines = picked.length ? picked : [{ id: uid(), text: "", op: "" }];
       rec.scanText = review.text || "";
-      rec.collection = desiredCollection(rec);
       ros.push(rec);
       added = picked.length;
     }
@@ -945,12 +1120,19 @@ export function start(root, host, shell) {
     var attach = $("#rv-file").checked ? scanFiles.slice() : [];
     roPut(rec).then(function () {
       current = rec;
+      // The scanner's reading of the VIN is recorded with its check-digit
+      // verdict; only a technician's ✓ Confirm VIN marks it confirmed.
+      noteVehicle(rec.vin, "ro-scan").then(function () { if (current === rec) paintVin(); });
       renderList(); paint();
       toast(existing
         ? "RO " + (rec.ro || "") + " updated from the scan — " + added + " new line" + (added === 1 ? "" : "s") + "."
         : "Repair order created from the scan — " + added + " line" + (added === 1 ? "" : "s") + ".");
       closeScan();
       if (attach.length) addFiles(attach);
+    }, function (e) {
+      if (!existing) ros = ros.filter(function (x) { return x !== rec; });
+      if (isRoConflict(e)) toast("RO " + (rec.ro || "").trim() + " is already used" + (e.other && e.other.deletedAt ? " by a repair order in the trash — restore it from 🗑️ Trash." : " by another repair order."));
+      else toast("Couldn't save — " + ((e && e.message) || e));
     });
   }
 
@@ -967,6 +1149,21 @@ export function start(root, host, shell) {
     $("#file-input").addEventListener("change", function (e) { addFiles(e.target.files); e.target.value = ""; });
     $("#open-vault-btn").onclick = openInVault;
     $("#import-btn").onclick = selectInVault;
+    $("#trash-toggle").onclick = function () { flushSave(); showTrash = !showTrash; loadTrash().then(renderList); };
+    $("#ref-add").onclick = addRef;
+    $("#ref-input").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addRef(); } });
+    $("#vin-confirm").onclick = function () {
+      if (!current) return;
+      var v = (current.vin || "").trim().toUpperCase();
+      var yes = !$("#vin-confirm").dataset.confirmed;
+      R().vehicles.confirm(v, yes).then(paintVin, function (e) { toast("Couldn't record that — " + ((e && e.message) || e)); });
+    };
+    $("#vin-open").onclick = function () {
+      if (!current || !current.vin) return;
+      try { shell.send({ type: "shell-vehicle", vin: current.vin.trim().toUpperCase() }); } catch (e) {}
+    };
+    // The VIN line is repainted once the edit is saved.
+    $("#ro-vin").addEventListener("input", function () { $("#vin-status").hidden = true; });
     var dz = $("#dropz");
     dz.onclick = function () { $("#file-input").click(); };
     ["dragenter", "dragover"].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); }); });
@@ -987,7 +1184,7 @@ export function start(root, host, shell) {
     ["dragleave", "drop"].forEach(function (ev) { sd.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); sd.classList.remove("drag"); }); });
     sd.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) startScan(e.dataTransfer.files); });
         window.addEventListener("focus", refreshFiles);
-    root.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModals(); });
+    root.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeModals(); $("#del-scrim").classList.remove("show"); $("#del-modal").classList.remove("show"); } });
   }
 
   // ---------- platform embedding ----------
@@ -1004,27 +1201,29 @@ export function start(root, host, shell) {
       // RO, renaming, deleting), so every such event refreshes the attachment
       // list; RO records are only ever written here, so for those only another
       // tab's edits count (a reload mid-typing would clobber the field).
-      var filesT = null, rosT = null;
+      var filesT = null, rosT = null, refsT = null;
       function onFiles(d) { clearTimeout(filesT); filesT = setTimeout(refreshFiles, 200); }
       FDData.bus.on("files:changed", onFiles);
-      FDData.bus.on("links:changed", onFiles);
+      FDData.bus.on("links:changed", function () { onFiles(); clearTimeout(refsT); refsT = setTimeout(renderRefs, 200); });
+      FDData.bus.on("documents:changed", function () { clearTimeout(refsT); refsT = setTimeout(renderRefs, 200); });
+      FDData.bus.on("vehicles:changed", function () { paintVin(); });
       FDData.bus.on("ros:changed", function (d) {
         if (!d.remote) return;
         clearTimeout(rosT);
         rosT = setTimeout(function () {
-          roAll().then(function (recs) {
+          Promise.all([roAll(), loadTrash()]).then(function (r) {
+            var recs = r[0];
             ros = recs || [];
             if (current) { var c = ros.filter(function (x) { return x.id === current.id; })[0]; current = c || null; }
             renderList(); paint();
           });
         }, 200);
       });
-      return roAll();
+      return loadTrash().then(roAll);
     }).then(function (recs) {
       ros = recs || [];
       ros.forEach(function (r) {
         var changed = false;
-        if (!r.collection) { r.collection = desiredCollection(r); changed = true; }
         // migrate the old single notes field into the first story line
         if (!r.lines) { r.lines = (r.notes && r.notes.trim()) ? [{ id: uid(), text: r.notes }] : []; changed = true; }
         FIELDS.forEach(function (f) { if (typeof r[f[1]] !== "string") { r[f[1]] = ""; changed = true; } });

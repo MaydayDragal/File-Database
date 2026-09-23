@@ -590,7 +590,7 @@ Done as written, with these notes:
   worker's precache list from the tree and `--check` runs in `npm test`.
 - Not done here: a Lighthouse run (not in the toolchain).
 
-### Phase 5 — Use the unified model · M
+### Phase 5 — Use the unified model · M — **done**
 
 Goal: the features the old split made impossible.
 
@@ -616,6 +616,57 @@ Goal: the features the old split made impossible.
 
 Acceptance: unit tests for backup round-trip including ROs; E2E for RO rename and
 combined backup/restore.
+
+Done as written, with these notes:
+
+- **Schema 2** (`src/data/schema.js`): the `vehicles` store (keyed by VIN,
+  indexed by series), `ros.deletedAt` and `files.blobId`. An existing
+  generation upgrades in place (new stores and indexes only). Repos now key by
+  their store's own keyPath, so `settings` and `vehicles` rows carry no stray
+  `id`.
+- **Trash** is `deletedAt` on `files` and `ros`; lists leave it out
+  (`files.listMeta` takes `trash: "with" | "only"`). Purge is reference-checked
+  in the data layer: `files.purge` keeps (and reports) anything a link names or
+  an LI document owns; `ros.purge` refuses while anything links *to* the RO and
+  takes the RO's own links with it, never its files. Trashing an RO keeps its
+  number (a restore must not collide), so a conflict names the trashed record.
+- **Duplicate review** is an intake step (`opts.reviewDuplicates`) that runs
+  before anything is written. "Reuse bytes" is a new record with `blobId` —
+  blobs stay immutable and keyed by the record that stored them, and a blobs
+  row is deleted only when no record names it (`dropFiles`). No reviewer means
+  keep both. Repair Orders skips, without asking, bytes already attached to
+  that RO (a rescan re-filing its PDF); a skipped duplicate on an RO is
+  attached as the stored file.
+- **RO ↔ files** carry no collection any more: attach/detach are links, "Open
+  in Files" is the `ro:<id>` view (by links), and a drop there attaches. The
+  old `RO <number>` collections on existing records are left as they are.
+  Appendix A's `files.linkToRo` is `ros.attach`; `vault-rename-collection` is
+  gone. The navigation messages stay messages (they are routing between
+  features, not data hand-offs); `vault-open {id}` and `shell-vehicle {vin}`
+  are new.
+- **Pins** keep the LI number and version on the `reference` link as a
+  snapshot, so an RO still says what it used after that version is deleted;
+  `ros.references()` reports the newest stored version beside it.
+- **Vehicles**: recorded when an RO is saved with a VIN (`ro`) or created from
+  a scan (`ro-scan`), never downgraded; only **✓ Confirm VIN** sets
+  `confirmed`. `vehicles.summary` reads vehicles, files, ros, documents and
+  tools in one transaction; LI documents and tools match the model series by
+  one shared rule (`FDCore.ids.modelsOfValidity` / `toolFitsModel`, which LI
+  Documents and the Tool Inventory filter by too). The view is shell-level
+  (`src/shell/vehicle.js`) over whichever feature is showing, not a seventh
+  tab.
+- **Quick-open**: each feature's `search` export is its own small module
+  (`src/features/*/search.js`, registered in `features/index.js`), so Ctrl+K
+  searches every store without loading a feature's UI.
+- **One backup**: `vehicles` joined the `.fdb` record stores (a backup without
+  them still restores); "Back up everything" is now the one `.fdb` download —
+  the per-app exports stay in each app's menu.
+- **LI copy-to-Vault** was already the same record since Phase 2 (a document
+  owns its PDF as a `files` row; "Add to File Vault" flips `inFiles`), so
+  nothing changed there; the unit tests pin it.
+- The worker's required core is now **derived**: `tools/sw-manifest.mjs`
+  follows `src/main.js`'s static imports, so a module the shell imports can
+  never be missing offline (the shell gained two).
 
 ### Phase 6 — Tests, docs, tooling · S
 

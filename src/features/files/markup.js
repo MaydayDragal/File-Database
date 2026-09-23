@@ -73,6 +73,9 @@ export default `
         <button class="nav__item" data-filter="vins" title="Group files by the vehicle identification number found inside them">
           <span class="nav__icon">🚗</span> By VIN <span class="nav__count" data-count="vins"></span>
         </button>
+        <button class="nav__item" data-filter="trash" title="Deleted files — restore them, or delete them for good">
+          <span class="nav__icon">🗑️</span> Trash <span class="nav__count" data-count="trash"></span>
+        </button>
       </nav>
 
       <div class="nav__section">
@@ -113,6 +116,7 @@ export default `
         <h1 id="view-title" class="view-title">All files</h1>
         <div class="spacer"></div>
         <div class="chip-filters" id="active-filters"></div>
+        <button id="empty-trash" class="btn btn--ghost btn--sm" type="button" hidden title="Delete everything in the trash for good">Empty trash</button>
         <label class="sort">
           <span class="hide-sm">Sort</span>
           <select id="sort-select">
@@ -165,7 +169,9 @@ export default `
         <button id="bulk-send-li" class="btn btn--ghost" title="Send the selected PDFs to LI Documents">🗄️ Send to LI</button>
         <button id="bulk-send-toolbox" class="btn btn--ghost" title="Send the selection to the matching Toolbox tool (files must be one kind)">🧰 Send to Toolbox</button>
         <button id="bulk-download" class="btn btn--ghost" title="Save the selected files into a folder on this computer — every file is verified on disk after writing">⬇ Download</button>
-        <button id="bulk-delete" class="btn btn--ghost bulkbar__danger">🗑 Delete</button>
+        <button id="bulk-delete" class="btn btn--ghost bulkbar__danger" title="Move the selected files to the trash">🗑 Delete</button>
+        <button id="bulk-restore" class="btn btn--primary bulkbar__trash" title="Put the selected files back">♻️ Restore</button>
+        <button id="bulk-purge" class="btn btn--ghost bulkbar__danger bulkbar__trash" title="Delete the selected files for good">Delete forever</button>
         <button id="bulk-clear" class="btn btn--ghost" title="Clear the selection (Esc)">✕</button>
       </div>
 
@@ -190,6 +196,7 @@ export default `
         <button id="d-star" class="icon-btn" title="Star" aria-label="Star">☆</button>
       </header>
       <div id="d-preview" class="detail__preview"></div>
+      <p class="detail__trashnote" id="d-trashnote">🗑️ This file is in the trash. Restore it, or delete it for good.</p>
       <div class="detail__meta">
         <div class="kv"><span class="k">Type</span><span id="d-type" class="v"></span></div>
         <div class="kv"><span class="k">Size</span><span id="d-size" class="v"></span></div>
@@ -235,7 +242,8 @@ export default `
         <button id="d-send-li" class="btn btn--ghost" hidden title="Send this PDF to the LI Database to parse and rename it">🗄️ Send to LI</button>
         <button class="btn" id="d-send-toolbox" hidden>🧰 Send to Toolbox</button>
         <div class="spacer"></div>
-        <button id="d-delete" class="btn btn--danger">Delete</button>
+        <button id="d-restore" class="btn btn--primary" hidden title="Take this file out of the trash">♻️ Restore</button>
+        <button id="d-delete" class="btn btn--danger" title="Move this file to the trash">Delete</button>
         <button id="d-save" class="btn btn--primary">Save</button>
       </footer>
     </div>
