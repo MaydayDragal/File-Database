@@ -181,7 +181,8 @@
     r.vinScan = r.vinScan || 0;
     r.inFiles = (r.inFiles === 0 || r.inFiles === false) ? 0 : 1;
     if (r.docId == null) delete r.docId;
-    if (!r.deletedAt) delete r.deletedAt;
+    if (!r.deletedAt) { delete r.deletedAt; delete r.trashedWith; }
+    if (!r.trashedWith) delete r.trashedWith;
     if (r.blobId == null || r.blobId === r.id) delete r.blobId;
     r.createdAt = r.createdAt || (existing && existing.createdAt) || now();
     r.updatedAt = r.updatedAt || now();
@@ -378,6 +379,7 @@
           return api.req(api.store("files").get(id)).then(function (f) {
             if (!f) return null;
             if (when) { if (f.deletedAt) return null; f.deletedAt = when; } else { if (!f.deletedAt) return null; delete f.deletedAt; }
+            delete f.trashedWith; // trashed on its own, not with a repair order
             done.push(id);
             return files._write(api, f);
           });
@@ -772,7 +774,9 @@
                 if (rs.some(function (x) { return x && !x.deletedAt; })) { out.kept.push(l.toId); return null; }
                 return api.req(api.store("files").get(l.toId)).then(function (f) {
                   if (!f || f.deletedAt) return null;
-                  f.deletedAt = t; fileIds.push(f.id); out.trashed.push(f.id);
+                  // trashedWith: this RO's delete put it there, so restoring
+                  // the RO (and only that) brings it back.
+                  f.deletedAt = t; f.trashedWith = id; fileIds.push(f.id); out.trashed.push(f.id);
                   return files._write(api, f);
                 });
               });
@@ -788,8 +792,9 @@
       return out;
     });
   };
-  // Bring a repair order back (its files stay wherever they are — a file
-  // trashed with it is restored too when opts.files is true).
+  // Bring a repair order back. With opts.files, the files its delete moved
+  // to the trash (trashedWith = this RO) come back too — never a file that
+  // was trashed on its own, before or since.
   ros.restore = function (id, opts) {
     var fileIds = [];
     return db.run(["ros", "links", "files"], "readwrite", function (api) {
@@ -802,8 +807,8 @@
           return api.req(api.store("links").index("from").getAll(["ro", id])).then(function (ls) {
             return Promise.all(ls.filter(function (l) { return l.kind === "attachment"; }).map(function (l) {
               return api.req(api.store("files").get(l.toId)).then(function (f) {
-                if (!f || !f.deletedAt) return null;
-                delete f.deletedAt; fileIds.push(f.id);
+                if (!f || !f.deletedAt || f.trashedWith !== id) return null;
+                delete f.deletedAt; delete f.trashedWith; fileIds.push(f.id);
                 return files._write(api, f);
               });
             }));

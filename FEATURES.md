@@ -92,7 +92,8 @@ backup can always get the files back out; the other per-app pages are gone
   a file whose bytes are already stored (a `blobs.sha256` match — never a name
   or size guess) is shown with the record it matches, before anything is
   written: **reuse** the stored bytes (a new record, no second copy), **keep** a
-  second copy, or **skip**. Closing the dialog keeps both.
+  second copy, or **skip** (a stored file in the trash is taken out, since it is
+  wanted again). Closing the dialog keeps both.
 - Install prompting when offered by the browser, platform service-worker
   registration on HTTPS/loopback, and refresh handling for worker updates.
 
@@ -299,7 +300,7 @@ an `RO <number>` collection; nothing reads or renames it any more.)
 | Rename | Writes the RO record alone — no file changes |
 | Unique numbers | `ros.roKey` is a unique index (D7): a number another RO holds is refused and the field shows "Not saved"; an RO in the trash keeps its number (restore it, or delete it for good) |
 | Delete RO | Asks what happens to the files — keep them attached (a restore brings them back), unlink them (they stay in Files), or move them to the trash too (except any another live RO uses) — then moves the RO to the trash |
-| RO trash | 🗑️ Trash in the list: Restore (its trashed files come back too) or Delete forever (the RO and its own links go; files stay) |
+| RO trash | 🗑️ Trash in the list: Restore (the files its delete moved to the trash come back too — never a file trashed on its own) or Delete forever (the RO and its own links go; files stay) |
 | LI documents & tools used | Pin the exact LI version (`ro → document`, `reference`, with the LI number and version kept on the link) and special tools (`ro → tool`, `required-tool`) by typing their numbers; a later import of a newer version shows **newer version exists (vN)** beside the pin, which keeps pointing at what was used |
 | VIN | Saving an RO with a VIN records the vehicle (`vehicles`, source `ro`; a scan records source `ro-scan`); the VIN line shows the check-digit verdict and **✓ Confirm VIN** (a technician's confirmation) and opens the vehicle view |
 

@@ -345,3 +345,40 @@ test("LI's Add to File Vault is the same record and the same bytes, not a copy",
   assert.equal((await blobRows()).length, 1, "one blob");
   assert.equal(await (await documents.getBlob("LI9_1")).text(), "%PDF-li");
 });
+
+test("restoring an RO brings back only the files its own delete trashed", async () => {
+  await fresh(); await db.open();
+  for (const id of ["withRo", "before", "since"]) await files.putFull({ id, name: id, blob: blobOf(id) });
+  await ros.put({ id: "r1", ro: "1" });
+  await ros.attach("r1", ["withRo", "before", "since"]);
+  await files.trash(["before"]);                       // trashed on its own, first
+  const t = await ros.trash("r1", { attachments: "trash" });
+  assert.deepEqual(t.trashed.sort(), ["since", "withRo"]);
+  assert.equal((await files.get("withRo")).trashedWith, "r1");
+  await files.restore(["since"]);                      // taken out on its own…
+  await files.trash(["since"]);                        // …and trashed on its own again
+  assert.equal((await files.get("since")).trashedWith, undefined);
+  await ros.restore("r1", { files: true });
+  assert.equal((await files.get("withRo")).deletedAt, undefined, "the file the RO's delete trashed is back");
+  assert.equal((await files.get("withRo")).trashedWith, undefined);
+  assert.ok((await files.get("before")).deletedAt, "a file trashed before stays in the trash");
+  assert.ok((await files.get("since")).deletedAt, "a file trashed on its own since stays in the trash");
+});
+
+test("skipping a duplicate whose stored file is in the trash takes that file out of the trash", async () => {
+  await fresh(); await db.open();
+  const { intake } = FDData;
+  await ros.put({ id: "r1", ro: "1" });
+  const first = await intake.ingest("vault", [new File(["EVIDENCE"], "photo.jpg")], { vinDetect: false, roId: "r1" });
+  const id = first.ids[0];
+  await files.trash([id]);
+  assert.deepEqual(await ros.attachments("r1"), [], "hidden from the RO while in the trash");
+  const again = await intake.ingest("vault", [new File(["EVIDENCE"], "photo (1).jpg")], {
+    vinDetect: false, roId: "r1", reviewDuplicates: (list) => list.map((d) => ({ index: d.index, action: "skip", reuse: d.matches[0].id })),
+  });
+  assert.equal(again.results[0].skipped, true);
+  assert.equal(again.results[0].restored, true);
+  assert.equal((await files.get(id)).deletedAt, undefined);
+  assert.deepEqual((await ros.attachments("r1")).map((f) => f.id), [id], "the RO shows its file again");
+  assert.equal((await files.list()).length, 1, "still one record");
+});

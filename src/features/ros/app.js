@@ -399,7 +399,9 @@ export function start(root, host, shell) {
   }
   // Duplicate review for files added to an RO: bytes already attached to
   // THIS repair order (a rescan filing the same PDF again) are skipped
-  // without asking; any other match is put to the person.
+  // without asking — and an attachment sitting in the trash comes back out
+  // (the intake restores a skipped duplicate's trashed stand-in); any other
+  // match is put to the person.
   function reviewFor(roId) {
     return function (list) {
       return R().ros.attachments(roId, { trash: "with" }).then(function (att) {

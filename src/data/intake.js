@@ -19,8 +19,10 @@
  * matches }]) resolves one decision per entry, { index, action: "reuse" |
  * "keep" | "skip", reuse?: fileId }. "reuse" stores a new record sharing
  * the bytes, "keep" stores a second copy, "skip" stores nothing (reported
- * as { skipped: true, duplicateOf }). Without a reviewer both are kept:
- * nothing is ever dropped on a match.
+ * as { skipped: true, duplicateOf }) — and when the stored file standing
+ * for it is in the trash, takes it out: adding the file again means it is
+ * wanted. Without a reviewer both are kept: nothing is ever dropped on a
+ * match.
  *
  * Classic <script> (window.FDData.intake) and side-effect import from Node.
  * Requires repos.js, jobs.js and src/core/ids.js.
@@ -132,6 +134,7 @@
           matches: d.matches.map(function (m) { return { id: m.id, name: m.name, collection: m.collection || "", inFiles: m.inFiles, deletedAt: m.deletedAt || 0, docId: m.docId || null }; }),
         };
       });
+      var revive = [];
       return Promise.resolve(reviewer(asked)).then(function (decisions) {
         (decisions || []).forEach(function (dec) {
           var en = dec && entries[dec.index];
@@ -142,12 +145,16 @@
             en.skip = true;
             // duplicateOf: the stored record that stands for it (the one the
             // reviewer named, else the first match).
-            results.push({ name: en.name, id: null, ok: false, skipped: true, duplicateOf: named || (d.matches[0] && d.matches[0].id), error: "already stored" });
+            var stand = named || (d.matches.filter(function (m) { return !m.deletedAt; })[0] || d.matches[0] || {}).id;
+            var sm = d.matches.filter(function (m) { return m.id === stand; })[0];
+            if (sm && sm.deletedAt) revive.push(stand);
+            results.push({ name: en.name, id: null, ok: false, skipped: true, duplicateOf: stand || null, restored: !!(sm && sm.deletedAt), error: "already stored" });
           } else if (dec.action === "reuse") {
             var target = named || (d.matches[0] && d.matches[0].id);
             if (target) en.reuse = target;
           }
         });
+        return revive.length ? repos.files.restore(revive) : null;
       });
     });
   }

@@ -36,7 +36,7 @@ function ensureStyle() {
   document.head.append(s);
 }
 function where(m) {
-  if (m.deletedAt) return "in the trash";
+  if (m.deletedAt) return "in the trash (skipping takes it out)";
   if (m.docId && !m.inFiles) return "an LI document's PDF";
   return m.collection ? "in " + m.collection : "in Files";
 }
@@ -70,7 +70,9 @@ export function reviewDuplicates(list) {
       name.textContent = d.name + " (" + fmt(d.size) + ")";
       const match = document.createElement("div");
       match.className = "fd-dup__match";
-      const m0 = d.matches[0];
+      // The record a skip stands for: a live match first (a trashed one only
+      // when that is all there is — skipping then takes it out of the trash).
+      const m0 = d.matches.filter((m) => !m.deletedAt)[0] || d.matches[0];
       match.textContent = "Same as “" + m0.name + "” " + where(m0) + (d.matches.length > 1 ? " and " + (d.matches.length - 1) + " more" : "");
       const sel = document.createElement("select");
       sel.setAttribute("aria-label", "What to do with " + d.name);
