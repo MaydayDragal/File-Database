@@ -139,7 +139,7 @@ await inv.locator("#detail .x[data-close]").click();
 await page.waitForTimeout(200);
 await page.keyboard.press("Control+k");
 await page.waitForTimeout(300);
-check(await page.locator("#quickopen:not([hidden])").count() === 1, "Ctrl+K opens quick-open (even with an iframe focused)");
+check(await page.locator("#quickopen:not([hidden])").count() === 1, "Ctrl+K opens quick-open (even with the focus inside a feature)");
 const knownTool = "000 589 01 10 00";
 await page.fill("#qo-input", knownTool);
 await page.waitForTimeout(200);
@@ -185,11 +185,11 @@ const relayed = await waitFor(async () => {
 }, 25000);
 check(relayed, "a background app's toast surfaces through the shell relay (app-prefixed)");
 
-// ---------- 9. Alt+2 switches apps from inside an iframe ----------
+// ---------- 9. Alt+2 switches apps from inside a feature ----------
 await inv.locator("#search").click().catch(() => {});
 await page.keyboard.press("Alt+2");
 await page.waitForTimeout(500);
-check(await page.locator("#tab-li.is-active").count() === 1, "Alt+2 pressed inside an iframe switches to LI Documents");
+check(await page.locator("#tab-li.is-active").count() === 1, "Alt+2 pressed inside a feature switches to LI Documents");
 
 // ---------- 10. Pinned Active Vehicle ----------
 // Pin the datacard's VIN via quick-open; every data tab scopes to the car.

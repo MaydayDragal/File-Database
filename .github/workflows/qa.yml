@@ -1,20 +1,28 @@
-name: QA release gate
+name: QA
 
-# Blocks a release until static checks, unit-style checks, the full E2E suite
-# and the portable build all pass on a clean, lockfile-driven install.
+# Three gates, sized to what they cost (REWRITE-PLAN.md Phase 6):
+#   checks    every push and pull request — static checks, the generated-file
+#             checks (viewer bundle, worker precache list, vendored PDF.js)
+#             and the Node unit tests. No browser; seconds.
+#   qa        pull requests — the whole Playwright E2E suite against the one
+#             page. Minutes. (Kept under its old job name so a required
+#             status check that names "qa" keeps working.)
+#   portable  pushes to the live branch — the portable USB package, bundled
+#             and exercised from file://, uploaded as an artifact.
 on:
   push:
-    branches: [claude/pwa-file-database-hqbppy]
   pull_request:
+  workflow_dispatch:
 
 jobs:
-  qa:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
       - name: Install dependencies (lockfile-driven)
         # Omit optional deps: pdfjs-dist's optional `canvas` (Node-only PDF
         # rendering, unused here — the vendor script reads its .mjs files) drags
@@ -24,17 +32,48 @@ jobs:
         # A high/critical finding fails the job. Document any approved
         # exception here and in the issue tracker before adding an override.
         run: npm audit --omit=optional --audit-level=high
+      - name: Static, generated-file and unit checks
+        run: npm run test:fast
+
+  qa:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies (lockfile-driven)
+        run: npm ci --omit=optional
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-      - name: Static checks
-        run: npm run test:static
-      - name: LI document-number checks
-        run: npm run test:li-number
-      - name: Backup-format checks
-        run: npm run test:backup
-      - name: Blob-integrity checks
-        run: npm run test:integrity
       - name: Full E2E suite
-        run: npm test
-      - name: Portable build
+        run: npm run test:e2e
+
+  portable:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/claude/pwa-file-database-hqbppy'
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies (lockfile-driven)
+        run: npm ci --omit=optional
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build and exercise the portable package
+        # Builds dist-portable/ (src/ bundled into app/app.js) and opens it
+        # from file://, with the launcher's profile and with no flags at all.
+        run: npm run test:portable
+      - name: Build the package to upload
         run: npm run build:portable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileDatabase-Portable
+          path: dist-portable/FileDatabase-Portable
+          if-no-files-found: error

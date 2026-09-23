@@ -1,6 +1,7 @@
 // End-to-end test for the File Database platform shell (root index.html):
-// tabs, lazy iframes, embedded chrome, unified theme, deep links, legacy
-// URLs/messages, tab badges and the Toolbox → File Vault save flow.
+// tabs, features mounted lazily into their panels, the features' own chrome
+// hidden inside the shell, unified theme, deep links, legacy URLs/messages,
+// tab badges and the Toolbox → File Vault save flow.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -45,7 +46,7 @@ const mountedApp = (key) => page.evaluate((k) => !!document.querySelector("#view
 await page.goto(base, { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 
-// --- Default app + lazy iframes ---
+// --- Default app + lazily mounted features ---
 check((await page.title()) === "Files · File Database", `title is "${await page.title()}"`);
 check(await page.locator("#tab-vault.is-active").count() === 1, "Files tab active by default");
 check((await page.locator("#tab-vault").getAttribute("aria-selected")) === "true", "Files tab aria-selected");
@@ -128,7 +129,7 @@ await page.goto(base + "#toolbox/pdf");
 await page.waitForTimeout(800);
 check(await page.locator("#tab-toolbox.is-active").count() === 1, "#toolbox/pdf activates the Toolbox");
 let activeTool = "";
-for (let i = 0; i < 20; i++) {           // the toolbox-open message may be pending until the frame loads
+for (let i = 0; i < 20; i++) {           // the toolbox-open message may be pending until the feature mounts
   activeTool = await page.evaluate(() =>
     document.querySelector("#view-toolbox")?.shadowRoot?.querySelector(".tab.active")?.dataset.tab || "");
   if (activeTool === "pdf") break;

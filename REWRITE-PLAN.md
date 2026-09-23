@@ -668,7 +668,7 @@ Done as written, with these notes:
   follows `src/main.js`'s static imports, so a module the shell imports can
   never be missing offline (the shell gained two).
 
-### Phase 6 — Tests, docs, tooling · S
+### Phase 6 — Tests, docs, tooling · S — **done**
 
 - Rewrite `FEATURES.md` from the new layout (much of §9 becomes a repo API list).
 - `README.md`: one app, one install, one backup; keep hosting and portable sections.
@@ -678,6 +678,44 @@ Done as written, with these notes:
   live branch. Add the precache-manifest check.
 - Delete `tools/e2e-bridge.mjs`, `e2e-shell.mjs` frame assertions and any suite
   whose subject moved to a unit test.
+
+Done as written, with these notes:
+
+- **Portable bundle.** `tools/build-portable.mjs` bundles `src/main.js` and
+  everything it imports (the features and their search modules — esbuild
+  inlines the registry's dynamic `import()`s) into `app/app.js`, swaps the
+  page's module tag for a plain `<script>`, and adds the bundle to the copy's
+  precache list under a cache name carrying a hash of the whole package (so a
+  copy served over HTTP(S) cannot keep serving an old bundle from a worker
+  whose bytes did not change). Features now find their stylesheet beside the page
+  (`featureStyle(folder)` in `src/features/mount.js`) instead of through
+  `import.meta.url`, which a classic bundle does not have; the build refuses a
+  bundle that still references it. `e2e-portable.mjs` opens the built page
+  from `file://` with no browser flags and checks all six features mount and
+  are styled. The launchers keep `--allow-file-access-from-files` for the
+  catalog fetch and the PDF worker.
+- **CI.** `qa.yml` is three jobs: `checks` (audit + `npm run test:fast`: the
+  static, generated-file and unit checks) on every push and PR; `qa` (the
+  whole browser suite) on PRs, under its old name so a required check keeps
+  matching; `portable` (build, exercise, upload the package) on pushes to the
+  live branch. The precache-manifest check was already in `npm test` (pulled
+  forward in Phase 4) and is part of `test:fast`; `vendor-pdfjs --check`
+  joined it.
+- **Tests.** `e2e-bridge.mjs` had already gone with the bridge (Phase 2), and
+  the shell suite's frame assertions with the frames (Phase 4); what remained
+  was iframe wording in three suites, now corrected. `e2e-vin-wmi.mjs` is
+  deleted: its subject (Mercedes-prefix validation — the engine number and a
+  non-Mercedes VIN rejected) is pinned exactly by the VIN golden, and the
+  datacard suite already proves only real VINs reach the sidebar.
+- **Docs.** FEATURES.md §9 is now the data layer's API: the common repo verbs,
+  each repo's own calls, and the module functions. README and tests/README
+  describe the fast/browser split and the portable bundle.
+- **Not done:** the core, data and services files stay classic scripts on
+  `window.FD*` (with ES-module facades), and the Node tests keep loading them
+  by side-effect import. Phase 4's notes expected them to become modules
+  here, but nothing in this list needs it — the portable bundle works with
+  them as they are — so it stays a candidate for later rather than a change
+  made without a reason.
 
 ---
 

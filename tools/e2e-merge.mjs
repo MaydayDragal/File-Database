@@ -1,6 +1,6 @@
 // Integration test for the cross-app handoffs through the File Database shell:
 // vault → LI, LI → vault and vault → Toolbox over the shared database, with the shell
-// (root index.html) owning tabs/navigation and each app living in its iframe.
+// (root index.html) owning tabs/navigation and each feature mounted in its panel.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -49,7 +49,7 @@ check(await page.locator("#tab-vault.is-active").count() === 1, "shell opens on 
 check(await page.locator("#view-vault:not([hidden])").count() === 1, "vault panel is visible");
 const vault = page.locator("#view-vault");
 await vault.locator("#empty").waitFor({ timeout: 8000 });
-check(true, "vault iframe booted (empty state visible)");
+check(true, "Files feature booted (empty state visible)");
 
 // --- The LI Documents tab opens the embedded LI app ---
 check(await page.locator("#tab-li").isVisible(), "shell shows an 'LI Documents' tab");
@@ -87,7 +87,7 @@ check(await vault.locator("#d-send-li").isVisible(), "'Send to LI' button shows 
 await vault.locator("#d-send-li").click();
 await page.waitForTimeout(400);
 const outboxToLi = (await fdbAll(page, "jobs")).filter((j) => j.type === "li-import").map((j) => ({ type: j.type, state: j.state, files: j.inputIds.length }));
-// The (loaded) LI iframe may already have run it — queued, running or done are all correct.
+// The (mounted) LI feature may already have run it — queued, running or done are all correct.
 check(await page.locator("#tab-li.is-active").count() === 1, "'Send to LI' switches the shell to the LI tab");
 check(await page.locator("#view-li:not([hidden])").count() === 1, "LI panel visible after the handoff");
 check(outboxToLi.length >= 1, "an li-import job was queued for the stored PDF (" + JSON.stringify(outboxToLi) + ")");
@@ -141,7 +141,7 @@ check(await page.locator("#view-toolbox:not([hidden])").count() === 1, "Toolbox 
 const toolbox = page.locator("#view-toolbox");
 await toolbox.locator(".tabs .tab").first().waitFor({ timeout: 15000 });
 let media = { active: false, name: "" };
-for (let i = 0; i < 40; i++) {           // frame lazy-loads + the job runs async — poll
+for (let i = 0; i < 40; i++) {           // the feature mounts lazily + the job runs async — poll
   media = await page.evaluate(() => {
     const doc = document.querySelector("#view-toolbox")?.shadowRoot;
     if (!doc) return { active: false, name: "" };
