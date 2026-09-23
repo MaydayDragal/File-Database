@@ -607,7 +607,9 @@ bundles `src/main.js` with every module it imports (the features and their
 search modules included) into one classic script, `app/app.js`, with esbuild —
 so `app/index.html` opens from `file://` without the launcher's
 `--allow-file-access-from-files` (a browser refuses an ES module from
-`file://`). The copy's worker precaches `app.js`. See the README and
+`file://`). The copy's worker precaches `app.js`, under a cache name that
+carries a hash of the whole package, so a copy served over HTTP(S) picks up a
+new build even when only the bundle changed. See the README and
 [portable guide](portable/START-HERE.txt) for launcher limits.
 
 `npm run test:fast` runs the static checks, the generated-file checks (viewer

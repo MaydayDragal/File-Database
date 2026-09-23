@@ -16,6 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -61,11 +62,6 @@ const CLASSIC_TAG = '<script src="app.js"></script>';
   const html = fs.readFileSync(path.join(APP, "index.html"), "utf8");
   if (!html.includes(MODULE_TAG)) throw new Error("index.html: the module entry tag changed — update tools/build-portable.mjs");
   fs.writeFileSync(path.join(APP, "index.html"), html.replace(MODULE_TAG, CLASSIC_TAG));
-  // Served over http(s) instead (a copy on a web server), the worker must
-  // precache the bundle the page now loads.
-  const sw = fs.readFileSync(path.join(APP, "sw.js"), "utf8");
-  if (!sw.includes("const CORE = [\n")) throw new Error("sw.js: CORE list not found");
-  fs.writeFileSync(path.join(APP, "sw.js"), sw.replace("const CORE = [\n", 'const CORE = [\n  "./app.js",\n'));
   tally(path.join(APP, "app.js"));
 }
 
@@ -76,6 +72,35 @@ if (fs.existsSync(path.join(ROOT, "inventory-data", "tools.json"))) {
   fs.mkdirSync(path.join(APP, "data"), { recursive: true });
   fs.copyFileSync(path.join(ROOT, "dist-db", "FileInventory.tidb"), path.join(APP, "data", "FileInventory.tidb"));
   tally(path.join(APP, "data"));
+}
+
+// Served over http(s) instead (a copy on a web server), the worker must
+// precache the bundle the page now loads — and its cache name must change
+// whenever anything it caches changes. The repository's worker is versioned
+// by hand; here a release can change app.js (or any copied file) alone,
+// which would leave sw.js byte-identical: the browser would keep the old
+// worker and its cache-first handler would serve the old app forever. So the
+// cache name carries a hash of every file in app/ (the worker prunes any
+// other file-database-* cache on activation).
+{
+  const swPath = path.join(APP, "sw.js");
+  let sw = fs.readFileSync(swPath, "utf8");
+  if (!sw.includes("const CORE = [\n")) throw new Error("sw.js: CORE list not found");
+  const m = sw.match(/const CACHE = "(file-database-[^"]+)";/);
+  if (!m) throw new Error("sw.js: CACHE name not found");
+  const h = createHash("sha256");
+  const walk = (dir) => fs.readdirSync(dir).sort().forEach((n) => {
+    const p = path.join(dir, n);
+    if (fs.statSync(p).isDirectory()) return walk(p);
+    if (p === swPath) return;
+    h.update(path.relative(APP, p).split(path.sep).join("/") + "\0");
+    h.update(fs.readFileSync(p));
+  });
+  walk(APP);
+  const cache = m[1] + "-" + h.digest("hex").slice(0, 12);
+  sw = sw.replace(m[0], 'const CACHE = "' + cache + '";').replace("const CORE = [\n", 'const CORE = [\n  "./app.js",\n');
+  fs.writeFileSync(swPath, sw);
+  console.log("  worker cache: " + cache);
 }
 
 // Launchers + readme

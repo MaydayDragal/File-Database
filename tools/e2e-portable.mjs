@@ -67,6 +67,12 @@ await ctx.close();
 // classic script), so every feature still mounts.
 ok(!/type="module"/.test(fs.readFileSync(path.join(PKG, "app", "index.html"), "utf8")), "app/index.html loads no ES module (src/ is bundled into app.js)");
 {
+  // Served over http(s), the copy's worker must precache app.js and change
+  // its cache name whenever the package's content does (a hash of app/).
+  const sw = fs.readFileSync(path.join(PKG, "app", "sw.js"), "utf8");
+  ok(/const CACHE = "file-database-v\d+-[0-9a-f]{12}";/.test(sw) && /"\.\/app\.js"/.test(sw), "the copy's worker precaches app.js under a content-hashed cache name");
+}
+{
   const plain = await launchBrowser();
   const p2 = await plain.newPage();
   const e2 = []; p2.on("pageerror", (e) => e2.push(String(e.message)));

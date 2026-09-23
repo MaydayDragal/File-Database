@@ -685,7 +685,9 @@ Done as written, with these notes:
   everything it imports (the features and their search modules — esbuild
   inlines the registry's dynamic `import()`s) into `app/app.js`, swaps the
   page's module tag for a plain `<script>`, and adds the bundle to the copy's
-  precache list. Features now find their stylesheet beside the page
+  precache list under a cache name carrying a hash of the whole package (so a
+  copy served over HTTP(S) cannot keep serving an old bundle from a worker
+  whose bytes did not change). Features now find their stylesheet beside the page
   (`featureStyle(folder)` in `src/features/mount.js`) instead of through
   `import.meta.url`, which a classic bundle does not have; the build refuses a
   bundle that still references it. `e2e-portable.mjs` opens the built page
