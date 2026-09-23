@@ -4,7 +4,9 @@
 // annotation on page 1 (a CSV); stored as an LI document, its detail view must
 // list all four, show each safely in the preview pane (the HTML as text, its
 // script never run), download one, and add one to Files tagged with the LI
-// number. A PDF without attachments says so.
+// number. A PDF without attachments says so. Files that share a name and
+// size but not bytes are all listed, the same bytes twice once, and an empty
+// file is still a file.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -35,10 +37,10 @@ const errors = [];
 page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message));
 const waitFor = async (fn, ms = 15000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(150); } return false; };
 
-const LI = "LI54.10-P-070001", LI2 = "LI54.10-P-070002";
+const LI = "LI54.10-P-070001", LI2 = "LI54.10-P-070002", LI3 = "LI54.10-P-070003";
 await page.goto(base + "#vault", { waitUntil: "load" });
 await page.waitForFunction(() => window.FDData && window.PDFLib && window.FDShell);
-await page.evaluate(async ({ LI, LI2 }) => {
+await page.evaluate(async ({ LI, LI2, LI3 }) => {
   const { PDFDocument, PDFName, PDFString, PDFHexString, StandardFonts } = window.PDFLib;
   const enc = (s) => new TextEncoder().encode(s);
   const PNG = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
@@ -62,10 +64,26 @@ await page.evaluate(async ({ LI, LI2 }) => {
   const withFiles = new Blob([await doc.save()], { type: "application/pdf" });
   const plain = await PDFDocument.create(); plain.addPage([600, 800]);
   const noFiles = new Blob([await plain.save()], { type: "application/pdf" });
+  const alike = await PDFDocument.create();
+  const a1 = alike.addPage([600, 800]);
+  await alike.attach(enc("AAAA"), "part.bin", { mimeType: "application/octet-stream" });
+  await alike.attach(new Uint8Array(0), "empty.txt", { mimeType: "text/plain" });
+  {
+    const c = alike.context;
+    const clip = (name, data, x) => {
+      const e = c.register(c.stream(data, { Type: "EmbeddedFile", Length: data.length }));
+      const s = c.register(c.obj({ Type: "Filespec", F: PDFString.of(name), UF: PDFHexString.fromText(name), EF: { F: e } }));
+      a1.node.addAnnot(c.register(c.obj({ Type: "Annot", Subtype: "FileAttachment", Rect: [x, 50, x + 20, 70], FS: s, Name: "PushPin" })));
+    };
+    clip("part.bin", enc("BBBB"), 50);
+    clip("part.bin", enc("AAAA"), 100);
+  }
+  const alikeFiles = new Blob([await alike.save()], { type: "application/pdf" });
   const R = window.FDData.repos;
   await R.documents.putWithFile({ id: LI + "_1", li: LI, ver: "1", title: "Wiring diagram", filename: LI + ".pdf" }, withFiles);
   await R.documents.putWithFile({ id: LI2 + "_1", li: LI2, ver: "1", title: "No attachments", filename: LI2 + ".pdf" }, noFiles);
-}, { LI, LI2 });
+  await R.documents.putWithFile({ id: LI3 + "_1", li: LI3, ver: "1", title: "Look-alike attachments", filename: LI3 + ".pdf" }, alikeFiles);
+}, { LI, LI2, LI3 });
 
 await page.goto(base + "#li/" + LI, { waitUntil: "load" });
 const li = page.locator("#view-li");
@@ -112,6 +130,19 @@ check(added && (rec.tags || []).includes(LI) && rec.collection === "LI Documents
 await page.goto(base + "#li/" + LI2, { waitUntil: "load" });
 await li.locator("#detailOverlay.show").waitFor({ timeout: 15000 });
 check(await waitFor(async () => /No files are attached/.test(await li.locator("#dAttList").textContent())), "a PDF without files says so");
+
+// Look-alikes: same name and size, different bytes.
+await page.goto(base + "#li/" + LI3, { waitUntil: "load" });
+await li.locator("#detailOverlay.show").waitFor({ timeout: 15000 });
+check(await waitFor(async () => (await rows.count()) === 3), "two part.bin files with different bytes are both listed, the repeated one once, and the empty file too", await li.locator("#dAttList .att-row__name").allTextContents());
+const metas = await li.locator("#dAttList .att-row", { hasText: "part.bin" }).locator(".att-row__meta").allTextContents();
+check(metas.length === 2 && metas.some((m) => /attached to the document/.test(m)) && metas.some((m) => /on page 1/.test(m)), "…one from the catalogue, the other from the page", metas);
+check(/0 B/.test(await row("empty.txt").locator(".att-row__meta").textContent()), "an empty file is listed as 0 B");
+const [dl0] = await Promise.all([page.waitForEvent("download", { timeout: 10000 }), row("empty.txt").locator(".att-dl-btn").click()]);
+const dl0Path = path.join(ROOT, "tools", "_fixtures", "att-empty.txt");
+await dl0.saveAs(dl0Path);
+check(dl0.suggestedFilename() === "empty.txt" && fs.statSync(dl0Path).size === 0, "…and downloads as an empty file", dl0.suggestedFilename());
+fs.rmSync(dl0Path, { force: true });
 
 check(errors.length === 0, "no page errors", errors);
 await browser.close();

@@ -79,12 +79,20 @@
       // description: PDF.js 4.2 passes a file spec's name and bytes but not
       // its /Desc, so a catalogue attachment has none; a paperclip
       // annotation's note (its Contents) is used for its file.
+      // The same file (name and bytes) listed by the catalogue and by a
+      // paperclip is shown once; an equal name and size is only a hint, the
+      // bytes decide. An empty file is still a file.
+      function same(a, b) {
+        for (var j = 0; j < a.length; j++) if (a[j] !== b[j]) return false;
+        return true;
+      }
       function add(f, page, note) {
-        if (!f || !f.content || !f.content.length) return;
+        if (!f || !f.content) return;
         var name = baseName(f.filename);
         var key = name + ":" + f.content.length;
-        if (seen[key]) return;
-        seen[key] = 1;
+        var prior = seen[key] || (seen[key] = []);
+        if (prior.some(function (c) { return same(c, f.content); })) return;
+        prior.push(f.content);
         var type = mimeOf(name);
         out.push({ name: name, description: f.description || note || "", size: f.content.length, type: type, page: page || 0, blob: new Blob([f.content], { type: type }) });
       }
