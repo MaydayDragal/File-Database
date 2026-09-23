@@ -58,5 +58,5 @@ test("code older than the database reports db:outdated (and boot's recovery stan
   assert.equal(seen.length, 1);
   assert.equal(seen[0].name, "file-database-1");
   assert.equal(seen[0].version, FDSchema.VERSION);
-  assert.equal(FDData.recoverOutdated(), false, "no location to reload in Node: nothing to do");
+  assert.equal(await FDData.recoverOutdated(), false, "no location to reload in Node: nothing to do");
 });

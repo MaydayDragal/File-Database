@@ -61,6 +61,36 @@ check(/older than your data/.test(toast) && /Ctrl\+Shift\+R/.test(toast), "when 
 const stillThere = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("file-database-1"); r.onsuccess = () => { const v = r.result.version; r.result.close(); res(v); }; r.onerror = () => res(-1); }));
 check(stillThere === 99, "the database is left exactly as it was", stillThere);
 
+// Stand-downs (run on the booted page, the reload marker cleared each time):
+// with session storage blocked the marker can't be kept, so it must never
+// reload (it could not stop); offline, the app cache is the only copy of the
+// app, so it must be kept and nothing reloaded.
+const standDown = async (setup) => {
+  await page.evaluate(async () => { sessionStorage.removeItem("fdb.outdatedReload"); await (await caches.open("file-database-v3")).put("/stale.js", new Response("old")); });
+  if (setup) await setup();
+  const before = loads;
+  const res = await page.evaluate(() => window.FDData.recoverOutdated()).catch((e) => "threw: " + e.message);
+  await page.waitForTimeout(1500);
+  const keys = await page.evaluate(async () => (await caches.keys()).sort());
+  return { res, reloaded: loads !== before, keptCache: keys.includes("file-database-v3") };
+};
+let r = await standDown(() => page.evaluate(() => {
+  window.__ss = Object.getOwnPropertyDescriptor(window, "sessionStorage") || Object.getOwnPropertyDescriptor(Window.prototype, "sessionStorage");
+  Object.defineProperty(window, "sessionStorage", { configurable: true, get() { throw new DOMException("denied", "SecurityError"); } });
+}));
+check(r.res === false && !r.reloaded && r.keptCache, "with session storage blocked it never reloads (no way to stop a loop) and keeps the cache", r);
+await page.evaluate(() => { Object.defineProperty(window, "sessionStorage", window.__ss); });
+await ctx.setOffline(true);
+r = await standDown();
+check(r.res === false && !r.reloaded && r.keptCache, "offline it keeps the app cache and does not reload", r);
+await ctx.setOffline(false);
+// A server that can't be reached although the browser says online: the
+// no-store probe fails, so the same.
+await page.route("**/sw.js?fdb-probe=*", (route) => route.abort());
+r = await standDown();
+check(r.res === false && !r.reloaded && r.keptCache, "an unreachable server (probe fails) keeps the cache and does not reload", r);
+await page.unroute("**/sw.js?fdb-probe=*");
+
 await browser.close();
 server.close();
 console.log(failures === 0 ? "\nOUTDATED-CODE CHECKS PASSED ✅" : `\n${failures} OUTDATED-CODE CHECK(S) FAILED ❌`);

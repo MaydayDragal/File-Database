@@ -563,9 +563,9 @@ export function boot() {
     // An out-of-date copy of the app (see boot.js): it clears the offline
     // cache and reloads on its own; say so instead of reporting a failure.
     if (e && e.name === "VersionError") {
-      toast(FDData.outdatedRecovering
+      Promise.resolve(FDData.outdatedRecovery).then((reloading) => toast(reloading
         ? "A newer version of File Database is installed — loading it…"
-        : "This copy of File Database is older than your data. Reload with Ctrl+Shift+R to load the current version.");
+        : "This copy of File Database is older than your data. Reload with Ctrl+Shift+R while online to load the current version."));
     } else toast("Couldn't open the database — " + ((e && e.message) || e));
   }).then(bootShell);
 }

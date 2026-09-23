@@ -587,8 +587,11 @@ minutes — enough to mix yesterday's copy of one file with today's of another),
 and revalidates a file it doesn't hold yet before caching it. If a page still
 ends up running code older than the database (IndexedDB `VersionError`), the
 data layer emits `db:outdated`; `boot.js` then deletes the app cache, asks for
-the latest worker and reloads once — at most once a minute per tab, after which
-the shell tells the user to hard-reload instead of looping. The worker
+the latest worker and reloads once — at most once a minute per tab (a marker in
+`sessionStorage`; if it can't be stored, it never reloads), and only when a
+`no-store` probe reaches the server (offline, the app cache is the only copy of
+the app and is kept). Otherwise the shell tells the user to hard-reload while
+online instead of looping. The worker
 prunes its own old caches and everything the pre-Phase-4 workers left behind
 (`platform-shell-*`, `file-vault-*`, `vault-app-*`, `li-db-*`,
 `tool-inventory-*`). User databases are not stored in service-worker caches.
@@ -643,7 +646,7 @@ Playwright-managed Chromium are required for the full workflow.
 | `e2e-merge.mjs` | Vault → LI, LI → Vault, Vault → Toolbox handoffs over the shared database |
 | `e2e-migrate.mjs` | First-launch migration of a profile seeded with all four legacy databases: dialog, verify, `.fdb` offer, deletion, every app reading the result; a forced verification failure leaving everything untouched |
 | `e2e-phase5.mjs` | The unified model in use: Files trash / restore / delete forever and a purge refused for a file an RO uses; the duplicate review (reuse, skip); one file on two repair orders; the RO delete choices and RO trash; a pinned LI version with "newer version exists" and a pinned tool; the vehicle record, **✓ Confirm VIN** and `#vehicle/<VIN>`; Ctrl+K results from every store; one `.fdb` download restored into a new generation with ROs, links, vehicles and pins intact |
-| `e2e-outdated.mjs` | An out-of-date copy of the app meeting a newer database: the app cache cleared (the OCR cache kept), exactly one reload, then a hard-reload message instead of a loop; the database untouched |
+| `e2e-outdated.mjs` | An out-of-date copy of the app meeting a newer database: the app cache cleared (the OCR cache kept), exactly one reload, then a hard-reload message instead of a loop; the database untouched; no reload and the cache kept with session storage blocked, offline, or with the server unreachable |
 | `e2e-pdf-security.mjs` | PDF.js runtime/parser configuration and malformed-PDF handling |
 | `e2e-pdfthumb.mjs` | PDF preview generation, persistence, background backfill |
 | `e2e-portable.mjs` | Build (with the `app.js` bundle), local-file shell/Vault/Inventory through the launcher's profile, catalog offer, same-path profile restart, and a double-clicked `app/index.html` with no browser flags mounting all six features; clears generated data |
